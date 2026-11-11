@@ -24,7 +24,12 @@ public partial class PanelWindow : Window
     private string? _tagFilter;
     private long? _undoId;
     private bool _reloadPending;
+    private bool _isDirty;
     private DateTime _lastHiddenAt = DateTime.MinValue;
+
+    /// <summary>Panel gizliyken gelen bir Reload() isteğinin verisinin henüz yansıtılmadığını belirtir;
+    /// ShowNearTray zaten koşulsuz yeniden yüklediği için ek bir tetikleyici gerekmez.</summary>
+    public bool IsDirty => _isDirty;
 
     public ObservableCollection<DayGroupItem> Groups { get; } = [];
     public ObservableCollection<TagChip> Tags { get; } = [];
@@ -52,7 +57,7 @@ public partial class PanelWindow : Window
         var area = SystemParameters.WorkArea;
         Left = area.Right - Width - 8;
         Top = area.Bottom - Height - 8;
-        Reload();
+        ReloadCore();
         Show();
         Activate();
         InputBox.Focus();
@@ -72,13 +77,26 @@ public partial class PanelWindow : Window
             note.IsEditing = false;
     }
 
+    /// <summary>Panel gizliyken gerçek yeniden yükleme işini atlar (DB okuma + UI güncelleme);
+    /// bunun yerine kirli işaretler. ShowNearTray açılışta zaten koşulsuz yeniden yükler.</summary>
     public void Reload()
+    {
+        if (!IsVisible)
+        {
+            _isDirty = true;
+            return;
+        }
+        ReloadCore();
+    }
+
+    private void ReloadCore()
     {
         if (AnyEditing)
         {
             _reloadPending = true;
             return;
         }
+        _isDirty = false;
         _reloadPending = false;
         Try(() =>
         {
@@ -249,15 +267,25 @@ public partial class PanelWindow : Window
         catch (Exception ex)
         {
             AppLog.Write(ex);
-            ErrorText.Text = ex switch
+            var message = ex switch
             {
                 NoteNotFoundException or ArgumentException => ex.Message,
                 SqliteException => $"Veritabanı hatası. Yedekler: {AppPaths.BackupDir}",
                 _ => $"Bir hata oluştu, ayrıntı: {AppPaths.LogPath}",
             };
-            ErrorBar.Visibility = Visibility.Visible;
-            _errorTimer.Stop();
-            _errorTimer.Start();
+            // Panel gizliyken ErrorBar görünmez; tepsi menüsünden tetiklenen (ör. dışa aktarma)
+            // hatalar kaybolmasın diye bu durumda mesaj kutusu gösterilir.
+            if (IsVisible)
+            {
+                ErrorText.Text = message;
+                ErrorBar.Visibility = Visibility.Visible;
+                _errorTimer.Stop();
+                _errorTimer.Start();
+            }
+            else
+            {
+                MessageBox.Show(message, "Notlar", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 }

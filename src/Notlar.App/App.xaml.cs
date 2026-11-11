@@ -29,10 +29,24 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        _mutex = new Mutex(initiallyOwned: true, MutexName, out var isFirstInstance);
-        _isFirstInstance = isFirstInstance;
-        _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
-        if (!isFirstInstance)
+        try
+        {
+            _mutex = new Mutex(initiallyOwned: true, MutexName, out var isFirstInstance);
+            _isFirstInstance = isFirstInstance;
+            _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
+        {
+            AppLog.Write(ex);
+            if (_isFirstInstance) _mutex?.ReleaseMutex();
+            MessageBox.Show(
+                "Notlar zaten farklı yetkiyle çalışıyor; bu nedenle başlatılamıyor.\n\nDiğer örneği kapatıp tekrar deneyin.",
+                "Notlar", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown();
+            return;
+        }
+
+        if (!_isFirstInstance)
         {
             // Zaten çalışıyor: mevcut örneğe paneli açmasını söyle ve çık.
             // Windows ön plana getirme kısıtlaması nedeniyle, hedef sürece izin vermeden
@@ -55,7 +69,8 @@ public partial class App : Application
         NoteStore store;
         try
         {
-            store = new NoteStore(AppPaths.DbPath, TimeProvider.System, new NamedEventChangeSignal(AppPaths.ChangeEventName));
+            var signal = ChangeSignals.CreateOrNull(AppPaths.ChangeEventName, AppLog.Write);
+            store = new NoteStore(AppPaths.DbPath, TimeProvider.System, signal);
         }
         catch (Exception ex)
         {
@@ -76,7 +91,15 @@ public partial class App : Application
             onOpen: _panel.ShowNearTray,
             onExport: _panel.ExportMarkdown,
             onExit: ExitApp);
-        _listener = new ChangeListener(AppPaths.ChangeEventName, () => Dispatcher.InvokeAsync(_panel.Reload), AppLog.Write);
+        try
+        {
+            _listener = new ChangeListener(AppPaths.ChangeEventName, () => Dispatcher.InvokeAsync(_panel.Reload), AppLog.Write);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
+        {
+            // Canlı güncelleme olmadan devam edilir; panel yine de her açılışta yeniden yükler.
+            AppLog.Write(ex);
+        }
         _showWait = ThreadPool.RegisterWaitForSingleObject(
             _showEvent, (_, _) => Dispatcher.InvokeAsync(_panel.ShowNearTray), null, Timeout.Infinite, executeOnlyOnce: false);
     }
