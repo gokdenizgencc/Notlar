@@ -85,15 +85,43 @@ public sealed class NoteStore
         sql.Append(" ORDER BY id");
         cmd.CommandText = sql.ToString();
 
-        var notes = new List<Note>();
-        using (var reader = cmd.ExecuteReader())
-            while (reader.Read())
-                notes.Add(Map(reader));
+        var notes = ReadAll(cmd);
 
         if (string.IsNullOrWhiteSpace(filter.Tag))
             return notes;
         var tag = TagParser.Normalize(filter.Tag);
         return notes.Where(n => n.Tags.Contains(tag)).ToList();
+    }
+
+    /// <summary>Panel görünümü: <paramref name="since"/> (dahil) ve sonrasındaki notlar + daha eski ama tamamlanmamış notlar, id sırasıyla.</summary>
+    public IReadOnlyList<Note> ListRecentAndOpen(DateOnly since)
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT {Columns} FROM notes
+            WHERE deleted_at IS NULL AND (substr(created_at, 1, 10) >= $since OR done = 0)
+            ORDER BY id
+            """;
+        cmd.Parameters.AddWithValue("$since", since.ToString("yyyy-MM-dd", Inv));
+        return ReadAll(cmd);
+    }
+
+    /// <summary><paramref name="before"/> gününden önce tamamlanmış (silinmemiş) not var mı?</summary>
+    public bool HasDoneBefore(DateOnly before)
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT EXISTS(
+                SELECT 1 FROM notes
+                WHERE deleted_at IS NULL AND done = 1 AND substr(created_at, 1, 10) < $before
+            )
+            """;
+        cmd.Parameters.AddWithValue("$before", before.ToString("yyyy-MM-dd", Inv));
+        using var reader = cmd.ExecuteReader();
+        reader.Read();
+        return reader.GetInt64(0) != 0;
     }
 
     public Note Update(long id, string text)
@@ -186,6 +214,15 @@ public sealed class NoteStore
         var conn = new SqliteConnection(_connectionString);
         conn.Open();
         return conn;
+    }
+
+    private static List<Note> ReadAll(SqliteCommand cmd)
+    {
+        var notes = new List<Note>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            notes.Add(Map(reader));
+        return notes;
     }
 
     private static string Validate(string? text)
