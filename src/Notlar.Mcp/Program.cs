@@ -37,6 +37,10 @@ builder.Services.AddSingleton(sp => new MemoryStore(
     AppPaths.DbPath,
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<IChangeSignal>()));
+builder.Services.AddSingleton(sp => new SkillRegistry(
+    AppPaths.DbPath,
+    sp.GetRequiredService<TimeProvider>(),
+    sp.GetRequiredService<IChangeSignal>()));
 
 builder.Services
     .AddMcpServer()
