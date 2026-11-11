@@ -26,7 +26,7 @@ public partial class DayWindow : Window
         Day = day;
         InitializeComponent();
         Title = "Notlar — " + DayGrouper.FormatDate(day);
-        Reload();
+        Loaded += (_, _) => Reload();
     }
 
     /// <summary>Store'dan güncel notları okuyup görünümü tazeler. Pencere kapalıysa/yüklenmemişse güvenli şekilde hiçbir şey yapmaz.</summary>
