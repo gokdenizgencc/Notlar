@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Notlar.Core;
+using Notlar.Mcp;
 
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 {
@@ -14,6 +15,7 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(new McpAuthor(McpAuthorParser.Parse(args)));
 builder.Services.AddSingleton<IChangeSignal>(sp =>
 {
     var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Notlar.ChangeSignal");

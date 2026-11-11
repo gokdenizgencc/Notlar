@@ -35,6 +35,19 @@ public static class AuthorColors
         return FallbackFor(authorName);
     }
 
+    /// <summary>Verilen rengin hafif saydam (rozet arka planı gibi) bir tonunu döndürür.</summary>
+    public static Brush Tint(Brush brush)
+    {
+        if (brush is SolidColorBrush solid)
+        {
+            var c = solid.Color;
+            var tinted = new SolidColorBrush(Color.FromArgb(38, c.R, c.G, c.B));
+            tinted.Freeze();
+            return tinted;
+        }
+        return brush;
+    }
+
     private static Brush FallbackFor(string authorName)
     {
         var hash = 0;

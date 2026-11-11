@@ -134,6 +134,26 @@ public class NoteStoreTests
     }
 
     [Fact]
+    public void List_filters_by_arbitrary_author_case_insensitive()
+    {
+        using var f = new StoreFixture();
+        f.Store.Add("a", "ChatGPT");
+        f.Store.Add("b", "Gemini");
+
+        Assert.Equal(["a"], f.Store.List(new NoteFilter(Author: "chatgpt")).Select(n => n.Text));
+        Assert.Equal(["b"], f.Store.List(new NoteFilter(Author: "GEMINI")).Select(n => n.Text));
+    }
+
+    [Fact]
+    public void Add_normalizes_arbitrary_author_names()
+    {
+        using var f = new StoreFixture();
+        Assert.Equal("ChatGPT", f.Store.Add("x", "chatgpt").Author);
+        Assert.Equal("Gemini", f.Store.Add("y", "gemini").Author);
+        Assert.Equal("Yeni", f.Store.Add("z", "yeni").Author);
+    }
+
+    [Fact]
     public void Migrates_old_schema_without_author_column()
     {
         var dir = Path.Combine(Path.GetTempPath(), "notlar-test-" + Guid.NewGuid().ToString("N"));
@@ -171,6 +191,55 @@ public class NoteStoreTests
 
         var added = store.Add("yeni not", NoteAuthor.Claude);
         Assert.Equal(NoteAuthor.Claude, added.Author);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void Migrates_lowercase_author_values_to_canonical_casing()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "notlar-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var dbPath = Path.Combine(dir, "eski.db");
+
+        try
+        {
+            using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString()))
+            {
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                    CREATE TABLE notes (
+                        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                        text       TEXT    NOT NULL,
+                        created_at TEXT    NOT NULL,
+                        updated_at TEXT    NULL,
+                        done       INTEGER NOT NULL DEFAULT 0,
+                        deleted_at TEXT    NULL,
+                        author     TEXT    NOT NULL DEFAULT 'ben'
+                    );
+                    INSERT INTO notes(text, created_at, author) VALUES ('ben notu', '2026-11-11T14:32:00.000+03:00', 'ben');
+                    INSERT INTO notes(text, created_at, author) VALUES ('claude notu', '2026-11-11T14:33:00.000+03:00', 'claude');
+                    """;
+                cmd.ExecuteNonQuery();
+            }
+            SqliteConnection.ClearAllPools();
+
+            var time = new FakeTime(new DateTimeOffset(2026, 11, 11, 14, 32, 0, Tr));
+            var signal = new CountingSignal();
+            var store = new NoteStore(dbPath, time, signal);
+
+            Assert.Equal("Ben", store.Get(1)!.Author);
+            Assert.Equal("Claude", store.Get(2)!.Author);
+
+            // İdempotent: ikinci kez açmak zaten kanonik olan değerleri bozmaz.
+            var reopened = new NoteStore(dbPath, time, signal);
+            Assert.Equal("Ben", reopened.Get(1)!.Author);
+            Assert.Equal("Claude", reopened.Get(2)!.Author);
         }
         finally
         {

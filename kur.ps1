@@ -30,6 +30,9 @@ Write-Host '> Claude Code MCP kaydı...'
 cmd /c "claude mcp remove notlar --scope user >nul 2>&1"
 claude mcp add notlar --scope user -- $mcpExe
 if ($LASTEXITCODE -ne 0) { throw 'MCP kaydı başarısız.' }
+# Başka bir istemci (ör. ChatGPT, Gemini) aynı sunucuyu kendi adıyla yazsın isterse,
+# --yazar argümanıyla ayrı bir MCP kaydı eklenebilir, ör.:
+#   claude mcp add notlar-chatgpt --scope user -- $mcpExe --yazar ChatGPT
 
 Write-Host '> CLAUDE.md yönergesi...'
 $claudeDir = Join-Path $env:USERPROFILE '.claude'

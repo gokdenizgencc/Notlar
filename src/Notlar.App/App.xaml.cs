@@ -68,10 +68,12 @@ public partial class App : Application
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
 
         NoteStore store;
+        TaskStore taskStore;
         try
         {
             var signal = ChangeSignals.CreateOrNull(AppPaths.ChangeEventName, AppLog.Write);
             store = new NoteStore(AppPaths.DbPath, TimeProvider.System, signal);
+            taskStore = new TaskStore(AppPaths.DbPath, TimeProvider.System, signal);
         }
         catch (Exception ex)
         {
@@ -86,7 +88,7 @@ public partial class App : Application
         TryLog(() => store.Backup(AppPaths.BackupDir, keep: 7));
         TryLog(AutoStart.EnsureRegistration);
 
-        _panel = new PanelWindow(store);
+        _panel = new PanelWindow(store, taskStore);
         _tray = new TrayIcon(
             onToggle: _panel.Toggle,
             onOpen: _panel.ShowNearTray,

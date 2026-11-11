@@ -56,10 +56,15 @@ public sealed class SearchToolTests : IDisposable
     }
 
     [Fact]
-    public void NotlardaAra_rejects_bad_yazar()
+    public void NotlardaAra_filters_by_arbitrary_author()
     {
-        var ex = Assert.Throws<McpException>(() => _tools.NotlardaAra("x", yazar: "biri"));
-        Assert.Equal("Geçersiz yazar 'biri', 'ben' veya 'claude' bekleniyor.", ex.Message);
+        _f.Store.Add("ortak kelime gemini notu", "Gemini");
+        _tools.NotEkle("ortak kelime claude notu");
+
+        var result = _tools.NotlardaAra("ortak kelime", yazar: "Gemini");
+
+        Assert.Contains("gemini notu", result);
+        Assert.DoesNotContain("claude notu", result);
     }
 
     [Fact]

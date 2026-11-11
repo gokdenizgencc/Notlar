@@ -43,14 +43,16 @@
                               VerticalAlignment="Top" Margin="0,2,8,0"/>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,0,8,0">
                         <TextBlock Text="{Binding Time}" Foreground="{DynamicResource Muted}"/>
-                        <Border x:Name="AuthorBadge" CornerRadius="8" Padding="5,0" Margin="4,0,0,0" VerticalAlignment="Center">
+                        <Border x:Name="AuthorBadge" CornerRadius="8" Padding="5,0" Margin="4,0,0,0" VerticalAlignment="Center"
+                                Background="{Binding AuthorTint}">
                             <TextBlock x:Name="AuthorBadgeText" Text="{Binding AuthorLabel}" FontSize="10"
-                                       Foreground="{DynamicResource Muted}"/>
+                                       Foreground="{Binding AuthorColor}"/>
                         </Border>
                     </StackPanel>
                     <StackPanel Grid.Column="2">
                         <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
                             <TextBlock x:Name="NoteText" Text="{Binding DisplayText}" TextWrapping="Wrap"
+                                       Foreground="{Binding AuthorColor}"
                                        MouseLeftButtonDown="NoteText_MouseLeftButtonDown"/>
                             <ItemsControl ItemsSource="{Binding Tags}" Margin="0,2,0,0">
                                 <ItemsControl.ItemsPanel>
@@ -92,9 +94,52 @@
                     <Setter TargetName="NoteText" Property="TextDecorations" Value="Strikethrough"/>
                     <Setter TargetName="NoteText" Property="Opacity" Value="0.5"/>
                 </DataTrigger>
-                <DataTrigger Binding="{Binding IsClaude}" Value="True">
-                    <Setter TargetName="AuthorBadge" Property="Background" Value="{DynamicResource TagBg}"/>
-                    <Setter TargetName="AuthorBadgeText" Property="Foreground" Value="{DynamicResource Accent}"/>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="TaskRowTemplate" DataType="{x:Type local:TaskItemVm}">
+            <Border x:Name="TaskRow" Focusable="True" FocusVisualStyle="{x:Null}"
+                    Background="Transparent" Padding="8,5" CornerRadius="4">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <CheckBox Grid.Column="0" IsChecked="{Binding Done, Mode=OneWay}"
+                              Click="TaskDone_Click" Focusable="False"
+                              VerticalAlignment="Top" Margin="0,2,8,0"/>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock x:Name="TaskTitleText" Text="{Binding Title}" TextWrapping="Wrap"
+                                   Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}"
+                                   MouseLeftButtonDown="TaskTitle_MouseLeftButtonDown"/>
+                        <TextBox Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
+                                 Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
+                                 Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                 CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}"
+                                 TextWrapping="Wrap" Padding="2"
+                                 KeyDown="TaskEditBox_KeyDown"
+                                 LostKeyboardFocus="TaskEditBox_LostKeyboardFocus"
+                                 IsVisibleChanged="EditBox_IsVisibleChanged"/>
+                    </StackPanel>
+                    <Border Grid.Column="2" CornerRadius="8" Padding="5,0" Margin="4,0,8,0" VerticalAlignment="Top"
+                            Background="{Binding AuthorTint}">
+                        <TextBlock Text="{Binding Author}" FontSize="10" Foreground="{Binding AuthorColor}"/>
+                    </Border>
+                    <Button x:Name="TaskDeleteButton" Grid.Column="3" Content="🗑" ToolTip="Sil"
+                            Style="{StaticResource FlatButton}" Visibility="Hidden"
+                            VerticalAlignment="Top" Click="TaskDeleteButton_Click"/>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="TaskRow" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="TaskRow" Property="Background" Value="{DynamicResource Surface}"/>
+                    <Setter TargetName="TaskDeleteButton" Property="Visibility" Value="Visible"/>
+                </Trigger>
+                <DataTrigger Binding="{Binding Done}" Value="True">
+                    <Setter TargetName="TaskTitleText" Property="TextDecorations" Value="Strikethrough"/>
+                    <Setter TargetName="TaskTitleText" Property="Opacity" Value="0.5"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -111,9 +156,10 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="📝 Notlar" FontSize="15" FontWeight="SemiBold" Margin="14,12,14,8"/>
+        <TextBlock x:Name="HeaderText" Grid.Row="0" Text="📝 Notlar" FontSize="15" FontWeight="SemiBold" Margin="14,12,14,8"
+                   MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
 
-        <Border Grid.Row="1" Margin="12,0,12,8" Background="{DynamicResource Surface}"
+        <Border x:Name="NotesInputBorder" Grid.Row="1" Margin="12,0,12,8" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="6">
             <Grid>
                 <TextBox x:Name="InputBox" Background="Transparent" BorderThickness="0" Padding="8,7"
@@ -135,6 +181,28 @@
             </Grid>
         </Border>
 
+        <Border x:Name="TaskInputBorder" Grid.Row="1" Margin="12,0,12,8" Background="{DynamicResource Surface}"
+                BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="6" Visibility="Collapsed">
+            <Grid>
+                <TextBox x:Name="TaskInputBox" Background="Transparent" BorderThickness="0" Padding="8,7"
+                         Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
+                         KeyDown="TaskInputBox_KeyDown"/>
+                <TextBlock Text="Görev başlığı yaz..." Foreground="{DynamicResource Muted}"
+                           Margin="11,7" IsHitTestVisible="False">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Text, ElementName=TaskInputBox}" Value="">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+        </Border>
+
         <ItemsControl x:Name="AuthorFilterRow" Grid.Row="2" ItemsSource="{Binding AuthorFilters}" Margin="12,0,12,4">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
@@ -145,7 +213,7 @@
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
                                 <Setter Property="Background" Value="{DynamicResource Surface}"/>
-                                <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+                                <Setter Property="Foreground" Value="{Binding Color}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                         <Setter Property="Background" Value="{DynamicResource Accent}"/>
@@ -240,6 +308,12 @@
                                HorizontalAlignment="Center" Margin="0,24,0,0" Visibility="Collapsed"/>
                     <ItemsControl ItemsSource="{Binding DayNotes}" ItemTemplate="{StaticResource NoteRowTemplate}"/>
                 </StackPanel>
+
+                <StackPanel x:Name="TasksPanel" Visibility="Collapsed">
+                    <TextBlock x:Name="TasksEmptyText" Text="Henüz görev yok." Foreground="{DynamicResource Muted}"
+                               HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
+                    <ItemsControl ItemsSource="{Binding Tasks}" ItemTemplate="{StaticResource TaskRowTemplate}"/>
+                </StackPanel>
             </Grid>
         </ScrollViewer>
 
@@ -248,7 +322,7 @@
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="Geri al" Click="Undo_Click"
                         Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" FontWeight="SemiBold"/>
-                <TextBlock Text="Not silindi." VerticalAlignment="Center"/>
+                <TextBlock x:Name="UndoText" Text="Not silindi." VerticalAlignment="Center"/>
             </DockPanel>
         </Border>
 

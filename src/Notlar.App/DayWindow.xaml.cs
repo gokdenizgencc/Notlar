@@ -99,27 +99,15 @@ public partial class DayWindow : Window
             SummaryPillsPanel.Children.Add(BuildPill($"{doneCount} tamamlandı", (Brush)FindResource("Muted"), (Brush)FindResource("Bg")));
 
         var byAuthor = dayNotes
-            .GroupBy(n => n.Author.DisplayName(), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(n => n.Author, StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(g => g.Count());
         foreach (var group in byAuthor)
         {
             var authorName = group.Key;
             var color = AuthorColors.For(authorName, _settings) ?? (Brush)FindResource("Fg");
-            var bg = Tint(color);
+            var bg = AuthorColors.Tint(color);
             SummaryPillsPanel.Children.Add(BuildPill($"{group.Count()} {authorName}", color, bg));
         }
-    }
-
-    private static Brush Tint(Brush brush)
-    {
-        if (brush is SolidColorBrush solid)
-        {
-            var c = solid.Color;
-            var tinted = new SolidColorBrush(Color.FromArgb(38, c.R, c.G, c.B));
-            tinted.Freeze();
-            return tinted;
-        }
-        return brush;
     }
 
     private UIElement BuildPill(string text, Brush foreground, Brush background)
@@ -164,7 +152,7 @@ public partial class DayWindow : Window
         Grid.SetColumn(checkBox, 0);
         grid.Children.Add(checkBox);
 
-        var authorName = note.Author.DisplayName();
+        var authorName = note.Author;
         var authorColor = AuthorColors.For(authorName, _settings) ?? (Brush)FindResource("Fg");
 
         var timePanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 14, 0), VerticalAlignment = VerticalAlignment.Top };
@@ -179,7 +167,7 @@ public partial class DayWindow : Window
             Padding = new Thickness(6, 1, 6, 1),
             Margin = new Thickness(6, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            Background = Tint(authorColor),
+            Background = AuthorColors.Tint(authorColor),
         };
         authorBadge.Child = new TextBlock
         {

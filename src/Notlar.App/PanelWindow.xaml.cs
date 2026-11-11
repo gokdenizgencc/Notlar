@@ -9,6 +9,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Data.Sqlite;
 using Notlar.Core;
@@ -20,14 +21,20 @@ public partial class PanelWindow : Window
     private static readonly StringComparer TrComparer = StringComparer.Create(CultureInfo.GetCultureInfo("tr-TR"), ignoreCase: true);
     private const int RecentDays = 30;
 
+    private enum UndoKind { Note, Task }
+
     private readonly NoteStore _store;
+    private readonly TaskStore _taskStore;
     private readonly DispatcherTimer _undoTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly DispatcherTimer _errorTimer = new() { Interval = TimeSpan.FromSeconds(4) };
+    private AppSettings _settings;
     private string? _tagFilter;
-    private NoteAuthor? _authorFilter;
+    private string? _authorFilter;
     private long? _undoId;
+    private UndoKind _undoKind;
     private bool _reloadPending;
     private bool _showAll;
+    private bool _tasksMode;
     private DateOnly? _selectedDay;
     private DateTime _lastHiddenAt = DateTime.MinValue;
     private readonly List<DayWindow> _dayWindows = [];
@@ -36,17 +43,30 @@ public partial class PanelWindow : Window
     public ObservableCollection<NoteItem> DayNotes { get; } = [];
     public ObservableCollection<TagChip> Tags { get; } = [];
     public ObservableCollection<AuthorChip> AuthorFilters { get; } = [];
+    public ObservableCollection<TaskItemVm> Tasks { get; } = [];
 
-    public PanelWindow(NoteStore store)
+    public PanelWindow(NoteStore store, TaskStore taskStore)
     {
         _store = store;
+        _taskStore = taskStore;
+        _settings = AppSettings.Load();
         InitializeComponent();
         DataContext = this;
         _undoTimer.Tick += (_, _) => HideUndo();
         _errorTimer.Tick += (_, _) => { _errorTimer.Stop(); ErrorBar.Visibility = Visibility.Collapsed; };
+        AppSettings.Changed += OnSettingsChanged;
     }
 
-    private bool AnyEditing => DayNotes.Any(n => n.IsEditing);
+    private bool AnyEditing => DayNotes.Any(n => n.IsEditing) || Tasks.Any(t => t.IsEditing);
+
+    private void OnSettingsChanged()
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            _settings = AppSettings.Load();
+            if (IsVisible) ReloadCore();
+        });
+    }
 
     /// <summary>Tray sol tık. Panel açıkken tıklama önce Deactivated'ı tetikler; hemen yeniden açmayı engelle.</summary>
     public void Toggle()
@@ -63,7 +83,7 @@ public partial class PanelWindow : Window
         Show();
         ReloadCore();
         Activate();
-        InputBox.Focus();
+        if (_tasksMode) TaskInputBox.Focus(); else InputBox.Focus();
     }
 
     private void HidePanel()
@@ -74,6 +94,7 @@ public partial class PanelWindow : Window
         _showAll = false;
         _selectedDay = null;
         _authorFilter = null;
+        _tasksMode = false;
     }
 
     /// <summary>Açık düzenlemeleri kaydetmeden kapatır, böylece ardından çağrılan Reload() ertelenmez.</summary>
@@ -81,6 +102,8 @@ public partial class PanelWindow : Window
     {
         foreach (var note in DayNotes)
             note.IsEditing = false;
+        foreach (var task in Tasks)
+            task.IsEditing = false;
     }
 
     /// <summary>Panel gizliyken gerçek yeniden yükleme işini atlar (DB okuma + UI güncelleme).
@@ -109,16 +132,39 @@ public partial class PanelWindow : Window
         _reloadPending = false;
         Try(() =>
         {
+            HeaderText.Text = _tasksMode ? "✅ Görevler" : "📝 Notlar";
+            NotesInputBorder.Visibility = _tasksMode ? Visibility.Collapsed : Visibility.Visible;
+            TaskInputBorder.Visibility = _tasksMode ? Visibility.Visible : Visibility.Collapsed;
+            TasksPanel.Visibility = _tasksMode ? Visibility.Visible : Visibility.Collapsed;
+
+            ReloadTasks();
+
+            if (_tasksMode)
+            {
+                AuthorFilterRow.Visibility = Visibility.Collapsed;
+                TagRow.Visibility = Visibility.Collapsed;
+                DayListPanel.Visibility = Visibility.Collapsed;
+                DayViewPanel.Visibility = Visibility.Collapsed;
+                return;
+            }
+
             var today = DateOnly.FromDateTime(DateTime.Now);
             var since = today.AddDays(-(RecentDays - 1));
             var all = _showAll ? _store.List(new NoteFilter()) : _store.ListRecentAndOpen(since);
 
-            AuthorFilters.Clear();
-            AuthorFilters.Add(new AuthorChip(null, "Tümü", _authorFilter is null));
-            AuthorFilters.Add(new AuthorChip(NoteAuthor.Ben, "Ben", _authorFilter == NoteAuthor.Ben));
-            AuthorFilters.Add(new AuthorChip(NoteAuthor.Claude, "Claude", _authorFilter == NoteAuthor.Claude));
+            var distinctAuthors = all.Select(n => n.Author).Distinct(StringComparer.OrdinalIgnoreCase).Order(TrComparer).ToList();
+            if (_authorFilter is not null && !distinctAuthors.Contains(_authorFilter, StringComparer.OrdinalIgnoreCase))
+                _authorFilter = null;
 
-            var byAuthor = _authorFilter is null ? all : all.Where(n => n.Author == _authorFilter).ToList();
+            AuthorFilters.Clear();
+            AuthorFilters.Add(new AuthorChip(null, "Tümü", _authorFilter is null, (Brush)FindResource("Fg")));
+            foreach (var author in distinctAuthors)
+            {
+                var color = AuthorColors.For(author, _settings) ?? (Brush)FindResource("Fg");
+                AuthorFilters.Add(new AuthorChip(author, author, string.Equals(author, _authorFilter, StringComparison.OrdinalIgnoreCase), color));
+            }
+
+            var byAuthor = _authorFilter is null ? all : all.Where(n => string.Equals(n.Author, _authorFilter, StringComparison.OrdinalIgnoreCase)).ToList();
 
             var tags = byAuthor.SelectMany(n => n.Tags).Distinct().Order(TrComparer).ToList();
             if (_tagFilter is not null && !tags.Contains(_tagFilter))
@@ -146,7 +192,10 @@ public partial class PanelWindow : Window
             if (_selectedDay is { } day)
             {
                 foreach (var note in selectedGroup?.Notes ?? [])
-                    DayNotes.Add(new NoteItem(note));
+                {
+                    var color = AuthorColors.For(note.Author, _settings) ?? (Brush)FindResource("Fg");
+                    DayNotes.Add(new NoteItem(note, color, AuthorColors.Tint(color)));
+                }
                 DayViewHeader.Text = DayGrouper.Header(day, today);
             }
             DayViewEmptyText.Visibility = _selectedDay is not null && DayNotes.Count == 0
@@ -154,6 +203,7 @@ public partial class PanelWindow : Window
 
             DayListPanel.Visibility = _selectedDay is null ? Visibility.Visible : Visibility.Collapsed;
             DayViewPanel.Visibility = _selectedDay is null ? Visibility.Collapsed : Visibility.Visible;
+            AuthorFilterRow.Visibility = Visibility.Visible;
 
             InputPlaceholder.Text = _selectedDay is { } selectedOther && selectedOther != today
                 ? $"{DayGrouper.FormatShort(selectedOther)}'{DativeSuffix(selectedOther)} not yaz... (#etiket)"
@@ -170,6 +220,18 @@ public partial class PanelWindow : Window
         });
     }
 
+    private void ReloadTasks()
+    {
+        var tasks = _taskStore.List();
+        Tasks.Clear();
+        foreach (var task in tasks)
+        {
+            var color = AuthorColors.For(task.Author, _settings) ?? (Brush)FindResource("Fg");
+            Tasks.Add(new TaskItemVm(task, color, AuthorColors.Tint(color)));
+        }
+        TasksEmptyText.Visibility = Tasks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     public void ExportMarkdown() => Try(() =>
     {
         var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -179,6 +241,14 @@ public partial class PanelWindow : Window
     });
 
     private void Window_Deactivated(object? sender, EventArgs e) => HidePanel();
+
+    private void HeaderText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 3) return;
+        CancelAllEdits();
+        _tasksMode = !_tasksMode;
+        Reload();
+    }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -199,6 +269,11 @@ public partial class PanelWindow : Window
         else if (e.Key == Key.Delete && Keyboard.FocusedElement is FrameworkElement { DataContext: NoteItem item })
         {
             DeleteNote(item);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete && Keyboard.FocusedElement is FrameworkElement { DataContext: TaskItemVm taskItem })
+        {
+            DeleteTask(taskItem);
             e.Handled = true;
         }
     }
@@ -224,6 +299,19 @@ public partial class PanelWindow : Window
                 _selectedDay = DateOnly.FromDateTime(DateTime.Now);
             }
             InputBox.Clear();
+            Reload();
+        });
+    }
+
+    private void TaskInputBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        if (string.IsNullOrWhiteSpace(TaskInputBox.Text)) return;
+        Try(() =>
+        {
+            _taskStore.Add(TaskInputBox.Text, NoteAuthor.Ben);
+            TaskInputBox.Clear();
             Reload();
         });
     }
@@ -389,6 +477,78 @@ public partial class PanelWindow : Window
         {
             _store.Delete(item.Id);
             _undoId = item.Id;
+            _undoKind = UndoKind.Note;
+            UndoText.Text = "Not silindi.";
+            UndoBar.Visibility = Visibility.Visible;
+            _undoTimer.Stop();
+            _undoTimer.Start();
+            Reload();
+        });
+    }
+
+    private void TaskDone_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox { DataContext: TaskItemVm item } box)
+        {
+            CancelAllEdits();
+            Try(() => { _taskStore.SetDone(item.Id, box.IsChecked == true); Reload(); });
+        }
+    }
+
+    private void TaskTitle_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2 || sender is not FrameworkElement { DataContext: TaskItemVm item }) return;
+        item.EditText = item.Task.Title;
+        item.IsEditing = true;
+        e.Handled = true;
+    }
+
+    private void TaskEditBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: TaskItemVm item }) return;
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            var text = item.EditText.Trim();
+            item.IsEditing = false;
+            if (text.Length > 0 && text != item.Task.Title)
+                Try(() => _taskStore.Rename(item.Id, text));
+            Reload();
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CancelTaskEdit(item);
+        }
+    }
+
+    private void TaskEditBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox { DataContext: TaskItemVm { IsEditing: true } item })
+            CancelTaskEdit(item);
+    }
+
+    private void CancelTaskEdit(TaskItemVm item)
+    {
+        item.IsEditing = false;
+        if (_reloadPending) Reload();
+    }
+
+    private void TaskDeleteButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TaskItemVm item })
+            DeleteTask(item);
+    }
+
+    private void DeleteTask(TaskItemVm item)
+    {
+        CancelAllEdits();
+        Try(() =>
+        {
+            _taskStore.Delete(item.Id);
+            _undoId = item.Id;
+            _undoKind = UndoKind.Task;
+            UndoText.Text = "Görev silindi.";
             UndoBar.Visibility = Visibility.Visible;
             _undoTimer.Stop();
             _undoTimer.Start();
@@ -399,7 +559,12 @@ public partial class PanelWindow : Window
     private void Undo_Click(object sender, RoutedEventArgs e)
     {
         if (_undoId is { } id)
-            Try(() => { _store.Restore(id); Reload(); });
+        {
+            if (_undoKind == UndoKind.Task)
+                Try(() => { _taskStore.Restore(id); Reload(); });
+            else
+                Try(() => { _store.Restore(id); Reload(); });
+        }
         HideUndo();
     }
 
@@ -421,7 +586,7 @@ public partial class PanelWindow : Window
             AppLog.Write(ex);
             var message = ex switch
             {
-                NoteNotFoundException or ArgumentException => ex.Message,
+                NoteNotFoundException or TaskNotFoundException or ArgumentException => ex.Message,
                 SqliteException => $"Veritabanı hatası. Yedekler: {AppPaths.BackupDir}",
                 _ => $"Bir hata oluştu, ayrıntı: {AppPaths.LogPath}",
             };

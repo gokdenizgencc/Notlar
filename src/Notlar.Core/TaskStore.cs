@@ -47,7 +47,7 @@ public sealed class TaskStore
             cmd.CommandText = "INSERT INTO tasks(title, created_at, author) VALUES($title, $now, $author) RETURNING id";
             cmd.Parameters.AddWithValue("$title", clean);
             cmd.Parameters.AddWithValue("$now", Now());
-            cmd.Parameters.AddWithValue("$author", string.IsNullOrWhiteSpace(author) ? "Claude" : author.Trim());
+            cmd.Parameters.AddWithValue("$author", string.IsNullOrWhiteSpace(author) ? NoteAuthor.Claude : NoteAuthor.Normalize(author));
             id = (long)cmd.ExecuteScalar()!;
         }
         _signal.Notify();

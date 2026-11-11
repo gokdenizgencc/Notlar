@@ -9,7 +9,7 @@ using Notlar.Core;
 namespace Notlar.Mcp;
 
 [McpServerToolType]
-public sealed class NoteTools(NoteStore store, TimeProvider time)
+public sealed class NoteTools(NoteStore store, TimeProvider time, McpAuthor? author = null)
 {
     [McpServerTool(Name = "not_ekle")]
     [Description("Kullanıcının kişisel not uygulamasına yeni not ekler. Kullanıcı 'not al', 'not et', 'kaydet', 'aklında tut' dediğinde bunu kullan. Kayıt saati otomatik atanır, ya da tarih/saat belirtilerek geçmiş (veya istenen) bir güne not eklenebilir. Metindeki #kelime etiket olur.")]
@@ -23,7 +23,7 @@ public sealed class NoteTools(NoteStore store, TimeProvider time)
         var timeOfDay = ParseTime(saat) ?? TimeOnly.FromDateTime(now.DateTime);
         var createdAt = new DateTimeOffset(date.Year, date.Month, date.Day,
             timeOfDay.Hour, timeOfDay.Minute, timeOfDay.Second, now.Offset);
-        var note = store.AddAt(metin, createdAt, NoteAuthor.Claude);
+        var note = store.AddAt(metin, createdAt, author?.Name ?? NoteAuthor.Claude);
         return $"Not eklendi: {NoteFormatter.Line(note)} — {DayGrouper.FormatDate(note.Day)}";
     });
 
@@ -34,7 +34,7 @@ public sealed class NoteTools(NoteStore store, TimeProvider time)
         [Description("Bitiş tarihi (yyyy-MM-dd). Boşsa bugün.")] string? bitis = null,
         [Description("Sadece bu etiketi taşıyan notlar, örn. 'iş'.")] string? etiket = null,
         [Description("true ise yalnızca tamamlanmamış notlar.")] bool sadece_acik = false,
-        [Description("Sadece bu yazarın notları: 'ben' veya 'claude'. Boşsa hepsi.")] string? yazar = null) => Run(() =>
+        [Description("Sadece bu yazarın notları, örn. 'Ben', 'Claude', 'ChatGPT'. Boşsa hepsi.")] string? yazar = null) => Run(() =>
     {
         var today = DateOnly.FromDateTime(time.GetLocalNow().DateTime);
         var to = ParseDate(bitis) ?? today;
@@ -97,20 +97,14 @@ public sealed class NoteTools(NoteStore store, TimeProvider time)
         throw new ArgumentException($"Geçersiz saat '{value}', HH:mm bekleniyor.");
     }
 
-    private static NoteAuthor? ParseAuthor(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-        if (NoteAuthorExtensions.TryParse(value.Trim(), out var author))
-            return author;
-        throw new ArgumentException($"Geçersiz yazar '{value}', 'ben' veya 'claude' bekleniyor.");
-    }
+    private static string? ParseAuthor(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     [McpServerTool(Name = "notlarda_ara")]
     [Description("Notların metninde kelime arar (Türkçe büyük/küçük harf duyarsız). Kullanıcı 'şunla ilgili notlarımı bul', 'X geçen notlar' dediğinde kullan.")]
     public string NotlardaAra(
         [Description("Aranacak kelimeler; tümünü içeren notlar bulunur.")] string sorgu,
-        [Description("Sadece bu yazarın notları: 'ben' veya 'claude'. Boşsa hepsi.")] string? yazar = null,
+        [Description("Sadece bu yazarın notları, örn. 'Ben', 'Claude', 'ChatGPT'. Boşsa hepsi.")] string? yazar = null,
         [Description("Sonuç sayısı sınırı.")] int limit = 20) => Run(() =>
     {
         var clampedLimit = Math.Clamp(limit, 1, 100);

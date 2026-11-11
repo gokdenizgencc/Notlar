@@ -62,16 +62,28 @@ public sealed class NoteStore
             cmd.CommandText = "ALTER TABLE notes ADD COLUMN author TEXT NOT NULL DEFAULT 'ben'";
             cmd.ExecuteNonQuery();
         }
+
+        // Eski (küçük harfli, enum tabanlı) yazar değerlerini güncel kanonik adlara taşır.
+        // İdempotent: zaten taşınmış DB'lerde hiçbir satırı etkilemez.
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                UPDATE notes SET author = 'Ben' WHERE author = 'ben';
+                UPDATE notes SET author = 'Claude' WHERE author = 'claude';
+                """;
+            cmd.ExecuteNonQuery();
+        }
     }
 
-    public Note Add(string text, NoteAuthor author = NoteAuthor.Ben) =>
+    public Note Add(string text, string author = NoteAuthor.Ben) =>
         AddAt(text, _time.GetLocalNow(), author);
 
     /// <summary>Notu belirtilen zamanla ekler (geçmiş/istenen tarihe not eklemek için).
     /// <paramref name="createdAt"/>, mağazanın yerel saat dilimine çevrilerek saklanır.</summary>
-    public Note AddAt(string text, DateTimeOffset createdAt, NoteAuthor author = NoteAuthor.Ben)
+    public Note AddAt(string text, DateTimeOffset createdAt, string author = NoteAuthor.Ben)
     {
         var clean = Validate(text);
+        var normalizedAuthor = NoteAuthor.Normalize(author);
         var local = TimeZoneInfo.ConvertTime(createdAt, _time.LocalTimeZone);
         long id;
         using (var conn = Open())
@@ -80,7 +92,7 @@ public sealed class NoteStore
             cmd.CommandText = "INSERT INTO notes(text, created_at, author) VALUES($text, $now, $author) RETURNING id";
             cmd.Parameters.AddWithValue("$text", clean);
             cmd.Parameters.AddWithValue("$now", Format(local));
-            cmd.Parameters.AddWithValue("$author", author.ToDbValue());
+            cmd.Parameters.AddWithValue("$author", normalizedAuthor);
             id = (long)cmd.ExecuteScalar()!;
         }
         _signal.Notify();
@@ -116,8 +128,8 @@ public sealed class NoteStore
             sql.Append(" AND done = 0");
         if (filter.Author is { } author)
         {
-            sql.Append(" AND author = $author");
-            cmd.Parameters.AddWithValue("$author", author.ToDbValue());
+            sql.Append(" AND author = $author COLLATE NOCASE");
+            cmd.Parameters.AddWithValue("$author", author);
         }
         sql.Append(" ORDER BY id");
         cmd.CommandText = sql.ToString();
@@ -282,13 +294,13 @@ public sealed class NoteStore
         Parse(r.GetString(2)),
         r.IsDBNull(3) ? null : Parse(r.GetString(3)),
         r.GetInt64(4) != 0,
-        NoteAuthorExtensions.TryParse(r.GetString(5), out var author) ? author : NoteAuthor.Ben);
+        r.GetString(5));
 
     private static readonly CultureInfo TrSearch = CultureInfo.GetCultureInfo("tr-TR");
 
     /// <summary>Canlı notlar arasında, metni (boşlukla ayrılmış) tüm terimleri içeren notları, Türkçe
     /// büyük/küçük harf duyarsız şekilde arar. En yeni not önce; <paramref name="limit"/> ile sınırlanır.</summary>
-    public IReadOnlyList<Note> Search(string query, NoteAuthor? author = null, int limit = 50)
+    public IReadOnlyList<Note> Search(string query, string? author = null, int limit = 50)
     {
         if (string.IsNullOrWhiteSpace(query))
             throw new ArgumentException("Arama metni boş olamaz.");
@@ -300,8 +312,8 @@ public sealed class NoteStore
         var sql = new StringBuilder($"SELECT {Columns} FROM notes WHERE deleted_at IS NULL");
         if (author is { } a)
         {
-            sql.Append(" AND author = $author");
-            cmd.Parameters.AddWithValue("$author", a.ToDbValue());
+            sql.Append(" AND author = $author COLLATE NOCASE");
+            cmd.Parameters.AddWithValue("$author", a);
         }
         sql.Append(" ORDER BY created_at DESC");
         cmd.CommandText = sql.ToString();

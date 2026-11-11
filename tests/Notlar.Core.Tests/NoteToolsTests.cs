@@ -125,10 +125,15 @@ public sealed class NoteToolsTests : IDisposable
     }
 
     [Fact]
-    public void NotlariListele_rejects_bad_yazar()
+    public void NotlariListele_filters_by_arbitrary_author()
     {
-        var ex = Assert.Throws<McpException>(() => _tools.NotlariListele(yazar: "biri"));
-        Assert.Equal("Geçersiz yazar 'biri', 'ben' veya 'claude' bekleniyor.", ex.Message);
+        _tools.NotEkle("claude notu");
+        _f.Store.Add("gemini notu", "Gemini");
+
+        var result = _tools.NotlariListele(yazar: "Gemini");
+
+        Assert.Contains("gemini notu", result);
+        Assert.DoesNotContain("claude notu", result);
     }
 
     [Fact]

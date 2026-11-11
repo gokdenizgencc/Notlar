@@ -8,15 +8,16 @@ using Notlar.Core;
 namespace Notlar.Mcp;
 
 [McpServerToolType]
-public sealed class TaskTools(TaskStore store)
+public sealed class TaskTools(TaskStore store, McpAuthor? author = null)
 {
     [McpServerTool(Name = "gorev_ekle")]
     [Description("Kullanıcının gizli görev listesine yeni bir görev başlığı ekler. Kullanıcı 'görev ekle', 'task ekle', 'yapılacaklara ekle' dediğinde kullan.")]
     public string GorevEkle(
         [Description("Görev başlığı.")] string baslik,
-        [Description("Görevi ekleyen asistan, örn. 'Claude' veya 'ChatGPT'.")] string yazar = "Claude") => Run(() =>
+        [Description("Görevi ekleyen asistan, örn. 'Claude' veya 'ChatGPT'. Boşsa bu MCP sunucusunun varsayılan yazarı kullanılır.")] string? yazar = null) => Run(() =>
     {
-        var task = store.Add(baslik, yazar);
+        var effectiveAuthor = string.IsNullOrWhiteSpace(yazar) ? (author?.Name ?? NoteAuthor.Claude) : yazar.Trim();
+        var task = store.Add(baslik, effectiveAuthor);
         return $"Görev eklendi: {Line(task)}";
     });
 
