@@ -106,7 +106,11 @@ public partial class App : Application
             onExit: ExitApp);
         try
         {
-            _listener = new ChangeListener(AppPaths.ChangeEventName, () => Dispatcher.InvokeAsync(_panel.Reload), AppLog.Write);
+            _listener = new ChangeListener(AppPaths.ChangeEventName, () => Dispatcher.InvokeAsync(() =>
+            {
+                _panel.Reload();
+                NoteEditorWindow.ReloadAll();
+            }), AppLog.Write);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
         {

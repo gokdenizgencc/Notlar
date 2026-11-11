@@ -14,7 +14,14 @@ public sealed class AppSettings
     public const double MaxDayFontSize = 40;
     public const double DefaultDayFontSize = 16;
 
+    public const double MinEditorFontSize = 8;
+    public const double MaxEditorFontSize = 40;
+    public const double DefaultEditorFontSize = 14;
+
     public double DayFontSize { get; set; } = DefaultDayFontSize;
+
+    /// <summary>Notepad++ tarzı tam ekran not editörünün yazı tipi boyutu (Ctrl+tekerlek / Ctrl +/- ile değişir).</summary>
+    public double EditorFontSize { get; set; } = DefaultEditorFontSize;
 
     /// <summary>Panel sabitlenmiş mi? Sabitken Deactivated (odak kaybı) paneli gizlemez; yalnızca "—"
     /// gizle düğmesi, Esc ya da tepsi simgesine tıklama gizler. Varsayılan true: kullanıcı düğmeye
@@ -82,6 +89,9 @@ public sealed class AppSettings
 
             if (settings.DayFontSize is double.NaN || settings.DayFontSize < MinDayFontSize || settings.DayFontSize > MaxDayFontSize)
                 settings.DayFontSize = DefaultDayFontSize;
+
+            if (settings.EditorFontSize is double.NaN || settings.EditorFontSize < MinEditorFontSize || settings.EditorFontSize > MaxEditorFontSize)
+                settings.EditorFontSize = DefaultEditorFontSize;
 
             return settings;
         }

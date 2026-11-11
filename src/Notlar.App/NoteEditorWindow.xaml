@@ -1,0 +1,102 @@
+<Window x:Class="Notlar.App.NoteEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Notlar — Editör" Width="1200" Height="800" MinWidth="500" MinHeight="350"
+        WindowStartupLocation="CenterScreen" WindowState="Maximized"
+        Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
+        FontFamily="Segoe UI"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewMouseWheel="Window_PreviewMouseWheel"
+        Closing="Window_Closing"
+        Closed="Window_Closed">
+    <Window.Resources>
+        <Style x:Key="FlatButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="4">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Sekme şeridi -->
+        <Border Grid.Row="0" Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1" Padding="8,6,8,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="TabStrip" Orientation="Horizontal"/>
+                </ScrollViewer>
+                <Button Grid.Column="1" x:Name="AddTabButton" Content="＋" Style="{StaticResource FlatButton}"
+                        Margin="6,0,6,6" Click="AddTabButton_Click"/>
+                <Popup x:Name="DatePickerPopup" Grid.Column="1" PlacementTarget="{Binding ElementName=AddTabButton}"
+                       Placement="Bottom" StaysOpen="False">
+                    <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1" Padding="4">
+                        <DatePicker x:Name="OpenDayPicker" SelectedDateChanged="OpenDayPicker_SelectedDateChanged"/>
+                    </Border>
+                </Popup>
+            </Grid>
+        </Border>
+
+        <!-- Gövde: satır numarası + saat çubuğu ve düzenleyici -->
+        <Grid Grid.Row="1" Background="{DynamicResource Surface}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,1,0">
+                <ScrollViewer x:Name="GutterScroll" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled"
+                              IsHitTestVisible="False">
+                    <TextBlock x:Name="GutterText" FontFamily="Consolas" TextAlignment="Left"
+                               Padding="10,4,10,4" Foreground="{DynamicResource Muted}" Background="Transparent"/>
+                </ScrollViewer>
+            </Border>
+
+            <TextBox x:Name="EditorBox" Grid.Column="1" FontFamily="Consolas"
+                      AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
+                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                      BorderThickness="0" Background="Transparent" Foreground="{DynamicResource Fg}"
+                      CaretBrush="{DynamicResource Fg}" Padding="10,4,10,4"
+                      TextChanged="EditorBox_TextChanged" SelectionChanged="EditorBox_SelectionChanged"
+                      ScrollViewer.ScrollChanged="EditorBox_ScrollChanged"/>
+        </Grid>
+
+        <!-- Dışarıda değişti çubuğu -->
+        <Border Grid.Row="2" x:Name="ExternalChangeBar" Background="{DynamicResource TagBg}" Padding="12,6" Visibility="Collapsed">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Yeniden yükle" Style="{StaticResource FlatButton}"
+                        Foreground="{DynamicResource Accent}" Click="ReloadBar_Click"/>
+                <TextBlock Text="Bu gün dışarıda değişti — Yeniden yükle" VerticalAlignment="Center" Foreground="{DynamicResource Fg}"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Durum çubuğu -->
+        <Border Grid.Row="3" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,4">
+            <DockPanel>
+                <TextBlock x:Name="DirtyText" DockPanel.Dock="Right" Text="Kaydedilmemiş değişiklik var"
+                           Foreground="{DynamicResource Accent}" Margin="12,0,0,0" Visibility="Collapsed"/>
+                <TextBlock x:Name="StatusText" Foreground="{DynamicResource Muted}"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -49,8 +49,10 @@
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <StackPanel x:Name="SummaryPillsPanel" Orientation="Horizontal" VerticalAlignment="Center"/>
+                    <Button x:Name="EditorButton" Content="📝 Editör" Style="{StaticResource FlatButton}"
+                            Margin="16,0,0,0" Click="EditorButton_Click"/>
                     <Button x:Name="AppearanceButton" Content="⚙ Görünüm" Style="{StaticResource FlatButton}"
-                            Margin="16,0,0,0" Click="AppearanceButton_Click"/>
+                            Margin="8,0,0,0" Click="AppearanceButton_Click"/>
                 </StackPanel>
             </Grid>
         </Border>

@@ -245,6 +245,11 @@ public partial class DayWindow : Window
         Reload();
     }
 
+    private void EditorButton_Click(object sender, RoutedEventArgs e)
+    {
+        NoteEditorWindow.OpenDay(_store, Day);
+    }
+
     private void AppearanceButton_Click(object sender, RoutedEventArgs e)
     {
         var window = new AppearanceWindow(_settings) { Owner = this };
