@@ -15,6 +15,23 @@ public class SkillCatalogTests
         var entry = Assert.Single(entries);
         Assert.Equal(5, entry.UsageCount);
         Assert.Equal("superpowers", entry.Source);
+        Assert.Null(entry.DescriptionTr);
+    }
+
+    [Fact]
+    public void Build_attaches_turkish_translation_when_present()
+    {
+        var installed = new List<SkillInfo> { new("Claude", "superpowers:brainstorming", "brainstorming", "desc", "superpowers") };
+        var translations = new Dictionary<string, SkillTranslation>
+        {
+            ["superpowers:brainstorming"] = new("superpowers:brainstorming", "Fikir üretir.", DateTimeOffset.UnixEpoch),
+        };
+
+        var entries = SkillCatalog.Build(installed, new Dictionary<string, SkillUsage>(), [], translations);
+
+        var entry = Assert.Single(entries);
+        Assert.Equal("Fikir üretir.", entry.DescriptionTr);
+        Assert.Equal("desc", entry.Description);
     }
 
     [Fact]

@@ -34,6 +34,7 @@ public partial class PanelWindow : Window
     private readonly TaskStore _taskStore;
     private readonly MemoryStore _memoryStore;
     private readonly SkillRegistry _skillRegistry;
+    private readonly SkillTranslations _skillTranslations;
     private readonly SkillUsageCache _skillUsageCache = new();
     private readonly DispatcherTimer _undoTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly DispatcherTimer _errorTimer = new() { Interval = TimeSpan.FromSeconds(4) };
@@ -53,10 +54,14 @@ public partial class PanelWindow : Window
     private IReadOnlyList<SkillInfo>? _skillInstalledCache;
     private IReadOnlyDictionary<string, SkillUsage>? _skillUsageDataCache;
     private IReadOnlyList<RegistrySkill>? _skillRegistryCache;
+    private IReadOnlyDictionary<string, SkillTranslation>? _skillTranslationsCache;
+    private IReadOnlyList<MarketplacePlugin>? _marketplaceCache;
     private bool _skillLoading;
     private bool _skillLoadRequested;
     private string _skillSearch = "";
     private bool _skillSortByUsage = true;
+    private bool _skillShowDiscover;
+    private readonly DispatcherTimer _skillStatusTimer = new() { Interval = TimeSpan.FromSeconds(6) };
 
     public ObservableCollection<DayListItem> Days { get; } = [];
     public ObservableCollection<NoteItem> DayNotes { get; } = [];
@@ -67,19 +72,23 @@ public partial class PanelWindow : Window
     public ObservableCollection<string> MemoryCategories { get; } = [];
     public ObservableCollection<SkillGroupVm> SkillGroups { get; } = [];
     public ObservableCollection<string> SkillAiOptions { get; } = [];
+    public ObservableCollection<MarketplaceGroupVm> MarketplaceGroups { get; } = [];
 
-    public PanelWindow(NoteStore store, TaskStore taskStore, MemoryStore memoryStore, SkillRegistry skillRegistry)
+    public PanelWindow(NoteStore store, TaskStore taskStore, MemoryStore memoryStore, SkillRegistry skillRegistry, SkillTranslations skillTranslations)
     {
         _store = store;
         _taskStore = taskStore;
         _memoryStore = memoryStore;
         _skillRegistry = skillRegistry;
+        _skillTranslations = skillTranslations;
         _settings = AppSettings.Load();
         InitializeComponent();
         DataContext = this;
         _undoTimer.Tick += (_, _) => HideUndo();
         _errorTimer.Tick += (_, _) => { _errorTimer.Stop(); ErrorBar.Visibility = Visibility.Collapsed; };
+        _skillStatusTimer.Tick += (_, _) => { _skillStatusTimer.Stop(); SkillStatusText.Visibility = Visibility.Collapsed; };
         AppSettings.Changed += OnSettingsChanged;
+        UpdatePinButtonVisual();
     }
 
     private bool AnyEditing => DayNotes.Any(n => n.IsEditing) || Tasks.Any(t => t.IsEditing)
@@ -104,8 +113,17 @@ public partial class PanelWindow : Window
     public void ShowNearTray()
     {
         var area = SystemParameters.WorkArea;
-        Left = area.Right - Width - 8;
-        Top = area.Bottom - Height - 8;
+        if (_settings.PanelPinned && _settings.PanelLeft is { } left && _settings.PanelTop is { } top
+            && IsOnScreen(left, top))
+        {
+            Left = left;
+            Top = top;
+        }
+        else
+        {
+            Left = area.Right - Width - 8;
+            Top = area.Bottom - Height - 8;
+        }
         Show();
         ReloadCore();
         Activate();
@@ -117,6 +135,33 @@ public partial class PanelWindow : Window
             default: InputBox.Focus(); break;
         }
     }
+
+    /// <summary>Konum ekranın görünür alanı (çoklu monitör dahil) dışında kalmışsa (ör. monitör
+    /// çıkarıldıysa) false döner; bu durumda ShowNearTray varsayılan sağ-alt konuma düşer.</summary>
+    private static bool IsOnScreen(double left, double top)
+    {
+        var v = SystemParameters.VirtualScreenLeft;
+        var vTop = SystemParameters.VirtualScreenTop;
+        var width = SystemParameters.VirtualScreenWidth;
+        var height = SystemParameters.VirtualScreenHeight;
+        return left >= v - 50 && left <= v + width + 50 && top >= vTop - 50 && top <= vTop + height + 50;
+    }
+
+    private void UpdatePinButtonVisual()
+    {
+        PinButton.ToolTip = _settings.PanelPinned ? "Sabitlemeyi kaldır" : "Sabitle";
+        PinButton.Background = _settings.PanelPinned ? (Brush)FindResource("Accent") : Brushes.Transparent;
+        PinButton.Foreground = _settings.PanelPinned ? (Brush)FindResource("OnAccent") : (Brush)FindResource("Muted");
+    }
+
+    private void PinButton_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.PanelPinned = !_settings.PanelPinned;
+        _settings.Save();
+        UpdatePinButtonVisual();
+    }
+
+    private void HideButton_Click(object sender, RoutedEventArgs e) => HidePanel();
 
     private void HidePanel()
     {
@@ -321,22 +366,36 @@ public partial class PanelWindow : Window
         Process.Start("explorer.exe", $"/select,\"{path}\"");
     });
 
-    private void Window_Deactivated(object? sender, EventArgs e) => HidePanel();
+    private void Window_Deactivated(object? sender, EventArgs e)
+    {
+        if (!_settings.PanelPinned) HidePanel();
+    }
 
     private void HeaderText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount != 3) return;
-        CancelAllEdits();
-        if (_mode == Mode.Personal)
+        if (e.ClickCount == 3)
         {
-            _mode = _previousMode;
+            CancelAllEdits();
+            if (_mode == Mode.Personal)
+            {
+                _mode = _previousMode;
+            }
+            else
+            {
+                _previousMode = _mode;
+                _mode = Mode.Personal;
+            }
+            Reload();
+            return;
         }
-        else
+
+        if (e.ClickCount == 1 && _settings.PanelPinned)
         {
-            _previousMode = _mode;
-            _mode = Mode.Personal;
+            try { DragMove(); } catch (InvalidOperationException) { return; }
+            _settings.PanelLeft = Left;
+            _settings.PanelTop = Top;
+            _settings.Save();
         }
-        Reload();
     }
 
     private void NotesTab_Click(object sender, RoutedEventArgs e)
@@ -452,6 +511,21 @@ public partial class PanelWindow : Window
         Reload();
     }
 
+    /// <summary>Takvim açılır penceresi dışarı tıklama ya da Esc ile kapandığında (tarih seçilmeden),
+    /// DatePicker alanının kendisi de gizlenir.</summary>
+    private void OtherDayPicker_CalendarClosed(object sender, RoutedEventArgs e)
+    {
+        if (OtherDayPicker.SelectedDate is null)
+            OtherDayPicker.Visibility = Visibility.Collapsed;
+    }
+
+    private void OtherDayClose_Click(object sender, RoutedEventArgs e)
+    {
+        OtherDayPicker.IsDropDownOpen = false;
+        OtherDayPicker.SelectedDate = null;
+        OtherDayPicker.Visibility = Visibility.Collapsed;
+    }
+
     /// <summary>"gün ay" biçimindeki ifadeye eklenecek -e hali eki ("'a" / "'e"), son sesli harfe göre
     /// Türkçe büyük ünlü uyumuyla belirlenir (ör. "10 Kasım" → "a", "3 Ekim" → "e").</summary>
     private static string DativeSuffix(DateOnly date)
@@ -537,12 +611,11 @@ public partial class PanelWindow : Window
         }
     }
 
-    private void NoteText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void EditNoteButton_Click(object sender, RoutedEventArgs e)
     {
-        if (e.ClickCount != 2 || sender is not FrameworkElement { DataContext: NoteItem item }) return;
+        if (sender is not FrameworkElement { DataContext: NoteItem item }) return;
         item.EditText = item.Note.Text;
         item.IsEditing = true;
-        e.Handled = true;
     }
 
     private void EditBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -582,6 +655,11 @@ public partial class PanelWindow : Window
         if (_reloadPending) Reload();
     }
 
+    private void CancelNoteEditButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: NoteItem item }) CancelEdit(item);
+    }
+
     private void DeleteButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: NoteItem item })
@@ -613,12 +691,11 @@ public partial class PanelWindow : Window
         }
     }
 
-    private void TaskTitle_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void TaskEditButton_Click(object sender, RoutedEventArgs e)
     {
-        if (e.ClickCount != 2 || sender is not FrameworkElement { DataContext: TaskItemVm item }) return;
+        if (sender is not FrameworkElement { DataContext: TaskItemVm item }) return;
         item.EditText = item.Task.Title;
         item.IsEditing = true;
-        e.Handled = true;
     }
 
     private void TaskEditBox_KeyDown(object sender, KeyEventArgs e)
@@ -650,6 +727,11 @@ public partial class PanelWindow : Window
     {
         item.IsEditing = false;
         if (_reloadPending) Reload();
+    }
+
+    private void CancelTaskEditButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: TaskItemVm item }) CancelTaskEdit(item);
     }
 
     private void TaskDeleteButton_Click(object sender, RoutedEventArgs e)
@@ -694,6 +776,8 @@ public partial class PanelWindow : Window
         if (_mode == Mode.Memory) Try(ReloadMemory);
     }
 
+    private void MemorySearchClear_Click(object sender, RoutedEventArgs e) => MemorySearchBox.Clear();
+
     private void MemoryAdd_Click(object sender, RoutedEventArgs e)
     {
         var title = MemoryTitleBox.Text.Trim();
@@ -710,14 +794,14 @@ public partial class PanelWindow : Window
         });
     }
 
-    private void MemoryRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void MemoryRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => ((UIElement)sender).Focus();
+
+    private void MemoryEditButton_Click(object sender, RoutedEventArgs e)
     {
-        ((UIElement)sender).Focus();
-        if (e.ClickCount != 2 || sender is not FrameworkElement { DataContext: MemoryItemVm item }) return;
+        if (sender is not FrameworkElement { DataContext: MemoryItemVm item }) return;
         item.EditTitle = item.Title;
         item.EditContent = item.Content;
         item.IsEditing = true;
-        e.Handled = true;
     }
 
     private void MemoryTitleEditBox_KeyDown(object sender, KeyEventArgs e)
@@ -766,6 +850,11 @@ public partial class PanelWindow : Window
         if (_reloadPending) Reload();
     }
 
+    private void CancelMemoryEditButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: MemoryItemVm item }) CancelMemoryEdit(item);
+    }
+
     private void MemoryDeleteButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: MemoryItemVm item })
@@ -795,6 +884,14 @@ public partial class PanelWindow : Window
         UndoBar.Visibility = Visibility.Collapsed;
     }
 
+    private void UndoClose_Click(object sender, RoutedEventArgs e) => HideUndo();
+
+    private void ErrorClose_Click(object sender, RoutedEventArgs e)
+    {
+        _errorTimer.Stop();
+        ErrorBar.Visibility = Visibility.Collapsed;
+    }
+
     /// <summary>Yetenek kataloğunu (gerekirse) UI dışı bir iş parçacığında kurar: tarama + kullanım
     /// sayımı + kayıt listesi oluşturma pahalı olabileceğinden (ilk kullanım taraması ~5 sn, sonraki
     /// taramalar dosya önbelleği sayesinde ~0.2 sn) yalnızca ilk açılışta ya da "↻ Yenile" ile
@@ -812,12 +909,15 @@ public partial class PanelWindow : Window
 
         var registry = _skillRegistry;
         var usageCache = _skillUsageCache;
+        var translations = _skillTranslations;
         Task.Run(() =>
         {
             var installed = ClaudeSkillScanner.ScanInstalled();
             var usage = usageCache.GetUsage();
             var regList = registry.List();
-            return (installed, usage, regList);
+            var trList = translations.All();
+            var marketplace = MarketplaceScanner.ScanAvailable();
+            return (installed, usage, regList, trList, marketplace);
         }).ContinueWith(t => Dispatcher.InvokeAsync(() =>
         {
             _skillLoading = false;
@@ -827,10 +927,12 @@ public partial class PanelWindow : Window
                 RenderSkills();
                 return;
             }
-            var (installed, usage, regList) = t.Result;
+            var (installed, usage, regList, trList, marketplace) = t.Result;
             _skillInstalledCache = installed;
             _skillUsageDataCache = usage;
             _skillRegistryCache = regList;
+            _skillTranslationsCache = trList;
+            _marketplaceCache = marketplace;
             RenderSkills();
         }), TaskScheduler.Default);
     }
@@ -849,19 +951,34 @@ public partial class PanelWindow : Window
         if (_skillLoading)
         {
             SkillGroups.Clear();
+            MarketplaceGroups.Clear();
             SkillsEmptyText.Visibility = Visibility.Collapsed;
+            DiscoverEmptyText.Visibility = Visibility.Collapsed;
+            DiscoverHintText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        SetSkillViewToggleStyle();
+        InstalledSkillsPanel.Visibility = _skillShowDiscover ? Visibility.Collapsed : Visibility.Visible;
+        DiscoverPanel.Visibility = _skillShowDiscover ? Visibility.Visible : Visibility.Collapsed;
+        SkillSortRow.Visibility = _skillShowDiscover ? Visibility.Collapsed : Visibility.Visible;
+
+        if (_skillShowDiscover)
+        {
+            RenderDiscover();
             return;
         }
 
         var installed = _skillInstalledCache ?? [];
         var usage = _skillUsageDataCache ?? new Dictionary<string, SkillUsage>();
         var registry = _skillRegistryCache ?? [];
-        var catalog = SkillCatalog.Build(installed, usage, registry);
+        var translations = _skillTranslationsCache ?? new Dictionary<string, SkillTranslation>();
+        var catalog = SkillCatalog.Build(installed, usage, registry, translations);
 
         var query = _skillSearch.Trim();
         var filtered = query.Length == 0
             ? catalog
-            : catalog.Where(e => TrContains(e.Name, query) || TrContains(e.Description, query)).ToList();
+            : catalog.Where(e => TrContains(e.Name, query) || TrContains(e.Description, query) || TrContains(e.DescriptionTr, query)).ToList();
 
         SkillGroups.Clear();
         foreach (var group in filtered.GroupBy(e => e.Ai).OrderBy(g => g.Key, TrComparer))
@@ -889,8 +1006,39 @@ public partial class PanelWindow : Window
             : null;
         var usageLabel = e.UsageCount > 0 ? $"{e.UsageCount} kez" : "kullanılmadı";
         var lastUsedLabel = e.LastUsed is { } lastUsed ? $"son: {lastUsed.ToString("d MMMM", TrTr)}" : "";
-        return new SkillItemVm(e.Id, e.Ai, e.Name, e.Description, e.Source, usageLabel, lastUsedLabel,
+        var displayDescription = string.IsNullOrWhiteSpace(e.DescriptionTr) ? e.Description : e.DescriptionTr!;
+        return new SkillItemVm(e.Id, e.Ai, e.Name, displayDescription, e.Description, e.Source, usageLabel, lastUsedLabel,
             e.UsageCount == 0, canDelete, registryId);
+    }
+
+    /// <summary>"Keşfet" görünümünü (Kurulu/Keşfet geçişiyle açılan marketplace plugin listesi) kurulu
+    /// durum ve Türkçe açıklamalarla birlikte oluşturur.</summary>
+    private void RenderDiscover()
+    {
+        var plugins = _marketplaceCache ?? [];
+        var translations = _skillTranslationsCache ?? new Dictionary<string, SkillTranslation>();
+
+        DiscoverHintText.Visibility = plugins.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        var query = _skillSearch.Trim();
+        var filtered = query.Length == 0
+            ? plugins
+            : plugins.Where(p => TrContains(p.Name, query) || TrContains(p.Description, query) || TrContains(p.Marketplace, query)).ToList();
+
+        MarketplaceGroups.Clear();
+        foreach (var group in filtered.GroupBy(p => p.Marketplace).OrderBy(g => g.Key, TrComparer))
+        {
+            var items = group.OrderBy(p => p.Installed ? 0 : 1).ThenBy(p => p.Name, TrComparer)
+                .Select(p =>
+                {
+                    translations.TryGetValue($"plugin:{p.Marketplace}/{p.Name}", out var tr);
+                    var description = string.IsNullOrWhiteSpace(tr?.DescriptionTr) ? p.Description : tr!.DescriptionTr;
+                    var vm = new MarketplacePluginVm(p.Marketplace, p.Name, description, p.Skills) { Installed = p.Installed };
+                    return vm;
+                }).ToList();
+            MarketplaceGroups.Add(new MarketplaceGroupVm(group.Key, items));
+        }
+        DiscoverEmptyText.Visibility = plugins.Count > 0 && MarketplaceGroups.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>tr-TR, büyük/küçük harfe duyarsız "içerir" araması.</summary>
@@ -929,6 +1077,8 @@ public partial class PanelWindow : Window
         if (_mode == Mode.Skills) RenderSkills();
     }
 
+    private void SkillSearchClear_Click(object sender, RoutedEventArgs e) => SkillSearchBox.Clear();
+
     private void SkillSortUsage_Click(object sender, RoutedEventArgs e)
     {
         _skillSortByUsage = true;
@@ -942,6 +1092,113 @@ public partial class PanelWindow : Window
     }
 
     private void SkillRefresh_Click(object sender, RoutedEventArgs e) => EnsureSkillsLoaded(forceRescan: true);
+
+    private void SkillAddClose_Click(object sender, RoutedEventArgs e) => SkillAddExpander.IsExpanded = false;
+
+    private void SetSkillViewToggleStyle()
+    {
+        SetTabStyle(SkillShowInstalledButton, !_skillShowDiscover);
+        SetTabStyle(SkillShowDiscoverButton, _skillShowDiscover);
+    }
+
+    private void SkillShowInstalled_Click(object sender, RoutedEventArgs e)
+    {
+        _skillShowDiscover = false;
+        RenderSkills();
+    }
+
+    private void SkillShowDiscover_Click(object sender, RoutedEventArgs e)
+    {
+        _skillShowDiscover = true;
+        RenderSkills();
+    }
+
+    /// <summary>"Kur"/"Kaldır" düğmesi: kullanıcıdan onay alır, ardından `claude plugin install|uninstall`
+    /// komutunu UI dışı bir iş parçacığında çalıştırır. Hiçbir komut, açık onaydan önce çalıştırılmaz.</summary>
+    private void MarketplaceAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: MarketplacePluginVm plugin } || plugin.Busy) return;
+
+        var verb = plugin.Installed ? "kaldırmak" : "kurmak";
+        var question = $"\"{plugin.Name}\" eklentisini ({plugin.Marketplace}) {verb} istediğinize emin misiniz?";
+        if (MessageBox.Show(question, "Notlar", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+
+        plugin.Busy = true;
+        var args = plugin.Installed
+            ? $"plugin uninstall \"{plugin.PluginId}\" -s user -y"
+            : $"plugin install \"{plugin.PluginId}\" -s user -y";
+        var wasInstalled = plugin.Installed;
+
+        Task.Run(() => RunClaudeCli(args)).ContinueWith(t => Dispatcher.InvokeAsync(() =>
+        {
+            plugin.Busy = false;
+            if (t.IsFaulted)
+            {
+                AppLog.Write(t.Exception);
+                ShowError("Komut çalıştırılamadı, ayrıntı: " + AppPaths.LogPath);
+                return;
+            }
+            var (success, stdout, stderr) = t.Result;
+            if (success)
+            {
+                EnsureSkillsLoaded(forceRescan: true);
+                ShowSkillStatus(wasInstalled
+                    ? "Kaldırıldı."
+                    : "Kuruldu. Yeni Claude Code oturumlarında kullanılabilir.");
+            }
+            else
+            {
+                var detail = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+                ShowError(string.IsNullOrWhiteSpace(detail) ? "Komut başarısız oldu." : detail.Trim());
+            }
+        }), TaskScheduler.Default);
+    }
+
+    /// <summary>"claude" CLI'yi verilen argümanlarla UI dışı bir iş parçacığında çalıştırır ve
+    /// çıkış kodu + yakalanan stdout/stderr ile döner. "claude" PATH'te bulunamazsa başarısız sayılır.</summary>
+    private static (bool Success, string Stdout, string Stderr) RunClaudeCli(string arguments)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "claude",
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            using var process = Process.Start(psi);
+            if (process is null) return (false, "", "'claude' komutu başlatılamadı.");
+            var stdout = process.StandardOutput.ReadToEnd();
+            var stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit(60_000);
+            return (process.ExitCode == 0, stdout, stderr);
+        }
+        catch (Exception ex)
+        {
+            return (false, "", ex.Message);
+        }
+    }
+
+    private void ShowSkillStatus(string text)
+    {
+        SkillStatusText.Text = text;
+        SkillStatusText.Visibility = Visibility.Visible;
+        _skillStatusTimer.Stop();
+        _skillStatusTimer.Start();
+    }
+
+    private void ShowError(string message)
+    {
+        if (!IsVisible) return;
+        ErrorText.Text = message;
+        ErrorBar.Visibility = Visibility.Visible;
+        _errorTimer.Stop();
+        _errorTimer.Start();
+    }
 
     private void SkillAdd_Click(object sender, RoutedEventArgs e)
     {

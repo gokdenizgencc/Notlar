@@ -52,8 +52,7 @@
                     <StackPanel Grid.Column="2">
                         <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
                             <TextBlock x:Name="NoteText" Text="{Binding DisplayText}" TextWrapping="Wrap"
-                                       Foreground="{Binding AuthorColor}"
-                                       MouseLeftButtonDown="NoteText_MouseLeftButtonDown"/>
+                                       Foreground="{Binding AuthorColor}"/>
                             <ItemsControl ItemsSource="{Binding Tags}" Margin="0,2,0,0">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
@@ -68,23 +67,32 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
-                        <TextBox Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
-                                 Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
-                                 Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
-                                 CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}"
-                                 TextWrapping="Wrap" Padding="2"
-                                 KeyDown="EditBox_KeyDown"
-                                 LostKeyboardFocus="EditBox_LostKeyboardFocus"
-                                 IsVisibleChanged="EditBox_IsVisibleChanged"/>
+                        <DockPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" LastChildFill="True">
+                            <Button DockPanel.Dock="Right" Content="✕" ToolTip="Vazgeç" VerticalAlignment="Top"
+                                    Style="{StaticResource FlatButton}" Click="CancelNoteEditButton_Click"/>
+                            <TextBox Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                     CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}"
+                                     TextWrapping="Wrap" Padding="2"
+                                     KeyDown="EditBox_KeyDown"
+                                     LostKeyboardFocus="EditBox_LostKeyboardFocus"
+                                     IsVisibleChanged="EditBox_IsVisibleChanged"/>
+                        </DockPanel>
                     </StackPanel>
-                    <Button x:Name="DeleteButton" Grid.Column="3" Content="🗑" ToolTip="Sil"
-                            Style="{StaticResource FlatButton}" Visibility="Hidden"
-                            VerticalAlignment="Top" Click="DeleteButton_Click"/>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top">
+                        <Button x:Name="EditButton" Content="✏️" ToolTip="Düzenle"
+                                Style="{StaticResource FlatButton}" Visibility="Hidden"
+                                Click="EditNoteButton_Click"/>
+                        <Button x:Name="DeleteButton" Content="🗑" ToolTip="Sil"
+                                Style="{StaticResource FlatButton}" Visibility="Hidden"
+                                Click="DeleteButton_Click"/>
+                    </StackPanel>
                 </Grid>
             </Border>
             <DataTemplate.Triggers>
                 <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
                     <Setter TargetName="Row" Property="Background" Value="{DynamicResource Surface}"/>
+                    <Setter TargetName="EditButton" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="DeleteButton" Property="Visibility" Value="Visible"/>
                 </Trigger>
                 <Trigger SourceName="Row" Property="IsKeyboardFocused" Value="True">
@@ -112,29 +120,37 @@
                               VerticalAlignment="Top" Margin="0,2,8,0"/>
                     <StackPanel Grid.Column="1">
                         <TextBlock x:Name="TaskTitleText" Text="{Binding Title}" TextWrapping="Wrap"
-                                   Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}"
-                                   MouseLeftButtonDown="TaskTitle_MouseLeftButtonDown"/>
-                        <TextBox Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}"
-                                 Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
-                                 Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
-                                 CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}"
-                                 TextWrapping="Wrap" Padding="2"
-                                 KeyDown="TaskEditBox_KeyDown"
-                                 LostKeyboardFocus="TaskEditBox_LostKeyboardFocus"
-                                 IsVisibleChanged="EditBox_IsVisibleChanged"/>
+                                   Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}"/>
+                        <DockPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" LastChildFill="True">
+                            <Button DockPanel.Dock="Right" Content="✕" ToolTip="Vazgeç" VerticalAlignment="Top"
+                                    Style="{StaticResource FlatButton}" Click="CancelTaskEditButton_Click"/>
+                            <TextBox Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                     CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}"
+                                     TextWrapping="Wrap" Padding="2"
+                                     KeyDown="TaskEditBox_KeyDown"
+                                     LostKeyboardFocus="TaskEditBox_LostKeyboardFocus"
+                                     IsVisibleChanged="EditBox_IsVisibleChanged"/>
+                        </DockPanel>
                     </StackPanel>
                     <Border Grid.Column="2" CornerRadius="8" Padding="5,0" Margin="4,0,8,0" VerticalAlignment="Top"
                             Background="{Binding AuthorTint}">
                         <TextBlock Text="{Binding Author}" FontSize="10" Foreground="{Binding AuthorColor}"/>
                     </Border>
-                    <Button x:Name="TaskDeleteButton" Grid.Column="3" Content="🗑" ToolTip="Sil"
-                            Style="{StaticResource FlatButton}" Visibility="Hidden"
-                            VerticalAlignment="Top" Click="TaskDeleteButton_Click"/>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top">
+                        <Button x:Name="TaskEditButton" Content="✏️" ToolTip="Düzenle"
+                                Style="{StaticResource FlatButton}" Visibility="Hidden"
+                                Click="TaskEditButton_Click"/>
+                        <Button x:Name="TaskDeleteButton" Content="🗑" ToolTip="Sil"
+                                Style="{StaticResource FlatButton}" Visibility="Hidden"
+                                Click="TaskDeleteButton_Click"/>
+                    </StackPanel>
                 </Grid>
             </Border>
             <DataTemplate.Triggers>
                 <Trigger SourceName="TaskRow" Property="IsMouseOver" Value="True">
                     <Setter TargetName="TaskRow" Property="Background" Value="{DynamicResource Surface}"/>
+                    <Setter TargetName="TaskEditButton" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="TaskDeleteButton" Property="Visibility" Value="Visible"/>
                 </Trigger>
                 <DataTrigger Binding="{Binding Done}" Value="True">
@@ -162,12 +178,16 @@
                                        Foreground="{DynamicResource Muted}" Margin="0,4,0,0"/>
                         </StackPanel>
                         <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
-                            <TextBox Text="{Binding EditTitle, UpdateSourceTrigger=PropertyChanged}"
-                                     Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
-                                     CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}"
-                                     FontWeight="SemiBold" Padding="2" Margin="0,0,0,4"
-                                     KeyDown="MemoryTitleEditBox_KeyDown"
-                                     IsVisibleChanged="EditBox_IsVisibleChanged"/>
+                            <DockPanel LastChildFill="True" Margin="0,0,0,4">
+                                <Button DockPanel.Dock="Right" Content="✕" ToolTip="Vazgeç"
+                                        Style="{StaticResource FlatButton}" Click="CancelMemoryEditButton_Click"/>
+                                <TextBox Text="{Binding EditTitle, UpdateSourceTrigger=PropertyChanged}"
+                                         Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                         CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}"
+                                         FontWeight="SemiBold" Padding="2"
+                                         KeyDown="MemoryTitleEditBox_KeyDown"
+                                         IsVisibleChanged="EditBox_IsVisibleChanged"/>
+                            </DockPanel>
                             <TextBox Text="{Binding EditContent, UpdateSourceTrigger=PropertyChanged}"
                                      Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
                                      CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}"
@@ -175,14 +195,20 @@
                                      KeyDown="MemoryContentEditBox_KeyDown"/>
                         </StackPanel>
                     </StackPanel>
-                    <Button x:Name="MemoryDeleteButton" Grid.Column="1" Content="🗑" ToolTip="Sil"
-                            Style="{StaticResource FlatButton}" Visibility="Hidden"
-                            VerticalAlignment="Top" Click="MemoryDeleteButton_Click"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                        <Button x:Name="MemoryEditButton" Content="✏️" ToolTip="Düzenle"
+                                Style="{StaticResource FlatButton}" Visibility="Hidden"
+                                Click="MemoryEditButton_Click"/>
+                        <Button x:Name="MemoryDeleteButton" Content="🗑" ToolTip="Sil"
+                                Style="{StaticResource FlatButton}" Visibility="Hidden"
+                                Click="MemoryDeleteButton_Click"/>
+                    </StackPanel>
                 </Grid>
             </Border>
             <DataTemplate.Triggers>
                 <Trigger SourceName="MemRow" Property="IsMouseOver" Value="True">
                     <Setter TargetName="MemRow" Property="Background" Value="{DynamicResource Surface}"/>
+                    <Setter TargetName="MemoryEditButton" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="MemoryDeleteButton" Property="Visibility" Value="Visible"/>
                 </Trigger>
             </DataTemplate.Triggers>
@@ -214,7 +240,7 @@
                                 <TextBlock Text="{Binding SourceLabel}" FontSize="11" Foreground="{DynamicResource Muted}"/>
                             </Border>
                         </StackPanel>
-                        <Border MaxHeight="34" ClipToBounds="True" Margin="0,2,0,0" ToolTip="{Binding Description}">
+                        <Border MaxHeight="34" ClipToBounds="True" Margin="0,2,0,0" ToolTip="{Binding OriginalDescription}">
                             <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Muted}"/>
                         </Border>
@@ -251,6 +277,55 @@
                 </Trigger>
             </DataTemplate.Triggers>
         </DataTemplate>
+
+        <DataTemplate x:Key="MarketplaceRowTemplate" DataType="{x:Type local:MarketplacePluginVm}">
+            <Border x:Name="MarketRow" Background="Transparent" Padding="8,6" CornerRadius="4">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <Border Background="{DynamicResource TagBg}" CornerRadius="8" Padding="6,0" Margin="6,0,0,0"
+                                VerticalAlignment="Center" Visibility="{Binding Installed, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="kurulu" FontSize="11" Foreground="{DynamicResource Accent}"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,2,0,4"
+                               Foreground="{DynamicResource Muted}"/>
+                    <ItemsControl ItemsSource="{Binding Skills}" Margin="0,0,0,4">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource TagBg}" CornerRadius="8"
+                                        Padding="6,0" Margin="0,0,4,4">
+                                    <TextBlock Text="{Binding}" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Content="{Binding ActionLabel}" Click="MarketplaceAction_Click"
+                            HorizontalAlignment="Right" Padding="12,4">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                                <Setter Property="Background" Value="{DynamicResource Accent}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Installed}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource Danger}"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="MarketRow" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="MarketRow" Property="Background" Value="{DynamicResource Surface}"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -265,8 +340,17 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock x:Name="HeaderText" Grid.Row="0" Text="📝 Notlar" FontSize="15" FontWeight="SemiBold" Margin="14,12,14,8"
-                   MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
+        <DockPanel Grid.Row="0" Margin="14,10,10,6" LastChildFill="True">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button x:Name="PinButton" Content="📌" ToolTip="Sabitle" Click="PinButton_Click"
+                        Style="{StaticResource FlatButton}" Padding="6,2"/>
+                <Button Content="—" ToolTip="Gizle" Click="HideButton_Click"
+                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="2,0,0,0"/>
+            </StackPanel>
+            <TextBlock x:Name="HeaderText" Text="📝 Notlar" FontSize="15" FontWeight="SemiBold"
+                       VerticalAlignment="Center"
+                       MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
+        </DockPanel>
 
         <StackPanel x:Name="TabsRow" Grid.Row="1" Orientation="Horizontal" Margin="14,0,14,8">
             <Button x:Name="NotesTabButton" Content="📝 Notlar" Click="NotesTab_Click"
@@ -325,7 +409,7 @@
             <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
                     BorderThickness="1" CornerRadius="6" Margin="0,0,0,6">
                 <Grid>
-                    <TextBox x:Name="MemorySearchBox" Background="Transparent" BorderThickness="0" Padding="8,7"
+                    <TextBox x:Name="MemorySearchBox" Background="Transparent" BorderThickness="0" Padding="8,7,28,7"
                              Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
                              TextChanged="MemorySearchBox_TextChanged"/>
                     <TextBlock Text="Hafızada ara..." Foreground="{DynamicResource Muted}"
@@ -341,6 +425,19 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
+                    <Button Content="✕" ToolTip="Temizle" Click="MemorySearchClear_Click"
+                            HorizontalAlignment="Right" Margin="0,0,4,0">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=MemorySearchBox}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                 </Grid>
             </Border>
             <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
@@ -395,7 +492,7 @@
             <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
                     BorderThickness="1" CornerRadius="6" Margin="0,0,0,6">
                 <Grid>
-                    <TextBox x:Name="SkillSearchBox" Background="Transparent" BorderThickness="0" Padding="8,7"
+                    <TextBox x:Name="SkillSearchBox" Background="Transparent" BorderThickness="0" Padding="8,7,28,7"
                              Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
                              TextChanged="SkillSearchBox_TextChanged"/>
                     <TextBlock Text="Yeteneklerde ara..." Foreground="{DynamicResource Muted}"
@@ -411,9 +508,32 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
+                    <Button Content="✕" ToolTip="Temizle" Click="SkillSearchClear_Click"
+                            HorizontalAlignment="Right" Margin="0,0,4,0">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=SkillSearchBox}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                 </Grid>
             </Border>
             <DockPanel LastChildFill="False" Margin="0,0,0,4">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Button x:Name="SkillShowInstalledButton" Content="Kurulu" Click="SkillShowInstalled_Click"
+                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,0"/>
+                    <Button x:Name="SkillShowDiscoverButton" Content="Keşfet" Click="SkillShowDiscover_Click"
+                            Style="{StaticResource FlatButton}" Padding="8,2"/>
+                </StackPanel>
+            </DockPanel>
+            <TextBlock x:Name="SkillStatusText" Foreground="{DynamicResource Accent}" TextWrapping="Wrap"
+                       Margin="0,0,0,4" Visibility="Collapsed"/>
+            <DockPanel x:Name="SkillSortRow" LastChildFill="False" Margin="0,0,0,4">
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <Button x:Name="SkillSortUsageButton" Content="Kullanıma göre" Click="SkillSortUsage_Click"
                             Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,0"/>
@@ -423,11 +543,13 @@
                 <Button DockPanel.Dock="Right" Content="↻ Yenile" ToolTip="Yeniden tara" Click="SkillRefresh_Click"
                         Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" Padding="8,2"/>
             </DockPanel>
-            <Expander Header="+ Elle ekle" Foreground="{DynamicResource Muted}" IsExpanded="False">
+            <Expander x:Name="SkillAddExpander" Header="+ Elle ekle" Foreground="{DynamicResource Muted}" IsExpanded="False">
                 <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
                         BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,0">
                     <StackPanel>
                         <DockPanel Margin="0,0,0,4" LastChildFill="True">
+                            <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="SkillAddClose_Click"
+                                    Style="{StaticResource FlatButton}"/>
                             <TextBlock DockPanel.Dock="Left" Text="AI:" Foreground="{DynamicResource Muted}"
                                        VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <ComboBox x:Name="SkillAiBox" IsEditable="True" Width="120" HorizontalAlignment="Left"
@@ -531,7 +653,11 @@
                                 Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
                         <DatePicker x:Name="OtherDayPicker" DockPanel.Dock="Left" Visibility="Collapsed"
                                     Margin="8,0,0,0" Width="130"
-                                    SelectedDateChanged="OtherDayPicker_SelectedDateChanged"/>
+                                    SelectedDateChanged="OtherDayPicker_SelectedDateChanged"
+                                    CalendarClosed="OtherDayPicker_CalendarClosed"/>
+                        <Button DockPanel.Dock="Left" Content="✕" ToolTip="Kapat" Click="OtherDayClose_Click"
+                                Style="{StaticResource FlatButton}" Margin="2,0,0,0"
+                                Visibility="{Binding Visibility, ElementName=OtherDayPicker}"/>
                     </DockPanel>
                     <Grid>
                         <TextBlock x:Name="EmptyText" Text="Henüz not yok." Foreground="{DynamicResource Muted}"
@@ -607,23 +733,46 @@
                 <StackPanel x:Name="SkillsPanel" Visibility="Collapsed">
                     <TextBlock x:Name="SkillsLoadingText" Text="Yetenekler taranıyor…" Foreground="{DynamicResource Muted}"
                                HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
-                    <TextBlock x:Name="SkillsEmptyText" Text="Henüz yetenek bulunamadı." Foreground="{DynamicResource Muted}"
-                               HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
-                    <ItemsControl ItemsSource="{Binding SkillGroups}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="{x:Type local:SkillGroupVm}">
-                                <StackPanel Margin="0,8,0,0">
-                                    <StackPanel Orientation="Horizontal" Margin="8,0,0,4">
-                                        <TextBlock Text="{Binding Ai}" FontSize="12" FontWeight="SemiBold"
-                                                   Foreground="{Binding AiColor}"/>
-                                        <TextBlock Text=" · " FontSize="11" Foreground="{DynamicResource Muted}"/>
-                                        <TextBlock Text="{Binding SummaryLabel}" FontSize="11" Foreground="{DynamicResource Muted}"/>
+
+                    <StackPanel x:Name="InstalledSkillsPanel">
+                        <TextBlock x:Name="SkillsEmptyText" Text="Henüz yetenek bulunamadı." Foreground="{DynamicResource Muted}"
+                                   HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
+                        <ItemsControl ItemsSource="{Binding SkillGroups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type local:SkillGroupVm}">
+                                    <StackPanel Margin="0,8,0,0">
+                                        <StackPanel Orientation="Horizontal" Margin="8,0,0,4">
+                                            <TextBlock Text="{Binding Ai}" FontSize="12" FontWeight="SemiBold"
+                                                       Foreground="{Binding AiColor}"/>
+                                            <TextBlock Text=" · " FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                            <TextBlock Text="{Binding SummaryLabel}" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                        </StackPanel>
+                                        <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SkillRowTemplate}"/>
                                     </StackPanel>
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SkillRowTemplate}"/>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <StackPanel x:Name="DiscoverPanel" Visibility="Collapsed">
+                        <TextBlock x:Name="DiscoverHintText"
+                                   Text="Henüz bir marketplace eklenmemiş. Claude Code'da /plugin ile marketplace ekleyebilirsin."
+                                   Foreground="{DynamicResource Muted}" TextWrapping="Wrap" TextAlignment="Center"
+                                   HorizontalAlignment="Center" Margin="24,40,24,0" Visibility="Collapsed"/>
+                        <TextBlock x:Name="DiscoverEmptyText" Text="Aramaya uyan eklenti yok." Foreground="{DynamicResource Muted}"
+                                   HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
+                        <ItemsControl ItemsSource="{Binding MarketplaceGroups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type local:MarketplaceGroupVm}">
+                                    <StackPanel Margin="0,8,0,0">
+                                        <TextBlock Text="{Binding Marketplace}" FontSize="12" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Muted}" Margin="8,0,0,4"/>
+                                        <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource MarketplaceRowTemplate}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </StackPanel>
             </Grid>
         </ScrollViewer>
@@ -631,6 +780,8 @@
         <Border x:Name="UndoBar" Grid.Row="6" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,8" Visibility="Collapsed">
             <DockPanel>
+                <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="UndoClose_Click"
+                        Style="{StaticResource FlatButton}" Margin="6,0,0,0"/>
                 <Button DockPanel.Dock="Right" Content="Geri al" Click="Undo_Click"
                         Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" FontWeight="SemiBold"/>
                 <TextBlock x:Name="UndoText" Text="Not silindi." VerticalAlignment="Center"/>
@@ -638,7 +789,11 @@
         </Border>
 
         <Border x:Name="ErrorBar" Grid.Row="7" Background="{DynamicResource Danger}" Padding="12,6" Visibility="Collapsed">
-            <TextBlock x:Name="ErrorText" Foreground="White" TextWrapping="Wrap"/>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="ErrorClose_Click"
+                        Style="{StaticResource FlatButton}" Foreground="White" Margin="6,0,0,0"/>
+                <TextBlock x:Name="ErrorText" Foreground="White" TextWrapping="Wrap"/>
+            </DockPanel>
         </Border>
     </Grid>
 </Window>

@@ -1,8 +1,9 @@
 namespace Notlar.Core;
 
 /// <summary>Panel'de gösterilecek, birleştirilmiş tek bir yetenek satırı: kurulu/elle kaydedilmiş bilgi
-/// + kullanım sayısı.</summary>
-public sealed record SkillEntry(string Ai, string Id, string Name, string Description, string Source, int UsageCount, DateTimeOffset? LastUsed);
+/// + kullanım sayısı. DescriptionTr varsa panelde Description yerine gösterilir (orijinal her zaman
+/// ToolTip'te kalır); yoksa null'dır.</summary>
+public sealed record SkillEntry(string Ai, string Id, string Name, string Description, string Source, int UsageCount, DateTimeOffset? LastUsed, string? DescriptionTr = null);
 
 /// <summary>Claude'un taranan kurulu skill'lerini + kullanım sayılarını ve diğer AI'ların elle kaydedilen
 /// yeteneklerini tek bir listede birleştirir.</summary>
@@ -14,15 +15,18 @@ public static class SkillCatalog
     public static IReadOnlyList<SkillEntry> Build(
         IReadOnlyList<SkillInfo> claudeInstalled,
         IReadOnlyDictionary<string, SkillUsage> claudeUsage,
-        IReadOnlyList<RegistrySkill> registry)
+        IReadOnlyList<RegistrySkill> registry,
+        IReadOnlyDictionary<string, SkillTranslation>? translations = null)
     {
+        translations ??= new Dictionary<string, SkillTranslation>();
         var entries = new List<SkillEntry>();
         var seenClaudeIds = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var skill in claudeInstalled)
         {
             claudeUsage.TryGetValue(skill.Id, out var usage);
-            entries.Add(new SkillEntry(skill.Ai, skill.Id, skill.Name, skill.Description, skill.Source, usage?.Count ?? 0, usage?.LastUsed));
+            translations.TryGetValue(skill.Id, out var tr);
+            entries.Add(new SkillEntry(skill.Ai, skill.Id, skill.Name, skill.Description, skill.Source, usage?.Count ?? 0, usage?.LastUsed, tr?.DescriptionTr));
             seenClaudeIds.Add(skill.Id);
         }
 

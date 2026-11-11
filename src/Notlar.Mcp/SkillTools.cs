@@ -12,10 +12,11 @@ namespace Notlar.Mcp;
 /// ve başka AI asistanlarının (ChatGPT, Gemini, vb.) kendi yeteneklerini elle kaydetmesine izin verir.
 /// Panel'deki bir sekme (başka bir ekip tarafından) bu bilgiyi kullanıcıya gösterecek.</summary>
 [McpServerToolType]
-public sealed class SkillTools(SkillRegistry registry)
+public sealed class SkillTools(SkillRegistry registry, SkillTranslations translations)
 {
     private static readonly CultureInfo TrTR = CultureInfo.GetCultureInfo("tr-TR");
     private const int DescriptionPreviewLength = 100;
+    private const string NoTranslationMarker = "[TR yok]";
 
     [McpServerTool(Name = "yetenek_kaydet")]
     [Description("""
@@ -35,10 +36,22 @@ public sealed class SkillTools(SkillRegistry registry)
         [Description("Yeteneğin adı.")] string ad) =>
         Run(() => $"Kullanım kaydedildi: {Line(registry.RecordUse(ai, ad))}");
 
+    [McpServerTool(Name = "yetenek_aciklama_kaydet")]
+    [Description("""
+        Bir yeteneğin Türkçe açıklamasını kaydeder (panelde İngilizce yerine gösterilir). Kısa, 1–2
+        cümle, ne işe yaradığını ve ne zaman kullanıldığını anlat.
+        """)]
+    public string YetenekAciklamaKaydet(
+        [Description("Yeteneğin id'si (yetenekleri_listele çıktısındaki id, ör. superpowers:brainstorming).")] string id,
+        [Description("1-2 cümlelik Türkçe açıklama.")] string aciklama_tr) =>
+        Run(() => $"Türkçe açıklama kaydedildi: {id} — {translations.Set(id, aciklama_tr).DescriptionTr}");
+
     [McpServerTool(Name = "yetenekleri_listele")]
     [Description("""
         Tüm yapay zekâların yeteneklerini listeler: Claude'un bilgisayarda kurulu skill'leri (kullanım
-        sayılarıyla birlikte) + başka AI'ların elle kaydettiği yetenekler.
+        sayılarıyla birlikte) + başka AI'ların elle kaydettiği yetenekler. Türkçe açıklaması olmayan
+        Claude skill'leri "[TR yok]" ile işaretlenir; bunlar için yetenek_aciklama_kaydet ile Türkçe
+        açıklama eklenebilir.
         """)]
     public string YetenekleriListele(
         [Description("Yapay zekâ adına göre filtrelemek için, örn. Claude, ChatGPT. Boşsa tümü.")] string? ai = null) => Run(() =>
@@ -46,7 +59,8 @@ public sealed class SkillTools(SkillRegistry registry)
         var installed = ClaudeSkillScanner.ScanInstalled();
         var usage = new SkillUsageCache().GetUsage();
         var registryItems = registry.List();
-        var catalog = SkillCatalog.Build(installed, usage, registryItems);
+        var allTranslations = translations.All();
+        var catalog = SkillCatalog.Build(installed, usage, registryItems, allTranslations);
 
         if (ai is { } filter)
         {
@@ -65,9 +79,12 @@ public sealed class SkillTools(SkillRegistry registry)
 
     private static string Line(SkillEntry e)
     {
-        var desc = e.Description.Length > DescriptionPreviewLength ? e.Description[..DescriptionPreviewLength] : e.Description;
+        var hasTr = !string.IsNullOrWhiteSpace(e.DescriptionTr);
+        var desc = hasTr ? e.DescriptionTr! : e.Description;
+        if (desc.Length > DescriptionPreviewLength) desc = desc[..DescriptionPreviewLength];
+        var trMarker = !hasTr && string.Equals(e.Ai, ClaudeSkillScanner.Ai, StringComparison.Ordinal) ? $" {NoTranslationMarker}" : "";
         var used = e.LastUsed is { } lu ? $", son: {lu.ToString("d MMMM yyyy", TrTR)}" : "";
-        return $"{e.Ai} · {e.Id} — {e.UsageCount} kez{used} — {desc}";
+        return $"{e.Ai} · {e.Id} — {e.UsageCount} kez{used} — {desc}{trMarker}";
     }
 
     private static string Line(RegistrySkill r)

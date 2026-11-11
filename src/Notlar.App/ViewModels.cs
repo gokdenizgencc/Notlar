@@ -109,10 +109,48 @@ public sealed class MemoryItemVm(MemoryItem item) : INotifyPropertyChanged
 /// <summary>Yetenekler sekmesinde bir AI başlığı altındaki yetenek satırları.</summary>
 public sealed record SkillGroupVm(string Ai, Brush AiColor, string SummaryLabel, IReadOnlyList<SkillItemVm> Items);
 
-/// <summary>Yetenekler sekmesinde tek bir yetenek satırının görünüm modeli.</summary>
+/// <summary>Yetenekler sekmesinde tek bir yetenek satırının görünüm modeli. Description panelde
+/// gösterilecek metindir (Türkçe çeviri varsa o, yoksa orijinal); OriginalDescription her zaman
+/// orijinal (İngilizce) metindir ve ToolTip'te gösterilir.</summary>
 public sealed record SkillItemVm(
-    string EntryId, string Ai, string Name, string Description, string SourceLabel,
+    string EntryId, string Ai, string Name, string Description, string OriginalDescription, string SourceLabel,
     string UsageLabel, string LastUsedLabel, bool IsUnused, bool CanDelete, long? RegistryId);
+
+/// <summary>"Keşfet" sekmesinde bir marketplace başlığı altındaki plugin'ler.</summary>
+public sealed record MarketplaceGroupVm(string Marketplace, IReadOnlyList<MarketplacePluginVm> Items);
+
+/// <summary>"Keşfet" sekmesinde tek bir marketplace plugin'inin görünüm modeli: kurulu/kurulu değil,
+/// kurulum sırasında "Kuruluyor…" durumu.</summary>
+public sealed class MarketplacePluginVm(string marketplace, string name, string description, IReadOnlyList<string> skills) : INotifyPropertyChanged
+{
+    private bool _installed;
+    private bool _busy;
+
+    public string Marketplace { get; } = marketplace;
+    public string Name { get; } = name;
+    public string Description { get; } = description;
+    public IReadOnlyList<string> Skills { get; } = skills;
+    public string PluginId => $"{Name}@{Marketplace}";
+
+    public bool Installed
+    {
+        get => _installed;
+        set { if (_installed == value) return; _installed = value; OnChanged(); OnChanged(nameof(ActionLabel)); }
+    }
+
+    public bool Busy
+    {
+        get => _busy;
+        set { if (_busy == value) return; _busy = value; OnChanged(); OnChanged(nameof(ActionLabel)); }
+    }
+
+    public string ActionLabel => Busy ? (Installed ? "Kaldırılıyor…" : "Kuruluyor…") : (Installed ? "Kaldır" : "Kur");
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
 
 /// <summary>Gizli kişisel görünümü için bir kayıt satırının görünüm modeli.</summary>
 public sealed class TaskItemVm(TaskItem task, Brush authorColor, Brush authorTint) : INotifyPropertyChanged

@@ -8,9 +8,14 @@ namespace Notlar.Core.Tests;
 public sealed class SkillToolsTests : IDisposable
 {
     private readonly SkillRegistryFixture _f = new();
+    private readonly SkillTranslations _translations;
     private readonly SkillTools _tools;
 
-    public SkillToolsTests() => _tools = new SkillTools(_f.Store);
+    public SkillToolsTests()
+    {
+        _translations = new SkillTranslations(_f.DbPath, _f.Time, _f.Signal);
+        _tools = new SkillTools(_f.Store, _translations);
+    }
 
     public void Dispose() => _f.Dispose();
 
@@ -58,6 +63,15 @@ public sealed class SkillToolsTests : IDisposable
 
         Assert.Contains("ChatGPT", result);
         Assert.Contains("web-search", result);
+    }
+
+    [Fact]
+    public void YetenekAciklamaKaydet_saves_translation()
+    {
+        var result = _tools.YetenekAciklamaKaydet("superpowers:brainstorming", "Yaratıcı fikirleri keşfeder.");
+
+        Assert.Contains("Yaratıcı fikirleri keşfeder.", result);
+        Assert.Equal("Yaratıcı fikirleri keşfeder.", _translations.Get("superpowers:brainstorming")!.DescriptionTr);
     }
 
     [Fact]

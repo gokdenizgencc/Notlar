@@ -16,6 +16,16 @@ public sealed class AppSettings
 
     public double DayFontSize { get; set; } = DefaultDayFontSize;
 
+    /// <summary>Panel sabitlenmiş mi? Sabitken Deactivated (odak kaybı) paneli gizlemez; yalnızca "—"
+    /// gizle düğmesi, Esc ya da tepsi simgesine tıklama gizler. Varsayılan true: kullanıcı düğmeye
+    /// basana kadar panel açık kalsın istiyor.</summary>
+    public bool PanelPinned { get; set; } = true;
+
+    /// <summary>Panel sabitliyken sürüklenerek taşındığında hatırlanan konum; null ise ekranın sağ altı
+    /// kullanılır.</summary>
+    public double? PanelLeft { get; set; }
+    public double? PanelTop { get; set; }
+
     [JsonInclude]
     public Dictionary<string, string> AuthorColors { get; set; } = CreateDefaultAuthorColors();
 
