@@ -124,17 +124,21 @@ public partial class PanelWindow : Window
 
     public void ShowNearTray()
     {
-        var area = SystemParameters.WorkArea;
-        if (_settings.PanelPinned && _settings.PanelLeft is { } left && _settings.PanelTop is { } top
-            && IsOnScreen(left, top))
+        ApplyWindowMode();
+        if (!_settings.PanelLarge)
         {
-            Left = left;
-            Top = top;
-        }
-        else
-        {
-            Left = area.Right - Width - 8;
-            Top = area.Bottom - Height - 8;
+            var area = SystemParameters.WorkArea;
+            if (_settings.PanelPinned && _settings.PanelLeft is { } left && _settings.PanelTop is { } top
+                && IsOnScreen(left, top))
+            {
+                Left = left;
+                Top = top;
+            }
+            else
+            {
+                Left = area.Right - Width - 8;
+                Top = area.Bottom - Height - 8;
+            }
         }
         Show();
         ReloadCore();
@@ -178,6 +182,14 @@ public partial class PanelWindow : Window
 
     private void HidePanel()
     {
+        if (_settings.PanelLarge)
+        {
+            _settings.PanelLargeWidth = Width;
+            _settings.PanelLargeHeight = Height;
+            _settings.PanelLargeLeft = Left;
+            _settings.PanelLargeTop = Top;
+            _settings.Save();
+        }
         CancelAllEdits();
         Hide();
         _lastHiddenAt = DateTime.Now;
@@ -187,6 +199,107 @@ public partial class PanelWindow : Window
         _tagFilter = null;
         _selectedPlanId = null;
         _mode = Mode.Notes;
+    }
+
+    /// <summary>Kompakt (sabit 360×520, NoResize) ve büyük (serbest boyutlandırılabilir, ~1000×720,
+    /// geçerli ekranın görünür alanına ortalanmış/kenetlenmiş) mod arasında geçiş yapar; boyut/konum
+    /// ve mod <see cref="AppSettings"/> içinde kalıcı tutulur.</summary>
+    private void ApplyWindowMode()
+    {
+        if (_settings.PanelLarge)
+        {
+            ResizeMode = ResizeMode.CanResizeWithGrip;
+            MinWidth = 500;
+            MinHeight = 400;
+            var area = GetCurrentScreenWorkArea();
+            var width = Math.Clamp(_settings.PanelLargeWidth ?? 1000, MinWidth, Math.Max(MinWidth, area.Width));
+            var height = Math.Clamp(_settings.PanelLargeHeight ?? 720, MinHeight, Math.Max(MinHeight, area.Height));
+            Width = width;
+            Height = height;
+            var left = _settings.PanelLargeLeft ?? area.Left + (area.Width - width) / 2;
+            var top = _settings.PanelLargeTop ?? area.Top + (area.Height - height) / 2;
+            Left = Math.Clamp(left, area.Left, Math.Max(area.Left, area.Right - width));
+            Top = Math.Clamp(top, area.Top, Math.Max(area.Top, area.Bottom - height));
+            SizeToggleButton.Content = "⤡";
+            SizeToggleButton.ToolTip = "Küçült";
+        }
+        else
+        {
+            ResizeMode = ResizeMode.NoResize;
+            MinWidth = 0;
+            MinHeight = 0;
+            Width = 360;
+            Height = 520;
+            SizeToggleButton.Content = "⤢";
+            SizeToggleButton.ToolTip = "Genişlet";
+        }
+    }
+
+    /// <summary>Panelin şu anki konumunun bulunduğu ekranın görünür (görev çubuğu hariç) alanını WPF
+    /// cihazdan bağımsız birimlerde döner; birden fazla monitörde doğru ekranı bulmak için kullanılır.</summary>
+    private Rect GetCurrentScreenWorkArea()
+    {
+        try
+        {
+            var bounds = new System.Drawing.Rectangle((int)Left, (int)Top, Math.Max(1, (int)Width), Math.Max(1, (int)Height));
+            var workingArea = Forms.Screen.FromRectangle(bounds).WorkingArea;
+            if (PresentationSource.FromVisual(this)?.CompositionTarget is { } target)
+            {
+                var topLeft = target.TransformFromDevice.Transform(new Point(workingArea.Left, workingArea.Top));
+                var bottomRight = target.TransformFromDevice.Transform(new Point(workingArea.Right, workingArea.Bottom));
+                return new Rect(topLeft, bottomRight);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+        }
+        var fallback = SystemParameters.WorkArea;
+        return new Rect(fallback.Left, fallback.Top, fallback.Width, fallback.Height);
+    }
+
+    private void SizeToggleButton_Click(object sender, RoutedEventArgs e) => ToggleSize();
+
+    private void ToggleSize()
+    {
+        if (_settings.PanelLarge)
+        {
+            _settings.PanelLargeWidth = Width;
+            _settings.PanelLargeHeight = Height;
+            _settings.PanelLargeLeft = Left;
+            _settings.PanelLargeTop = Top;
+            _settings.PanelLarge = false;
+        }
+        else
+        {
+            _settings.PanelLarge = true;
+        }
+        _settings.Save();
+        ApplyWindowMode();
+        if (!_settings.PanelLarge)
+        {
+            var area = SystemParameters.WorkArea;
+            if (_settings.PanelPinned && _settings.PanelLeft is { } left && _settings.PanelTop is { } top
+                && IsOnScreen(left, top))
+            {
+                Left = left;
+                Top = top;
+            }
+            else
+            {
+                Left = area.Right - Width - 8;
+                Top = area.Bottom - Height - 8;
+            }
+        }
+    }
+
+    /// <summary>Başlık çubuğunun boş alanına çift tıklama, büyüt/küçült modunu değiştirir (düğmeler ve
+    /// başlık metni kendi tıklama işleyicilerine sahip olduğundan burada yalnızca doğrudan DockPanel'e
+    /// gelen tıklamalar işlenir, böylece sürükleme/üçlü tıklama davranışı bozulmaz).</summary>
+    private void HeaderBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2 && Equals(e.OriginalSource, sender))
+            ToggleSize();
     }
 
     /// <summary>Açık düzenlemeleri kaydetmeden kapatır, böylece ardından çağrılan Reload() ertelenmez.</summary>
@@ -394,7 +507,7 @@ public partial class PanelWindow : Window
 
     private void Window_Deactivated(object? sender, EventArgs e)
     {
-        if (!_settings.PanelPinned) HidePanel();
+        if (!_settings.PanelPinned && !_settings.PanelLarge) HidePanel();
     }
 
     private void HeaderText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

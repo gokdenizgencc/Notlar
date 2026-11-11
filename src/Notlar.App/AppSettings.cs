@@ -26,6 +26,17 @@ public sealed class AppSettings
     public double? PanelLeft { get; set; }
     public double? PanelTop { get; set; }
 
+    /// <summary>Panel büyük (serbest boyutlandırılabilir) modda mı, yoksa kompakt sabit boyutlu
+    /// modda mı? Büyük moddayken de odak kaybı paneli gizlemez (sabitlenmiş gibi davranır).</summary>
+    public bool PanelLarge { get; set; }
+
+    /// <summary>Büyük moddaki son boyut/konum; null ise ekranın görünür alanına göre ortalanmış
+    /// varsayılan (~1000×720) kullanılır.</summary>
+    public double? PanelLargeWidth { get; set; }
+    public double? PanelLargeHeight { get; set; }
+    public double? PanelLargeLeft { get; set; }
+    public double? PanelLargeTop { get; set; }
+
     [JsonInclude]
     public Dictionary<string, string> AuthorColors { get; set; } = CreateDefaultAuthorColors();
 
