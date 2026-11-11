@@ -9,6 +9,7 @@ namespace Notlar.App;
 public sealed class TrayIcon : IDisposable
 {
     private readonly Forms.NotifyIcon _notifyIcon;
+    private bool _syncingAutoStart;
 
     public TrayIcon(Action onToggle, Action onOpen, Action onExport, Action onExit)
     {
@@ -16,10 +17,25 @@ public sealed class TrayIcon : IDisposable
         menu.Items.Add("Aç", null, (_, _) => onOpen());
         menu.Items.Add("Markdown olarak dışa aktar", null, (_, _) => onExport());
         var autoStart = new Forms.ToolStripMenuItem("Windows ile başlat") { CheckOnClick = true, Checked = AutoStart.IsEnabled() };
-        autoStart.CheckedChanged += (_, _) => AutoStart.SetEnabled(autoStart.Checked);
+        autoStart.CheckedChanged += (_, _) =>
+        {
+            if (_syncingAutoStart) return;
+            try
+            {
+                AutoStart.SetEnabled(autoStart.Checked);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write(ex);
+                SyncAutoStartCheck(autoStart);
+            }
+        };
         menu.Items.Add(autoStart);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Çıkış", null, (_, _) => onExit());
+        // Menü her açıldığında kutucuğu gerçek kayıt defteri durumuyla senkronize et
+        // (ör. kayıt elle silinmiş/eklenmiş olabilir); SetEnabled tetiklenmesin.
+        menu.Opening += (_, _) => SyncAutoStartCheck(autoStart);
 
         _notifyIcon = new Forms.NotifyIcon
         {
@@ -32,6 +48,20 @@ public sealed class TrayIcon : IDisposable
         {
             if (e.Button == Forms.MouseButtons.Left) onToggle();
         };
+    }
+
+    /// <summary>Kutucuğu kayıt defteri durumuyla günceller; CheckedChanged'in yeniden tetiklenmesini (SetEnabled çağrısını) engeller.</summary>
+    private void SyncAutoStartCheck(Forms.ToolStripMenuItem autoStart)
+    {
+        _syncingAutoStart = true;
+        try
+        {
+            autoStart.Checked = AutoStart.IsEnabled();
+        }
+        finally
+        {
+            _syncingAutoStart = false;
+        }
     }
 
     /// <summary>Gömülü .ico yerine çalışma anında çizilen basit ikon (mavi daire, beyaz "N").</summary>

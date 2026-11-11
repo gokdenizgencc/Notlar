@@ -60,10 +60,16 @@ public partial class PanelWindow : Window
 
     private void HidePanel()
     {
-        foreach (var note in Groups.SelectMany(g => g.Notes))
-            note.IsEditing = false;
+        CancelAllEdits();
         Hide();
         _lastHiddenAt = DateTime.Now;
+    }
+
+    /// <summary>Açık düzenlemeleri kaydetmeden kapatır, böylece ardından çağrılan Reload() ertelenmez.</summary>
+    private void CancelAllEdits()
+    {
+        foreach (var note in Groups.SelectMany(g => g.Notes))
+            note.IsEditing = false;
     }
 
     public void Reload()
@@ -138,6 +144,7 @@ public partial class PanelWindow : Window
     {
         if (sender is FrameworkElement { DataContext: TagChip chip })
         {
+            CancelAllEdits();
             _tagFilter = chip.Tag;
             Reload();
         }
@@ -148,7 +155,10 @@ public partial class PanelWindow : Window
     private void Done_Click(object sender, RoutedEventArgs e)
     {
         if (sender is CheckBox { DataContext: NoteItem item } box)
+        {
+            CancelAllEdits();
             Try(() => { _store.SetDone(item.Id, box.IsChecked == true); Reload(); });
+        }
     }
 
     private void NoteText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -202,15 +212,19 @@ public partial class PanelWindow : Window
             DeleteNote(item);
     }
 
-    private void DeleteNote(NoteItem item) => Try(() =>
+    private void DeleteNote(NoteItem item)
     {
-        _store.Delete(item.Id);
-        _undoId = item.Id;
-        UndoBar.Visibility = Visibility.Visible;
-        _undoTimer.Stop();
-        _undoTimer.Start();
-        Reload();
-    });
+        CancelAllEdits();
+        Try(() =>
+        {
+            _store.Delete(item.Id);
+            _undoId = item.Id;
+            UndoBar.Visibility = Visibility.Visible;
+            _undoTimer.Stop();
+            _undoTimer.Start();
+            Reload();
+        });
+    }
 
     private void Undo_Click(object sender, RoutedEventArgs e)
     {
