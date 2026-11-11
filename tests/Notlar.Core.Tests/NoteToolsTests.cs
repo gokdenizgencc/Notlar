@@ -25,6 +25,41 @@ public sealed class NoteToolsTests : IDisposable
     }
 
     [Fact]
+    public void NotEkle_with_tarih_only_uses_current_time_of_day_on_that_date()
+    {
+        _tools.NotEkle("geçmiş not", tarih: "2026-11-01");
+
+        var note = Assert.Single(_f.Store.List(new NoteFilter()));
+        Assert.Equal(new DateOnly(2026, 11, 1), note.Day);
+        Assert.Equal(new TimeSpan(14, 32, 0), note.CreatedAt.TimeOfDay);
+        Assert.Equal(NoteAuthor.Claude, note.Author);
+    }
+
+    [Fact]
+    public void NotEkle_with_tarih_and_saat_uses_both()
+    {
+        _tools.NotEkle("dün gece", tarih: "2026-11-10", saat: "23:15");
+
+        var note = Assert.Single(_f.Store.List(new NoteFilter()));
+        Assert.Equal(new DateOnly(2026, 11, 10), note.Day);
+        Assert.Equal(new TimeSpan(23, 15, 0), note.CreatedAt.TimeOfDay);
+    }
+
+    [Fact]
+    public void NotEkle_rejects_bad_saat()
+    {
+        var ex = Assert.Throws<McpException>(() => _tools.NotEkle("x", saat: "25:99"));
+        Assert.Equal("Geçersiz saat '25:99', HH:mm bekleniyor.", ex.Message);
+    }
+
+    [Fact]
+    public void NotEkle_rejects_bad_tarih()
+    {
+        var ex = Assert.Throws<McpException>(() => _tools.NotEkle("x", tarih: "11.11.2026"));
+        Assert.Equal("Geçersiz tarih '11.11.2026', yyyy-MM-dd bekleniyor.", ex.Message);
+    }
+
+    [Fact]
     public void NotEkle_empty_throws_McpException()
     {
         var ex = Assert.Throws<McpException>(() => _tools.NotEkle("  "));

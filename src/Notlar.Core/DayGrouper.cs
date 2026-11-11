@@ -16,6 +16,9 @@ public static class DayGrouper
 
     public static string FormatDate(DateOnly date) => date.ToString("d MMMM yyyy, dddd", Tr);
 
+    /// <summary>Yıl/gün adı olmadan kısa biçim, ör. "10 Kasım" (başka güne not yaz... yer tutucusu için).</summary>
+    public static string FormatShort(DateOnly date) => date.ToString("d MMMM", Tr);
+
     public static string Header(DateOnly date, DateOnly today)
     {
         if (date == today) return $"BUGÜN · {FormatDate(date)}";

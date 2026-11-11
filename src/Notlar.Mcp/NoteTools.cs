@@ -12,10 +12,18 @@ namespace Notlar.Mcp;
 public sealed class NoteTools(NoteStore store, TimeProvider time)
 {
     [McpServerTool(Name = "not_ekle")]
-    [Description("Kullanıcının kişisel not uygulamasına yeni not ekler. Kullanıcı 'not al', 'not et', 'kaydet', 'aklında tut' dediğinde bunu kullan. Kayıt saati otomatik atanır. Metindeki #kelime etiket olur.")]
-    public string NotEkle([Description("Not metni. İsteğe bağlı #etiket içerebilir.")] string metin) => Run(() =>
+    [Description("Kullanıcının kişisel not uygulamasına yeni not ekler. Kullanıcı 'not al', 'not et', 'kaydet', 'aklında tut' dediğinde bunu kullan. Kayıt saati otomatik atanır, ya da tarih/saat belirtilerek geçmiş (veya istenen) bir güne not eklenebilir. Metindeki #kelime etiket olur.")]
+    public string NotEkle(
+        [Description("Not metni. İsteğe bağlı #etiket içerebilir.")] string metin,
+        [Description("Notun tarihi. Boşsa bugün.")] string? tarih = null,
+        [Description("Notun saati. Boşsa şimdiki saat.")] string? saat = null) => Run(() =>
     {
-        var note = store.Add(metin, NoteAuthor.Claude);
+        var now = time.GetLocalNow();
+        var date = ParseDate(tarih) ?? DateOnly.FromDateTime(now.DateTime);
+        var timeOfDay = ParseTime(saat) ?? TimeOnly.FromDateTime(now.DateTime);
+        var createdAt = new DateTimeOffset(date.Year, date.Month, date.Day,
+            timeOfDay.Hour, timeOfDay.Minute, timeOfDay.Second, now.Offset);
+        var note = store.AddAt(metin, createdAt, NoteAuthor.Claude);
         return $"Not eklendi: {NoteFormatter.Line(note)} — {DayGrouper.FormatDate(note.Day)}";
     });
 
@@ -78,6 +86,15 @@ public sealed class NoteTools(NoteStore store, TimeProvider time)
         if (DateOnly.TryParseExact(value.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
             return date;
         throw new ArgumentException($"Geçersiz tarih '{value}', yyyy-MM-dd bekleniyor.");
+    }
+
+    private static TimeOnly? ParseTime(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        if (TimeOnly.TryParseExact(value.Trim(), "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var t))
+            return t;
+        throw new ArgumentException($"Geçersiz saat '{value}', HH:mm bekleniyor.");
     }
 
     private static NoteAuthor? ParseAuthor(string? value)

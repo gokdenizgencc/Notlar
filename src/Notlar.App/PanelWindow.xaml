@@ -119,7 +119,7 @@
                 <TextBox x:Name="InputBox" Background="Transparent" BorderThickness="0" Padding="8,7"
                          Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
                          KeyDown="InputBox_KeyDown"/>
-                <TextBlock Text="Not yaz... (#etiket ekleyebilirsin)" Foreground="{DynamicResource Muted}"
+                <TextBlock x:Name="InputPlaceholder" Text="Bugüne not yaz... (#etiket)" Foreground="{DynamicResource Muted}"
                            Margin="11,7" IsHitTestVisible="False">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
@@ -186,6 +186,13 @@
         <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" Padding="6,0,6,8">
             <Grid>
                 <StackPanel x:Name="DayListPanel">
+                    <DockPanel Margin="2,0,2,6" LastChildFill="False">
+                        <Button DockPanel.Dock="Left" Content="📅 Başka gün" Click="OtherDayButton_Click"
+                                Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
+                        <DatePicker x:Name="OtherDayPicker" DockPanel.Dock="Left" Visibility="Collapsed"
+                                    Margin="8,0,0,0" Width="130"
+                                    SelectedDateChanged="OtherDayPicker_SelectedDateChanged"/>
+                    </DockPanel>
                     <Grid>
                         <TextBlock x:Name="EmptyText" Text="Henüz not yok." Foreground="{DynamicResource Muted}"
                                    HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
@@ -229,6 +236,8 @@
                                 Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
                         <TextBlock x:Name="DayViewHeader" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>
                     </DockPanel>
+                    <TextBlock x:Name="DayViewEmptyText" Text="Bu günde not yok." Foreground="{DynamicResource Muted}"
+                               HorizontalAlignment="Center" Margin="0,24,0,0" Visibility="Collapsed"/>
                     <ItemsControl ItemsSource="{Binding DayNotes}" ItemTemplate="{StaticResource NoteRowTemplate}"/>
                 </StackPanel>
             </Grid>

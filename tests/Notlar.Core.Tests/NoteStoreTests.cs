@@ -35,6 +35,49 @@ public class NoteStoreTests
     }
 
     [Fact]
+    public void AddAt_stores_given_day_and_time_and_signals()
+    {
+        using var f = new StoreFixture();
+        var created = new DateTimeOffset(2026, 11, 1, 9, 0, 0, Tr);
+
+        var note = f.Store.AddAt("geçmiş not", created);
+
+        Assert.Equal(created, note.CreatedAt);
+        Assert.Equal(new DateOnly(2026, 11, 1), note.Day);
+        Assert.Equal(1, f.Signal.Count);
+    }
+
+    [Fact]
+    public void AddAt_converts_to_store_local_time_zone()
+    {
+        using var f = new StoreFixture();
+        var createdUtc = new DateTimeOffset(2026, 11, 1, 6, 0, 0, TimeSpan.Zero); // 09:00 TR
+
+        var note = f.Store.AddAt("x", createdUtc);
+
+        Assert.Equal(new DateTimeOffset(2026, 11, 1, 9, 0, 0, Tr), note.CreatedAt);
+        Assert.Equal(Tr, note.CreatedAt.Offset);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void AddAt_rejects_empty_text(string text)
+    {
+        using var f = new StoreFixture();
+        Assert.Throws<ArgumentException>(() => f.Store.AddAt(text, f.Time.GetLocalNow()));
+        Assert.Equal(0, f.Signal.Count);
+    }
+
+    [Fact]
+    public void Add_delegates_to_AddAt_with_current_local_time()
+    {
+        using var f = new StoreFixture();
+        var note = f.Store.Add("x");
+        Assert.Equal(f.Time.GetLocalNow(), note.CreatedAt);
+    }
+
+    [Fact]
     public void List_filters_by_inclusive_date_range()
     {
         using var f = new StoreFixture();

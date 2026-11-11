@@ -64,16 +64,22 @@ public sealed class NoteStore
         }
     }
 
-    public Note Add(string text, NoteAuthor author = NoteAuthor.Ben)
+    public Note Add(string text, NoteAuthor author = NoteAuthor.Ben) =>
+        AddAt(text, _time.GetLocalNow(), author);
+
+    /// <summary>Notu belirtilen zamanla ekler (geçmiş/istenen tarihe not eklemek için).
+    /// <paramref name="createdAt"/>, mağazanın yerel saat dilimine çevrilerek saklanır.</summary>
+    public Note AddAt(string text, DateTimeOffset createdAt, NoteAuthor author = NoteAuthor.Ben)
     {
         var clean = Validate(text);
+        var local = TimeZoneInfo.ConvertTime(createdAt, _time.LocalTimeZone);
         long id;
         using (var conn = Open())
         using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = "INSERT INTO notes(text, created_at, author) VALUES($text, $now, $author) RETURNING id";
             cmd.Parameters.AddWithValue("$text", clean);
-            cmd.Parameters.AddWithValue("$now", Now());
+            cmd.Parameters.AddWithValue("$now", Format(local));
             cmd.Parameters.AddWithValue("$author", author.ToDbValue());
             id = (long)cmd.ExecuteScalar()!;
         }

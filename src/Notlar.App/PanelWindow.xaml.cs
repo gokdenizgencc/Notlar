@@ -137,20 +137,27 @@ public partial class PanelWindow : Window
             foreach (var group in groups)
                 Days.Add(new DayListItem(group.Date, DayGrouper.Header(group.Date, today), group.Notes.Count));
 
-            var selectedGroup = _selectedDay is { } day ? groups.FirstOrDefault(g => g.Date == day) : null;
-            if (_selectedDay is not null && selectedGroup is null)
-                _selectedDay = null;
+            // Not: açık bir gün görünümünde gösterilecek not kalmasa bile (ör. hepsi silindi, ya da
+            // "Başka gün" ile boş bir gün açıldı) otomatik olarak gün listesine dönülmez; kullanıcı
+            // yalnızca Geri/Esc ile çıkar.
+            var selectedGroup = _selectedDay is { } selDay ? groups.FirstOrDefault(g => g.Date == selDay) : null;
 
             DayNotes.Clear();
-            if (selectedGroup is not null)
+            if (_selectedDay is { } day)
             {
-                foreach (var note in selectedGroup.Notes)
+                foreach (var note in selectedGroup?.Notes ?? [])
                     DayNotes.Add(new NoteItem(note));
-                DayViewHeader.Text = DayGrouper.Header(selectedGroup.Date, today);
+                DayViewHeader.Text = DayGrouper.Header(day, today);
             }
+            DayViewEmptyText.Visibility = _selectedDay is not null && DayNotes.Count == 0
+                ? Visibility.Visible : Visibility.Collapsed;
 
             DayListPanel.Visibility = _selectedDay is null ? Visibility.Visible : Visibility.Collapsed;
             DayViewPanel.Visibility = _selectedDay is null ? Visibility.Collapsed : Visibility.Visible;
+
+            InputPlaceholder.Text = _selectedDay is { } selectedOther && selectedOther != today
+                ? $"{DayGrouper.FormatShort(selectedOther)}'{DativeSuffix(selectedOther)} not yaz... (#etiket)"
+                : "Bugüne not yaz... (#etiket)";
 
             var hasOlderDone = !_showAll && _store.HasDoneBefore(since);
             OlderToggle.Visibility = _showAll || hasOlderDone ? Visibility.Visible : Visibility.Collapsed;
@@ -203,11 +210,55 @@ public partial class PanelWindow : Window
         if (string.IsNullOrWhiteSpace(InputBox.Text)) return;
         Try(() =>
         {
-            _store.Add(InputBox.Text);
+            if (_selectedDay is { } day)
+            {
+                // Seçili gün görünümünde: notu o güne, günün saati olarak "şu an"ın saatiyle ekle
+                // (seçili gün bugünse bu zaten normal "şimdi" ile aynı anlama gelir).
+                var now = DateTimeOffset.Now;
+                var createdAt = new DateTimeOffset(day.Year, day.Month, day.Day, now.Hour, now.Minute, now.Second, now.Offset);
+                _store.AddAt(InputBox.Text, createdAt);
+            }
+            else
+            {
+                _store.Add(InputBox.Text);
+                _selectedDay = DateOnly.FromDateTime(DateTime.Now);
+            }
             InputBox.Clear();
-            _selectedDay = DateOnly.FromDateTime(DateTime.Now);
             Reload();
         });
+    }
+
+    private void OtherDayButton_Click(object sender, RoutedEventArgs e)
+    {
+        OtherDayPicker.DisplayDateEnd = DateTime.Today;
+        OtherDayPicker.Visibility = Visibility.Visible;
+        OtherDayPicker.IsDropDownOpen = true;
+        OtherDayPicker.Focus();
+    }
+
+    private void OtherDayPicker_SelectedDateChanged(object sender, SelectionChangedEventArgs e)
+    {
+        OtherDayPicker.Visibility = Visibility.Collapsed;
+        if (OtherDayPicker.SelectedDate is not { } date) return;
+        CancelAllEdits();
+        _selectedDay = DateOnly.FromDateTime(date);
+        OtherDayPicker.SelectedDate = null;
+        Reload();
+    }
+
+    /// <summary>"gün ay" biçimindeki ifadeye eklenecek -e hali eki ("'a" / "'e"), son sesli harfe göre
+    /// Türkçe büyük ünlü uyumuyla belirlenir (ör. "10 Kasım" → "a", "3 Ekim" → "e").</summary>
+    private static string DativeSuffix(DateOnly date)
+    {
+        const string back = "aıouAIOU";
+        const string front = "eiöüEİÖÜ";
+        var phrase = DayGrouper.FormatShort(date);
+        for (var i = phrase.Length - 1; i >= 0; i--)
+        {
+            if (back.IndexOf(phrase[i]) >= 0) return "a";
+            if (front.IndexOf(phrase[i]) >= 0) return "e";
+        }
+        return "e";
     }
 
     private void DayRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
