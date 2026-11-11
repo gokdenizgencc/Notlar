@@ -38,13 +38,18 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <CheckBox Grid.Column="0" IsChecked="{Binding Done, Mode=OneWay}"
+                    <CheckBox x:Name="SelectCheckBox" Grid.Column="0" IsChecked="{Binding IsSelected}"
+                              Click="NoteSelect_Click" Focusable="False" BorderBrush="{DynamicResource Accent}"
+                              VerticalAlignment="Top" Margin="0,2,6,0" Width="16" Height="16"
+                              Visibility="{Binding SelectModeActive, Converter={StaticResource BoolToVis}}"/>
+                    <CheckBox Grid.Column="1" IsChecked="{Binding Done, Mode=OneWay}"
                               Click="Done_Click" Focusable="False"
                               VerticalAlignment="Top" Margin="0,2,8,0"/>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,0,8,0">
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,0,8,0">
                         <TextBlock Text="{Binding Time}" Foreground="{DynamicResource Muted}"/>
                         <Border x:Name="AuthorBadge" CornerRadius="8" Padding="5,0" Margin="4,0,0,0" VerticalAlignment="Center"
                                 Background="{Binding AuthorTint}">
@@ -52,7 +57,7 @@
                                        Foreground="{Binding AuthorColor}"/>
                         </Border>
                     </StackPanel>
-                    <StackPanel Grid.Column="2">
+                    <StackPanel Grid.Column="3">
                         <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
                             <TextBlock x:Name="NoteText" Text="{Binding DisplayText}" TextWrapping="Wrap"
                                        Foreground="{Binding AuthorColor}"/>
@@ -82,7 +87,10 @@
                                      IsVisibleChanged="EditBox_IsVisibleChanged"/>
                         </DockPanel>
                     </StackPanel>
-                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top">
+                    <StackPanel x:Name="NoteActionsPanel" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Top">
+                        <Button x:Name="AddToPlanButton" Content="📋" ToolTip="Plana adım olarak ekle"
+                                Style="{StaticResource FlatButton}" Visibility="Hidden"
+                                Click="AddNoteToPlanButton_Click"/>
                         <Button x:Name="EditButton" Content="✏️" ToolTip="Düzenle"
                                 Style="{StaticResource FlatButton}" Visibility="Hidden"
                                 Click="EditNoteButton_Click"/>
@@ -95,6 +103,7 @@
             <DataTemplate.Triggers>
                 <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
                     <Setter TargetName="Row" Property="Background" Value="{DynamicResource Surface}"/>
+                    <Setter TargetName="AddToPlanButton" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="EditButton" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="DeleteButton" Property="Visibility" Value="Visible"/>
                 </Trigger>
@@ -104,6 +113,12 @@
                 <DataTrigger Binding="{Binding Done}" Value="True">
                     <Setter TargetName="NoteText" Property="TextDecorations" Value="Strikethrough"/>
                     <Setter TargetName="NoteText" Property="Opacity" Value="0.5"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource TagBg}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding SelectModeActive}" Value="True">
+                    <Setter TargetName="NoteActionsPanel" Property="Visibility" Value="Collapsed"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -489,6 +504,8 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -893,6 +910,8 @@
                                 Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
                         <Button DockPanel.Dock="Right" Content="⤢ Büyüt" ToolTip="Büyük pencerede aç" Click="ExpandButton_Click"
                                 Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
+                        <Button x:Name="SelectModeToggleButton" DockPanel.Dock="Right" Content="Seç" ToolTip="Notları çoklu seç"
+                                Click="SelectModeToggle_Click" Style="{StaticResource FlatButton}" Margin="0,0,6,0"/>
                         <TextBlock x:Name="DayViewHeader" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>
                     </DockPanel>
                     <TextBlock x:Name="DayViewEmptyText" Text="Bu günde not yok." Foreground="{DynamicResource Muted}"
@@ -1173,7 +1192,29 @@
             </Grid>
         </ScrollViewer>
 
-        <Border x:Name="UndoBar" Grid.Row="7" Background="{DynamicResource Surface}"
+        <Border x:Name="SelectionBar" Grid.Row="7" Background="{DynamicResource Surface}"
+                BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,8" Visibility="Collapsed">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="✕" ToolTip="Seçimden çık" Click="SelectModeExit_Click"
+                        Style="{StaticResource FlatButton}" Margin="6,0,0,0"/>
+                <Button DockPanel.Dock="Right" Content="📋 Plana ekle" Click="SelectionAddToPlan_Click"
+                        Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" FontWeight="SemiBold"/>
+                <TextBlock x:Name="SelectionCountText" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
+        <Border x:Name="PlanAddedBar" Grid.Row="8" Background="{DynamicResource Surface}"
+                BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,8" Visibility="Collapsed">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="PlanAddedClose_Click"
+                        Style="{StaticResource FlatButton}" Margin="6,0,0,0"/>
+                <Button DockPanel.Dock="Right" Content="Planı aç" Click="PlanAddedOpen_Click"
+                        Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" FontWeight="SemiBold"/>
+                <TextBlock x:Name="PlanAddedText" TextWrapping="Wrap" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Border>
+
+        <Border x:Name="UndoBar" Grid.Row="9" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,8" Visibility="Collapsed">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="UndoClose_Click"
@@ -1184,7 +1225,7 @@
             </DockPanel>
         </Border>
 
-        <Border x:Name="ErrorBar" Grid.Row="8" Background="{DynamicResource Danger}" Padding="12,6" Visibility="Collapsed">
+        <Border x:Name="ErrorBar" Grid.Row="10" Background="{DynamicResource Danger}" Padding="12,6" Visibility="Collapsed">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="ErrorClose_Click"
                         Style="{StaticResource FlatButton}" Foreground="White" Margin="6,0,0,0"/>

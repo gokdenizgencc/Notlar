@@ -18,6 +18,8 @@ public sealed class NoteItem(Note note, Brush authorColor, Brush authorTint) : I
 {
     private bool _isEditing;
     private string _editText = "";
+    private bool _isSelected;
+    private bool _selectModeActive;
 
     public Note Note { get; } = note;
     public long Id => Note.Id;
@@ -48,6 +50,21 @@ public sealed class NoteItem(Note note, Brush authorColor, Brush authorTint) : I
     {
         get => _editText;
         set { _editText = value; OnChanged(); }
+    }
+
+    /// <summary>Çoklu seçim modunda bu notun işaretli olup olmadığı.</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set { if (_isSelected == value) return; _isSelected = value; OnChanged(); }
+    }
+
+    /// <summary>Gün görünümünde "Seç" ile açılan çoklu seçim modu bu not için etkin mi (seçim kutusu
+    /// ve satır vurgusu bu alana göre görünür/gizlenir).</summary>
+    public bool SelectModeActive
+    {
+        get => _selectModeActive;
+        set { if (_selectModeActive == value) return; _selectModeActive = value; OnChanged(); }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

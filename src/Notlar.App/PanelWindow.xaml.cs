@@ -59,6 +59,9 @@ public partial class PanelWindow : Window
     private bool _fullScreen;
     private readonly List<DayWindow> _dayWindows = [];
 
+    private bool _selectMode;
+    private readonly HashSet<long> _selectedNoteIds = [];
+
     private long? _selectedPlanId;
     private Plan? _currentPlan;
     private bool _planTitleEditing;
@@ -471,6 +474,7 @@ public partial class PanelWindow : Window
                 TagRow.Visibility = Visibility.Collapsed;
                 DayListPanel.Visibility = Visibility.Collapsed;
                 DayViewPanel.Visibility = Visibility.Collapsed;
+                ResetSelectMode();
                 return;
             }
 
@@ -514,18 +518,25 @@ public partial class PanelWindow : Window
             // yalnızca Geri/Esc ile çıkar.
             var selectedGroup = _selectedDay is { } selDay ? groups.FirstOrDefault(g => g.Date == selDay) : null;
 
+            if (_selectedDay is null) ResetSelectMode();
+
             DayNotes.Clear();
             if (_selectedDay is { } day)
             {
                 foreach (var note in selectedGroup?.Notes ?? [])
                 {
                     var color = AuthorColors.For(note.Author, _settings) ?? (Brush)FindResource("Fg");
-                    DayNotes.Add(new NoteItem(note, color, AuthorColors.Tint(color)));
+                    DayNotes.Add(new NoteItem(note, color, AuthorColors.Tint(color))
+                    {
+                        SelectModeActive = _selectMode,
+                        IsSelected = _selectedNoteIds.Contains(note.Id),
+                    });
                 }
                 DayViewHeader.Text = DayGrouper.Header(day, today);
             }
             DayViewEmptyText.Visibility = _selectedDay is not null && DayNotes.Count == 0
                 ? Visibility.Visible : Visibility.Collapsed;
+            RefreshSelectModeUi();
 
             DayListPanel.Visibility = _selectedDay is null ? Visibility.Visible : Visibility.Collapsed;
             DayViewPanel.Visibility = _selectedDay is null ? Visibility.Collapsed : Visibility.Visible;
@@ -713,6 +724,13 @@ public partial class PanelWindow : Window
             if (PlanAddExpander.IsExpanded) { PlanAddExpander.IsExpanded = false; e.Handled = true; return; }
             if (PlanAddStepExpander.IsExpanded) { PlanAddStepExpander.IsExpanded = false; e.Handled = true; return; }
             if (_fullScreen) { ToggleFullScreen(); e.Handled = true; return; }
+            if (_selectMode)
+            {
+                ResetSelectMode();
+                Reload();
+                e.Handled = true;
+                return;
+            }
             if (_selectedPlanId is not null)
             {
                 _selectedPlanId = null;
@@ -1001,6 +1019,92 @@ public partial class PanelWindow : Window
             Reload();
         });
     }
+
+    // --- Notları plana adım olarak ekleme (tekli ve çoklu seçim) ---
+
+    private long? _planAddedId;
+
+    private void SelectModeToggle_Click(object sender, RoutedEventArgs e)
+    {
+        CancelAllEdits();
+        _selectMode = !_selectMode;
+        if (!_selectMode) _selectedNoteIds.Clear();
+        Reload();
+    }
+
+    private void SelectModeExit_Click(object sender, RoutedEventArgs e)
+    {
+        ResetSelectMode();
+        Reload();
+    }
+
+    /// <summary>Çoklu seçim modunu kapatır ve ilgili alt barı gizler; Reload() çağrılmadan da
+    /// güvenle kullanılabilir (ör. başka bir sekmeye/güne geçişte).</summary>
+    private void ResetSelectMode()
+    {
+        _selectMode = false;
+        _selectedNoteIds.Clear();
+        RefreshSelectModeUi();
+    }
+
+    private void RefreshSelectModeUi()
+    {
+        SetTabStyle(SelectModeToggleButton, _selectMode);
+        SelectModeToggleButton.Content = _selectMode ? "✕ Seçimi bitir" : "Seç";
+        SelectionBar.Visibility = _selectMode ? Visibility.Visible : Visibility.Collapsed;
+        SelectionCountText.Text = $"{_selectedNoteIds.Count} not seçildi";
+    }
+
+    private void NoteSelect_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox { DataContext: NoteItem item } box) return;
+        if (box.IsChecked == true) _selectedNoteIds.Add(item.Id);
+        else _selectedNoteIds.Remove(item.Id);
+        RefreshSelectModeUi();
+    }
+
+    private void AddNoteToPlanButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: NoteItem item }) return;
+        OpenAddToPlanDialog([FlattenNoteText(item.Note)]);
+    }
+
+    private void SelectionAddToPlan_Click(object sender, RoutedEventArgs e)
+    {
+        var texts = DayNotes.Where(n => _selectedNoteIds.Contains(n.Id)).Select(n => FlattenNoteText(n.Note)).ToList();
+        if (texts.Count == 0) return;
+        OpenAddToPlanDialog(texts);
+    }
+
+    /// <summary>Not metnini (etiketler dahil) tek satıra düzleştirir; adım metni olarak kullanılır.</summary>
+    private static string FlattenNoteText(Note note) =>
+        string.Join(' ', note.Text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    private void OpenAddToPlanDialog(IReadOnlyList<string> texts)
+    {
+        var dialog = new AddToPlanWindow(_planStore, texts) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+
+        if (_selectMode) ResetSelectMode();
+        Reload();
+
+        _planAddedId = dialog.ResultPlanId;
+        PlanAddedText.Text = $"{dialog.ResultAddedCount} adım '{dialog.ResultPlanTitle}' planına eklendi.";
+        PlanAddedBar.Visibility = Visibility.Visible;
+    }
+
+    private void PlanAddedOpen_Click(object sender, RoutedEventArgs e)
+    {
+        if (_planAddedId is not { } id) return;
+        PlanAddedBar.Visibility = Visibility.Collapsed;
+        CancelAllEdits();
+        _mode = Mode.Plans;
+        _plansShowProjects = false;
+        _selectedPlanId = id;
+        Reload();
+    }
+
+    private void PlanAddedClose_Click(object sender, RoutedEventArgs e) => PlanAddedBar.Visibility = Visibility.Collapsed;
 
     private void TaskDone_Click(object sender, RoutedEventArgs e)
     {

@@ -1,0 +1,144 @@
+<Window x:Class="Notlar.App.AddToPlanWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Plana ekle" Width="420" Height="560" MinWidth="360" MinHeight="420"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip"
+        Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
+        FontFamily="Segoe UI" FontSize="13"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <Style x:Key="FlatButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="6">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Plana ekle" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,10"/>
+
+        <!-- Plan seçim listesi -->
+        <StackPanel x:Name="ListPanel" Grid.Row="1">
+            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                    BorderThickness="1" CornerRadius="6" Margin="0,0,0,8">
+                <TextBox x:Name="SearchBox" Background="Transparent" BorderThickness="0" Padding="8,7"
+                         Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
+                         TextChanged="SearchBox_TextChanged"/>
+            </Border>
+        </StackPanel>
+
+        <Grid Grid.Row="2">
+            <!-- Plan listesi + yeni plan -->
+            <ScrollViewer x:Name="ListScroll" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock x:Name="EmptyText" Text="Eşleşen plan yok." Foreground="{DynamicResource Muted}"
+                               HorizontalAlignment="Center" Margin="0,24,0,0" Visibility="Collapsed"/>
+                    <ItemsControl x:Name="PlansList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="PickRow" Background="Transparent" Padding="8,6" CornerRadius="4" Cursor="Hand"
+                                        MouseLeftButtonDown="PlanPick_MouseLeftButtonDown">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <Border Background="{Binding StatusBrush}" CornerRadius="8" Padding="6,0" Margin="6,0,0,0"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding StatusLabel}" FontSize="11" Foreground="White"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding StepCountLabel}" Foreground="{DynamicResource Muted}" FontSize="11" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                                <DataTemplate.Triggers>
+                                    <Trigger SourceName="PickRow" Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="PickRow" Property="Background" Value="{DynamicResource Surface}"/>
+                                    </Trigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Expander x:Name="NewPlanExpander" Header="+ Yeni plan" Foreground="{DynamicResource Muted}"
+                              IsExpanded="False" Expanded="NewPlanExpander_Expanded" Margin="0,8,0,0">
+                        <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                                BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,0">
+                            <StackPanel>
+                                <TextBox x:Name="NewPlanTitleBox" Background="Transparent" BorderThickness="0" Padding="2"
+                                         Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
+                                         KeyDown="NewPlanTitleBox_KeyDown" Margin="0,0,0,6"/>
+                                <Button Content="Oluştur" Click="NewPlanCreate_Click" HorizontalAlignment="Right"
+                                        Style="{StaticResource FlatButton}" Background="{DynamicResource Accent}"
+                                        Foreground="{DynamicResource OnAccent}" Padding="12,4"/>
+                            </StackPanel>
+                        </Border>
+                    </Expander>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Seçili plan: mevcut adımlar + ekleme konumu -->
+            <StackPanel x:Name="DetailPanel" Visibility="Collapsed">
+                <DockPanel Margin="0,0,0,8">
+                    <Button DockPanel.Dock="Left" Content="‹ Planlar" Click="BackToList_Click"
+                            Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
+                </DockPanel>
+                <TextBlock x:Name="SelectedPlanTitleText" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                <TextBlock Text="Mevcut adımlar" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,4"/>
+                <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock x:Name="NoStepsText" Text="Bu planda henüz adım yok." Foreground="{DynamicResource Muted}"
+                                   FontSize="12" Visibility="Collapsed"/>
+                        <ItemsControl x:Name="StepsList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,2"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <TextBlock Text="Nereye eklensin?" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,4"/>
+                <RadioButton x:Name="StartRadio" Content="En başa" GroupName="Position" Margin="0,0,0,4"/>
+                <RadioButton x:Name="EndRadio" Content="En sona ekle" GroupName="Position" IsChecked="True" Margin="0,0,0,4"/>
+                <DockPanel Margin="0,0,0,4" LastChildFill="True">
+                    <RadioButton x:Name="AfterStepRadio" DockPanel.Dock="Left" Content="Şu adımdan sonra:" GroupName="Position"
+                                 VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ComboBox x:Name="AfterStepBox" DisplayMemberPath="Label"/>
+                </DockPanel>
+            </StackPanel>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="Vazgeç" Style="{StaticResource FlatButton}" Click="Cancel_Click" Margin="0,0,8,0"/>
+            <Button x:Name="AddButton" Content="Ekle" Click="Add_Click" Padding="14,6" Cursor="Hand" IsEnabled="False">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                        <Setter Property="Background" Value="{DynamicResource Accent}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Window>
