@@ -24,6 +24,10 @@ builder.Services.AddSingleton(sp => new NoteStore(
     AppPaths.DbPath,
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<IChangeSignal>()));
+builder.Services.AddSingleton(sp => new TaskStore(
+    AppPaths.DbPath,
+    sp.GetRequiredService<TimeProvider>(),
+    sp.GetRequiredService<IChangeSignal>()));
 
 builder.Services
     .AddMcpServer()
