@@ -51,6 +51,7 @@ public partial class PanelWindow : Window
     private Mode _previousMode = Mode.Notes;
     private DateOnly? _selectedDay;
     private DateTime _lastHiddenAt = DateTime.MinValue;
+    private bool _dragging;
     private readonly List<DayWindow> _dayWindows = [];
 
     private long? _selectedPlanId;
@@ -507,7 +508,45 @@ public partial class PanelWindow : Window
 
     private void Window_Deactivated(object? sender, EventArgs e)
     {
+        if (_dragging) return;
         if (!_settings.PanelPinned && !_settings.PanelLarge) HidePanel();
+    }
+
+    /// <summary>Panelin en üstündeki her zaman görünür sürükleme çubuğu: moda ya da sabitlenme
+    /// durumuna bakmaksızın her zaman DragMove ile taşımaya izin verir. Sürükleme sırasında pencere
+    /// odağı kaybedip Deactivated tetiklense bile (ör. alt-tab) <see cref="_dragging"/> bayrağı sayesinde
+    /// sabitlenmemiş panel gizlenmez.</summary>
+    private void DragBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2)
+        {
+            ToggleSize();
+            return;
+        }
+        if (e.ClickCount != 1) return;
+
+        _dragging = true;
+        try { DragMove(); }
+        catch (InvalidOperationException) { /* mouse zaten bırakılmış olabilir */ }
+        finally { _dragging = false; }
+        SavePanelPosition();
+    }
+
+    /// <summary>Sürükleme sonrası güncel konumu, geçerli moda (kompakt/büyük) göre uygun alanlara
+    /// kaydeder.</summary>
+    private void SavePanelPosition()
+    {
+        if (_settings.PanelLarge)
+        {
+            _settings.PanelLargeLeft = Left;
+            _settings.PanelLargeTop = Top;
+        }
+        else
+        {
+            _settings.PanelLeft = Left;
+            _settings.PanelTop = Top;
+        }
+        _settings.Save();
     }
 
     private void HeaderText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

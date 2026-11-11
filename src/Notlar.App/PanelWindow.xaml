@@ -411,27 +411,38 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <DockPanel x:Name="HeaderBar" Grid.Row="0" Margin="14,10,10,6" LastChildFill="True"
+        <Border x:Name="DragBar" Grid.Row="0" Height="28" Background="{DynamicResource Surface}"
+                BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1"
+                Cursor="SizeAll" ToolTip="Sürükleyerek taşı"
+                MouseLeftButtonDown="DragBar_MouseLeftButtonDown">
+            <Grid>
+                <TextBlock Text="⠿" Foreground="{DynamicResource Muted}" FontSize="14"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0">
+                    <Button x:Name="PinButton" Content="📌" ToolTip="Sabitle" Click="PinButton_Click"
+                            Style="{StaticResource FlatButton}" Padding="6,2"/>
+                    <Button x:Name="SizeToggleButton" Content="⤢" ToolTip="Genişlet" Click="SizeToggleButton_Click"
+                            Style="{StaticResource FlatButton}" Padding="6,2" Margin="2,0,0,0"/>
+                    <Button Content="—" ToolTip="Gizle" Click="HideButton_Click"
+                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="2,0,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <DockPanel x:Name="HeaderBar" Grid.Row="1" Margin="14,10,10,6" LastChildFill="True"
                    MouseLeftButtonDown="HeaderBar_MouseLeftButtonDown">
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                <Button x:Name="PinButton" Content="📌" ToolTip="Sabitle" Click="PinButton_Click"
-                        Style="{StaticResource FlatButton}" Padding="6,2"/>
-                <Button x:Name="SizeToggleButton" Content="⤢" ToolTip="Genişlet" Click="SizeToggleButton_Click"
-                        Style="{StaticResource FlatButton}" Padding="6,2" Margin="2,0,0,0"/>
-                <Button Content="—" ToolTip="Gizle" Click="HideButton_Click"
-                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="2,0,0,0"/>
-            </StackPanel>
             <TextBlock x:Name="HeaderText" Text="📝 Notlar" FontSize="15" FontWeight="SemiBold"
                        VerticalAlignment="Center"
                        MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
         </DockPanel>
 
-        <StackPanel x:Name="TabsRow" Grid.Row="1" Orientation="Horizontal" Margin="14,0,14,8">
+        <StackPanel x:Name="TabsRow" Grid.Row="2" Orientation="Horizontal" Margin="14,0,14,8">
             <Button x:Name="NotesTabButton" Content="📝 Notlar" Click="NotesTab_Click"
                     Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,0"/>
             <Button x:Name="MemoryTabButton" Content="🧠 Hafıza" Click="MemoryTab_Click"
@@ -442,7 +453,7 @@
                     Style="{StaticResource FlatButton}" Padding="10,4"/>
         </StackPanel>
 
-        <Border x:Name="NotesInputBorder" Grid.Row="2" Margin="12,0,12,8" Background="{DynamicResource Surface}"
+        <Border x:Name="NotesInputBorder" Grid.Row="3" Margin="12,0,12,8" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="6">
             <Grid>
                 <TextBox x:Name="InputBox" Background="Transparent" BorderThickness="0" Padding="8,7"
@@ -464,7 +475,7 @@
             </Grid>
         </Border>
 
-        <Border x:Name="TaskInputBorder" Grid.Row="2" Margin="12,0,12,8" Background="{DynamicResource Surface}"
+        <Border x:Name="TaskInputBorder" Grid.Row="3" Margin="12,0,12,8" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="6" Visibility="Collapsed">
             <Grid>
                 <TextBox x:Name="TaskInputBox" Background="Transparent" BorderThickness="0" Padding="8,7"
@@ -486,7 +497,7 @@
             </Grid>
         </Border>
 
-        <StackPanel x:Name="MemoryInputPanel" Grid.Row="2" Margin="12,0,12,8" Visibility="Collapsed">
+        <StackPanel x:Name="MemoryInputPanel" Grid.Row="3" Margin="12,0,12,8" Visibility="Collapsed">
             <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
                     BorderThickness="1" CornerRadius="6" Margin="0,0,0,6">
                 <Grid>
@@ -576,7 +587,7 @@
             </Expander>
         </StackPanel>
 
-        <StackPanel x:Name="SkillsHeaderPanel" Grid.Row="2" Margin="12,0,12,8" Visibility="Collapsed">
+        <StackPanel x:Name="SkillsHeaderPanel" Grid.Row="3" Margin="12,0,12,8" Visibility="Collapsed">
             <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
                     BorderThickness="1" CornerRadius="6" Margin="0,0,0,6">
                 <Grid>
@@ -689,7 +700,7 @@
             </Expander>
         </StackPanel>
 
-        <DockPanel Grid.Row="3" Margin="12,0,12,4" LastChildFill="True">
+        <DockPanel Grid.Row="4" Margin="12,0,12,4" LastChildFill="True">
             <Button x:Name="FilterClearButton" DockPanel.Dock="Right" Content="✕" ToolTip="Filtreyi temizle"
                     Click="FilterClear_Click" Style="{StaticResource FlatButton}" Visibility="Collapsed"/>
             <ItemsControl x:Name="AuthorFilterRow" ItemsSource="{Binding AuthorFilters}">
@@ -717,7 +728,7 @@
             </ItemsControl>
         </DockPanel>
 
-        <ItemsControl x:Name="TagRow" Grid.Row="4" ItemsSource="{Binding Tags}" Margin="12,0,12,6" Visibility="Collapsed">
+        <ItemsControl x:Name="TagRow" Grid.Row="5" ItemsSource="{Binding Tags}" Margin="12,0,12,6" Visibility="Collapsed">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
@@ -741,7 +752,7 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <ScrollViewer Grid.Row="5" VerticalScrollBarVisibility="Auto" Padding="6,0,6,8">
+        <ScrollViewer Grid.Row="6" VerticalScrollBarVisibility="Auto" Padding="6,0,6,8">
             <Grid>
                 <StackPanel x:Name="DayListPanel">
                     <DockPanel Margin="2,0,2,6" LastChildFill="False">
@@ -1011,7 +1022,7 @@
             </Grid>
         </ScrollViewer>
 
-        <Border x:Name="UndoBar" Grid.Row="6" Background="{DynamicResource Surface}"
+        <Border x:Name="UndoBar" Grid.Row="7" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,8" Visibility="Collapsed">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="UndoClose_Click"
@@ -1022,7 +1033,7 @@
             </DockPanel>
         </Border>
 
-        <Border x:Name="ErrorBar" Grid.Row="7" Background="{DynamicResource Danger}" Padding="12,6" Visibility="Collapsed">
+        <Border x:Name="ErrorBar" Grid.Row="8" Background="{DynamicResource Danger}" Padding="12,6" Visibility="Collapsed">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="ErrorClose_Click"
                         Style="{StaticResource FlatButton}" Foreground="White" Margin="6,0,0,0"/>
