@@ -4,6 +4,9 @@ using Microsoft.Extensions.Logging;
 using Notlar.Core;
 using Notlar.Mcp;
 
+if (ContextCommand.TryRun(args))
+    return;
+
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 {
     Args = args,
@@ -27,6 +30,10 @@ builder.Services.AddSingleton(sp => new NoteStore(
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<IChangeSignal>()));
 builder.Services.AddSingleton(sp => new TaskStore(
+    AppPaths.DbPath,
+    sp.GetRequiredService<TimeProvider>(),
+    sp.GetRequiredService<IChangeSignal>()));
+builder.Services.AddSingleton(sp => new MemoryStore(
     AppPaths.DbPath,
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<IChangeSignal>()));
