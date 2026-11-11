@@ -69,11 +69,13 @@ public partial class App : Application
 
         NoteStore store;
         TaskStore taskStore;
+        MemoryStore memoryStore;
         try
         {
             var signal = ChangeSignals.CreateOrNull(AppPaths.ChangeEventName, AppLog.Write);
             store = new NoteStore(AppPaths.DbPath, TimeProvider.System, signal);
             taskStore = new TaskStore(AppPaths.DbPath, TimeProvider.System, signal);
+            memoryStore = new MemoryStore(AppPaths.DbPath, TimeProvider.System, signal);
         }
         catch (Exception ex)
         {
@@ -88,7 +90,7 @@ public partial class App : Application
         TryLog(() => store.Backup(AppPaths.BackupDir, keep: 7));
         TryLog(AutoStart.EnsureRegistration);
 
-        _panel = new PanelWindow(store, taskStore);
+        _panel = new PanelWindow(store, taskStore, memoryStore);
         _tray = new TrayIcon(
             onToggle: _panel.Toggle,
             onOpen: _panel.ShowNearTray,

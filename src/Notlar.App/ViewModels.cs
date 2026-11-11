@@ -56,6 +56,56 @@ public sealed class NoteItem(Note note, Brush authorColor, Brush authorTint) : I
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
+/// <summary>Hafıza listesinde bir kategori başlığı altındaki kartlar.</summary>
+public sealed record MemoryGroupVm(string Header, IReadOnlyList<MemoryItemVm> Items);
+
+/// <summary>Bir hafıza kartının görünüm modeli (başlık/içerik satır içi düzenleme desteğiyle).</summary>
+public sealed class MemoryItemVm(MemoryItem item) : INotifyPropertyChanged
+{
+    private static readonly CultureInfo TrTr = CultureInfo.GetCultureInfo("tr-TR");
+    private bool _isEditing;
+    private string _editTitle = "";
+    private string _editContent = "";
+
+    public MemoryItem Item { get; } = item;
+    public long Id => Item.Id;
+    public string Title => Item.Title;
+    public string Content => Item.Content;
+    public string Category => Item.Category;
+    public string UpdatedLabel => $"güncellendi: {Item.UpdatedAt.ToString("d MMMM HH:mm", TrTr)}";
+
+    public bool IsEditing
+    {
+        get => _isEditing;
+        set
+        {
+            if (_isEditing == value) return;
+            _isEditing = value;
+            OnChanged();
+            OnChanged(nameof(IsViewing));
+        }
+    }
+
+    public bool IsViewing => !_isEditing;
+
+    public string EditTitle
+    {
+        get => _editTitle;
+        set { _editTitle = value; OnChanged(); }
+    }
+
+    public string EditContent
+    {
+        get => _editContent;
+        set { _editContent = value; OnChanged(); }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
 /// <summary>Gizli kişisel görünümü için bir kayıt satırının görünüm modeli.</summary>
 public sealed class TaskItemVm(TaskItem task, Brush authorColor, Brush authorTint) : INotifyPropertyChanged
 {

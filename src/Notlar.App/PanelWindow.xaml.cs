@@ -21,10 +21,17 @@ public partial class PanelWindow : Window
     private static readonly StringComparer TrComparer = StringComparer.Create(CultureInfo.GetCultureInfo("tr-TR"), ignoreCase: true);
     private const int RecentDays = 30;
 
-    private enum UndoKind { Note, Task }
+    private enum UndoKind { Note, Task, Memory }
+
+    /// <summary>Panelin görünür modu: normal not günlüğü, görünür hafıza kartları sekmesi ya da üçlü
+    /// tıklamayla açılan gizli kişisel liste.</summary>
+    private enum Mode { Notes, Memory, Personal }
+
+    private static readonly CultureInfo TrTr = CultureInfo.GetCultureInfo("tr-TR");
 
     private readonly NoteStore _store;
     private readonly TaskStore _taskStore;
+    private readonly MemoryStore _memoryStore;
     private readonly DispatcherTimer _undoTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly DispatcherTimer _errorTimer = new() { Interval = TimeSpan.FromSeconds(4) };
     private AppSettings _settings;
@@ -34,7 +41,8 @@ public partial class PanelWindow : Window
     private UndoKind _undoKind;
     private bool _reloadPending;
     private bool _showAll;
-    private bool _tasksMode;
+    private Mode _mode = Mode.Notes;
+    private Mode _previousMode = Mode.Notes;
     private DateOnly? _selectedDay;
     private DateTime _lastHiddenAt = DateTime.MinValue;
     private readonly List<DayWindow> _dayWindows = [];
@@ -44,11 +52,14 @@ public partial class PanelWindow : Window
     public ObservableCollection<TagChip> Tags { get; } = [];
     public ObservableCollection<AuthorChip> AuthorFilters { get; } = [];
     public ObservableCollection<TaskItemVm> Tasks { get; } = [];
+    public ObservableCollection<MemoryGroupVm> MemoryGroups { get; } = [];
+    public ObservableCollection<string> MemoryCategories { get; } = [];
 
-    public PanelWindow(NoteStore store, TaskStore taskStore)
+    public PanelWindow(NoteStore store, TaskStore taskStore, MemoryStore memoryStore)
     {
         _store = store;
         _taskStore = taskStore;
+        _memoryStore = memoryStore;
         _settings = AppSettings.Load();
         InitializeComponent();
         DataContext = this;
@@ -57,7 +68,8 @@ public partial class PanelWindow : Window
         AppSettings.Changed += OnSettingsChanged;
     }
 
-    private bool AnyEditing => DayNotes.Any(n => n.IsEditing) || Tasks.Any(t => t.IsEditing);
+    private bool AnyEditing => DayNotes.Any(n => n.IsEditing) || Tasks.Any(t => t.IsEditing)
+        || MemoryGroups.Any(g => g.Items.Any(m => m.IsEditing));
 
     private void OnSettingsChanged()
     {
@@ -83,7 +95,12 @@ public partial class PanelWindow : Window
         Show();
         ReloadCore();
         Activate();
-        if (_tasksMode) TaskInputBox.Focus(); else InputBox.Focus();
+        switch (_mode)
+        {
+            case Mode.Personal: TaskInputBox.Focus(); break;
+            case Mode.Memory: MemorySearchBox.Focus(); break;
+            default: InputBox.Focus(); break;
+        }
     }
 
     private void HidePanel()
@@ -94,7 +111,7 @@ public partial class PanelWindow : Window
         _showAll = false;
         _selectedDay = null;
         _authorFilter = null;
-        _tasksMode = false;
+        _mode = Mode.Notes;
     }
 
     /// <summary>Açık düzenlemeleri kaydetmeden kapatır, böylece ardından çağrılan Reload() ertelenmez.</summary>
@@ -104,6 +121,9 @@ public partial class PanelWindow : Window
             note.IsEditing = false;
         foreach (var task in Tasks)
             task.IsEditing = false;
+        foreach (var group in MemoryGroups)
+            foreach (var item in group.Items)
+                item.IsEditing = false;
     }
 
     /// <summary>Panel gizliyken gerçek yeniden yükleme işini atlar (DB okuma + UI güncelleme).
@@ -132,14 +152,26 @@ public partial class PanelWindow : Window
         _reloadPending = false;
         Try(() =>
         {
-            HeaderText.Text = _tasksMode ? "🔒 Kişisel" : "📝 Notlar";
-            NotesInputBorder.Visibility = _tasksMode ? Visibility.Collapsed : Visibility.Visible;
-            TaskInputBorder.Visibility = _tasksMode ? Visibility.Visible : Visibility.Collapsed;
-            TasksPanel.Visibility = _tasksMode ? Visibility.Visible : Visibility.Collapsed;
+            HeaderText.Text = _mode switch
+            {
+                Mode.Personal => "🔒 Kişisel",
+                Mode.Memory => "🧠 Hafıza",
+                _ => "📝 Notlar",
+            };
+            TabsRow.Visibility = _mode == Mode.Personal ? Visibility.Collapsed : Visibility.Visible;
+            SetTabStyle(NotesTabButton, _mode == Mode.Notes);
+            SetTabStyle(MemoryTabButton, _mode == Mode.Memory);
+
+            NotesInputBorder.Visibility = _mode == Mode.Notes ? Visibility.Visible : Visibility.Collapsed;
+            TaskInputBorder.Visibility = _mode == Mode.Personal ? Visibility.Visible : Visibility.Collapsed;
+            MemoryInputPanel.Visibility = _mode == Mode.Memory ? Visibility.Visible : Visibility.Collapsed;
+            TasksPanel.Visibility = _mode == Mode.Personal ? Visibility.Visible : Visibility.Collapsed;
+            MemoryPanel.Visibility = _mode == Mode.Memory ? Visibility.Visible : Visibility.Collapsed;
 
             ReloadTasks();
+            ReloadMemory();
 
-            if (_tasksMode)
+            if (_mode != Mode.Notes)
             {
                 AuthorFilterRow.Visibility = Visibility.Collapsed;
                 TagRow.Visibility = Visibility.Collapsed;
@@ -232,6 +264,35 @@ public partial class PanelWindow : Window
         TasksEmptyText.Visibility = Tasks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private void SetTabStyle(Button button, bool selected)
+    {
+        button.Background = selected ? (Brush)FindResource("Accent") : Brushes.Transparent;
+        button.Foreground = selected ? (Brush)FindResource("OnAccent") : (Brush)FindResource("Muted");
+    }
+
+    /// <summary>Hafıza kartlarını (arama metni varsa MemoryStore.Search ile süzülmüş) kategoriye göre
+    /// gruplayıp yeniden yükler; kategori ComboBox'ının seçeneklerini de günceller.</summary>
+    private void ReloadMemory()
+    {
+        var query = MemorySearchBox.Text.Trim();
+        var all = query.Length > 0 ? _memoryStore.Search(query) : _memoryStore.List();
+
+        MemoryGroups.Clear();
+        foreach (var group in all.GroupBy(m => m.Category).OrderBy(g => g.Key, TrComparer))
+        {
+            var items = group.OrderByDescending(m => m.UpdatedAt).Select(m => new MemoryItemVm(m)).ToList();
+            MemoryGroups.Add(new MemoryGroupVm(group.Key.ToUpper(TrTr), items));
+        }
+        MemoryEmptyText.Visibility = MemoryGroups.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        var categories = _memoryStore.Categories().ToList();
+        if (!categories.Contains("genel", StringComparer.OrdinalIgnoreCase))
+            categories.Insert(0, "genel");
+        MemoryCategories.Clear();
+        foreach (var category in categories.Order(TrComparer))
+            MemoryCategories.Add(category);
+    }
+
     public void ExportMarkdown() => Try(() =>
     {
         var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -246,7 +307,31 @@ public partial class PanelWindow : Window
     {
         if (e.ClickCount != 3) return;
         CancelAllEdits();
-        _tasksMode = !_tasksMode;
+        if (_mode == Mode.Personal)
+        {
+            _mode = _previousMode;
+        }
+        else
+        {
+            _previousMode = _mode;
+            _mode = Mode.Personal;
+        }
+        Reload();
+    }
+
+    private void NotesTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (_mode == Mode.Personal) return;
+        CancelAllEdits();
+        _mode = Mode.Notes;
+        Reload();
+    }
+
+    private void MemoryTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (_mode == Mode.Personal) return;
+        CancelAllEdits();
+        _mode = Mode.Memory;
         Reload();
     }
 
@@ -274,6 +359,11 @@ public partial class PanelWindow : Window
         else if (e.Key == Key.Delete && Keyboard.FocusedElement is FrameworkElement { DataContext: TaskItemVm taskItem })
         {
             DeleteTask(taskItem);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete && Keyboard.FocusedElement is FrameworkElement { DataContext: MemoryItemVm memoryItem })
+        {
+            DeleteMemory(memoryItem);
             e.Handled = true;
         }
     }
@@ -560,12 +650,113 @@ public partial class PanelWindow : Window
     {
         if (_undoId is { } id)
         {
-            if (_undoKind == UndoKind.Task)
-                Try(() => { _taskStore.Restore(id); Reload(); });
-            else
-                Try(() => { _store.Restore(id); Reload(); });
+            switch (_undoKind)
+            {
+                case UndoKind.Task: Try(() => { _taskStore.Restore(id); Reload(); }); break;
+                case UndoKind.Memory: Try(() => { _memoryStore.Restore(id); Reload(); }); break;
+                default: Try(() => { _store.Restore(id); Reload(); }); break;
+            }
         }
         HideUndo();
+    }
+
+    private void MemorySearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_mode == Mode.Memory) Try(ReloadMemory);
+    }
+
+    private void MemoryAdd_Click(object sender, RoutedEventArgs e)
+    {
+        var title = MemoryTitleBox.Text.Trim();
+        var content = MemoryContentBox.Text.Trim();
+        if (title.Length == 0 || content.Length == 0) return;
+        var category = MemoryCategoryBox.Text;
+        Try(() =>
+        {
+            _memoryStore.Add(title, content, category);
+            MemoryTitleBox.Clear();
+            MemoryContentBox.Clear();
+            MemoryCategoryBox.Text = "genel";
+            Reload();
+        });
+    }
+
+    private void MemoryRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        ((UIElement)sender).Focus();
+        if (e.ClickCount != 2 || sender is not FrameworkElement { DataContext: MemoryItemVm item }) return;
+        item.EditTitle = item.Title;
+        item.EditContent = item.Content;
+        item.IsEditing = true;
+        e.Handled = true;
+    }
+
+    private void MemoryTitleEditBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: MemoryItemVm item }) return;
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            SaveMemoryEdit(item);
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CancelMemoryEdit(item);
+        }
+    }
+
+    private void MemoryContentEditBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: MemoryItemVm item }) return;
+        if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            e.Handled = true;
+            SaveMemoryEdit(item);
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CancelMemoryEdit(item);
+        }
+    }
+
+    private void SaveMemoryEdit(MemoryItemVm item)
+    {
+        var title = item.EditTitle.Trim();
+        var content = item.EditContent.Trim();
+        item.IsEditing = false;
+        if (title.Length > 0 && content.Length > 0 && (title != item.Title || content != item.Content))
+            Try(() => _memoryStore.Update(item.Id, title, content));
+        Reload();
+    }
+
+    private void CancelMemoryEdit(MemoryItemVm item)
+    {
+        item.IsEditing = false;
+        if (_reloadPending) Reload();
+    }
+
+    private void MemoryDeleteButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: MemoryItemVm item })
+            DeleteMemory(item);
+    }
+
+    private void DeleteMemory(MemoryItemVm item)
+    {
+        CancelAllEdits();
+        Try(() =>
+        {
+            _memoryStore.Delete(item.Id);
+            _undoId = item.Id;
+            _undoKind = UndoKind.Memory;
+            UndoText.Text = "Hafıza kaydı silindi.";
+            UndoBar.Visibility = Visibility.Visible;
+            _undoTimer.Stop();
+            _undoTimer.Start();
+            Reload();
+        });
     }
 
     private void HideUndo()
