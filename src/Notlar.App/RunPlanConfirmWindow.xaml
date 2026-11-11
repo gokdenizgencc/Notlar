@@ -1,0 +1,74 @@
+<Window x:Class="Notlar.App.RunPlanConfirmWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Planı çalıştır" Width="460" Height="460" MinWidth="380" MinHeight="260"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip"
+        Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
+        FontFamily="Segoe UI" FontSize="13"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="FlatButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="6">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" x:Name="TitleText" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+        <TextBlock Grid.Row="1" x:Name="QuestionText" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" MaxHeight="340">
+            <ItemsControl x:Name="StepsList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Number}" Foreground="{DynamicResource Muted}" Margin="0,0,8,0"/>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding AuthorLabel}" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Accent}" Visibility="{Binding AuthorLabelVisibility}"/>
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Vazgeç" Style="{StaticResource FlatButton}" Click="CancelButton_Click" Margin="0,0,8,0"/>
+            <Button Content="▶ Çalıştır" Click="RunButton_Click" Padding="14,6" Cursor="Hand">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                        <Setter Property="Background" Value="{DynamicResource Accent}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Window>

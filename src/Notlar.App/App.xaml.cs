@@ -16,23 +16,9 @@ public partial class App : Application
 {
     private const int ASFW_ANY = -1;
 
-    private static readonly string MutexName = @"Local\Notlar.App.Tek." + CurrentUserSid();
-    private static readonly string ShowEventName = @"Local\Notlar.App.Goster." + CurrentUserSid();
-
-    /// <summary>Çekirdek nesne adlarının (mutex/olay) kullanıcıya özel olması için geçerli kullanıcının SID'i.
-    /// Alınamazsa boş döner; bu durumda ad paylaşılır ama uygulama yine de çalışır.</summary>
-    private static string CurrentUserSid()
-    {
-        try
-        {
-            return WindowsIdentity.GetCurrent().User?.Value ?? "";
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write(ex);
-            return "";
-        }
-    }
+    // Kullanıcıya özel çekirdek nesne adları: tek implementasyon için AppPaths.BuildPerUserName kullanılır.
+    private static readonly string MutexName = AppPaths.BuildPerUserName(@"Local\Notlar.App.Tek");
+    private static readonly string ShowEventName = AppPaths.BuildPerUserName(@"Local\Notlar.App.Goster");
 
     private Mutex? _mutex;
     private bool _isFirstInstance;
@@ -98,6 +84,7 @@ public partial class App : Application
         SkillTranslations skillTranslations;
         PlanStore planStore;
         ProjectStore projectStore;
+        AppFlags appFlags;
         try
         {
             var signal = ChangeSignals.CreateOrNull(AppPaths.ChangeEventName, AppLog.Write);
@@ -108,6 +95,7 @@ public partial class App : Application
             skillTranslations = new SkillTranslations(AppPaths.DbPath, TimeProvider.System, signal);
             planStore = new PlanStore(AppPaths.DbPath, TimeProvider.System, signal);
             projectStore = new ProjectStore(AppPaths.DbPath, TimeProvider.System, signal);
+            appFlags = new AppFlags(AppPaths.DbPath, signal);
         }
         catch (Exception ex)
         {
@@ -120,7 +108,7 @@ public partial class App : Application
 
         TryLog(AutoStart.EnsureRegistration);
 
-        _panel = new PanelWindow(store, taskStore, memoryStore, skillRegistry, skillTranslations, planStore, projectStore);
+        _panel = new PanelWindow(store, taskStore, memoryStore, skillRegistry, skillTranslations, planStore, projectStore, appFlags);
         _tray = new TrayIcon(
             onToggle: _panel.Toggle,
             onOpen: _panel.ShowNearTray,

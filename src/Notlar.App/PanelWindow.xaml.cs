@@ -39,6 +39,8 @@ public partial class PanelWindow : Window
     private readonly SkillTranslations _skillTranslations;
     private readonly PlanStore _planStore;
     private readonly ProjectStore _projectStore;
+    private readonly AppFlags? _appFlags;
+    private bool _kisiselOkumaSyncing;
     private readonly SkillUsageCache _skillUsageCache = new();
     private readonly DispatcherTimer _undoTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly DispatcherTimer _errorTimer = new() { Interval = TimeSpan.FromSeconds(4) };
@@ -93,7 +95,7 @@ public partial class PanelWindow : Window
     public ObservableCollection<ProjectComboItem> PlanProjectOptions { get; } = [];
 
     public PanelWindow(NoteStore store, TaskStore taskStore, MemoryStore memoryStore, SkillRegistry skillRegistry,
-        SkillTranslations skillTranslations, PlanStore planStore, ProjectStore projectStore)
+        SkillTranslations skillTranslations, PlanStore planStore, ProjectStore projectStore, AppFlags? appFlags = null)
     {
         _store = store;
         _taskStore = taskStore;
@@ -102,6 +104,7 @@ public partial class PanelWindow : Window
         _skillTranslations = skillTranslations;
         _planStore = planStore;
         _projectStore = projectStore;
+        _appFlags = appFlags;
         _settings = AppSettings.Load();
         _discoverSort = _settings.DiscoverSort;
         InitializeComponent();
@@ -451,6 +454,7 @@ public partial class PanelWindow : Window
             MemoryInputPanel.Visibility = _mode == Mode.Memory ? Visibility.Visible : Visibility.Collapsed;
             SkillsHeaderPanel.Visibility = _mode == Mode.Skills ? Visibility.Visible : Visibility.Collapsed;
             TasksPanel.Visibility = _mode == Mode.Personal ? Visibility.Visible : Visibility.Collapsed;
+            if (_mode == Mode.Personal) SyncKisiselOkumaCheckBox();
             MemoryPanel.Visibility = _mode == Mode.Memory ? Visibility.Visible : Visibility.Collapsed;
             SkillsPanel.Visibility = _mode == Mode.Skills ? Visibility.Visible : Visibility.Collapsed;
             PlansPanel.Visibility = _mode == Mode.Plans ? Visibility.Visible : Visibility.Collapsed;
@@ -783,6 +787,22 @@ public partial class PanelWindow : Window
             TaskInputBox.Clear();
             Reload();
         });
+    }
+
+    /// <summary>AppFlags.KisiselMcpOkuma anahtarının geçerli değerini onay kutusuna yansıtır (olay tetiklemeden).</summary>
+    private void SyncKisiselOkumaCheckBox()
+    {
+        _kisiselOkumaSyncing = true;
+        KisiselOkumaCheckBox.IsChecked = _appFlags?.GetBool(AppFlags.KisiselMcpOkuma) ?? false;
+        _kisiselOkumaSyncing = false;
+    }
+
+    /// <summary>"Claude okuyabilsin" anahtarını kaydeder; kapalıyken MCP kişisel listeyi okuyamaz,
+    /// yalnızca ekleme yapabilir (TaskTools.kisisel_listele). Varsayılan kapalı.</summary>
+    private void KisiselOkumaCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_kisiselOkumaSyncing || _appFlags is null) return;
+        Try(() => _appFlags.SetBool(AppFlags.KisiselMcpOkuma, KisiselOkumaCheckBox.IsChecked == true));
     }
 
     private void OtherDayButton_Click(object sender, RoutedEventArgs e)
@@ -2086,9 +2106,10 @@ public partial class PanelWindow : Window
         }
 
         Plan plan;
+        IReadOnlyList<PlanStep> steps;
         try
         {
-            (plan, _) = _planStore.GetPlan(id);
+            (plan, steps) = _planStore.GetPlan(id);
         }
         catch (PlanNotFoundException)
         {
@@ -2098,9 +2119,9 @@ public partial class PanelWindow : Window
 
         var effectiveFolder = PlanFolder.Resolve(plan, _projectStore);
         var folderLabel = effectiveFolder ?? "Kullanıcı klasörü (proje bağlı değil)";
-        var question = $"Claude Code bu klasörde açılıp planı uygulamaya başlayacak: {folderLabel}. Devam edilsin mi?";
-        if (MessageBox.Show(question, "Notlar", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
-            return;
+        var confirmWindow = new RunPlanConfirmWindow(plan.Title, folderLabel, steps) { Owner = this };
+        confirmWindow.ShowDialog();
+        if (!confirmWindow.Confirmed) return;
 
         Try(() => PlanLauncher.Launch(plan, effectiveFolder));
     }

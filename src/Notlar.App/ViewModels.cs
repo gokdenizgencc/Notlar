@@ -249,6 +249,10 @@ public sealed class PlanStepItemVm(PlanStep step) : INotifyPropertyChanged
     public string? Result => Step.Result;
     public bool HasResult => !string.IsNullOrWhiteSpace(Step.Result);
 
+    /// <summary>Adımı kullanıcı dışında biri eklediyse "(ekleyen: &lt;yazar&gt;)"; aksi halde boş.</summary>
+    public string AuthorLabel => Step.Author == NoteAuthor.Ben ? "" : $"(ekleyen: {Step.Author})";
+    public bool HasAuthorLabel => AuthorLabel.Length > 0;
+
     public string StatusIcon => Step.Status switch
     {
         StepStatus.Bekliyor => "⏳",
