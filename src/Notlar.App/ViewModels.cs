@@ -106,6 +106,14 @@ public sealed class MemoryItemVm(MemoryItem item) : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
+/// <summary>Yetenekler sekmesinde bir AI başlığı altındaki yetenek satırları.</summary>
+public sealed record SkillGroupVm(string Ai, Brush AiColor, string SummaryLabel, IReadOnlyList<SkillItemVm> Items);
+
+/// <summary>Yetenekler sekmesinde tek bir yetenek satırının görünüm modeli.</summary>
+public sealed record SkillItemVm(
+    string EntryId, string Ai, string Name, string Description, string SourceLabel,
+    string UsageLabel, string LastUsedLabel, bool IsUnused, bool CanDelete, long? RegistryId);
+
 /// <summary>Gizli kişisel görünümü için bir kayıt satırının görünüm modeli.</summary>
 public sealed class TaskItemVm(TaskItem task, Brush authorColor, Brush authorTint) : INotifyPropertyChanged
 {

@@ -15,6 +15,7 @@ public static class ClaudeSkillScanner
 {
     public const string Ai = "Claude";
     public const string UserSource = "kullanıcı";
+    public const string ClaudeAiSource = "claude.ai";
 
     public static string DefaultClaudeDir { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
@@ -30,12 +31,7 @@ public static class ClaudeSkillScanner
         var userSkillsDir = Path.Combine(claudeDir, "skills");
         if (Directory.Exists(userSkillsDir))
         {
-            foreach (var dir in TryGetDirectories(userSkillsDir))
-            {
-                var parsed = TryParseSkillMd(Path.Combine(dir, "SKILL.md"));
-                if (parsed is not { } p) continue;
-                result.Add(new SkillInfo(Ai, p.Name, p.Name, p.Description, UserSource));
-            }
+            ScanSkillsDirRecursive(userSkillsDir, userSkillsDir, depth: 0, result);
         }
 
         var pluginsCacheDir = Path.Combine(claudeDir, "plugins", "cache");
@@ -63,6 +59,39 @@ public static class ClaudeSkillScanner
         }
 
         return result;
+    }
+
+    /// <summary>claudeDir\skills altında SKILL.md dosyalarını en fazla 3 seviye derine kadar özyinelemeli
+    /// arar (düz "skills\&lt;ad&gt;\SKILL.md" kullanıcı skill'leri ve claude.ai senkron skill'leri olan
+    /// "skills\synced\&lt;id&gt;\&lt;ad&gt;\SKILL.md"). "skills\.trash" içeriği yoksayılır. Bir dizinde
+    /// SKILL.md bulununca altına inilmez.</summary>
+    private static void ScanSkillsDirRecursive(string dir, string skillsRoot, int depth, List<SkillInfo> result)
+    {
+        const int maxDepth = 3;
+        foreach (var child in TryGetDirectories(dir))
+        {
+            var childDepth = depth + 1;
+            if (childDepth == 1 && string.Equals(Path.GetFileName(child), ".trash", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var parsed = TryParseSkillMd(Path.Combine(child, "SKILL.md"));
+            if (parsed is { } p)
+            {
+                var source = IsUnderSynced(skillsRoot, child) ? ClaudeAiSource : UserSource;
+                result.Add(new SkillInfo(Ai, p.Name, p.Name, p.Description, source));
+                continue;
+            }
+
+            if (childDepth < maxDepth)
+                ScanSkillsDirRecursive(child, skillsRoot, childDepth, result);
+        }
+    }
+
+    private static bool IsUnderSynced(string skillsRoot, string dir)
+    {
+        var relative = Path.GetRelativePath(skillsRoot, dir);
+        var firstSegment = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+        return string.Equals(firstSegment, "synced", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>claudeDir\projects altındaki tüm *.jsonl transkriptlerini tarayarak skill kullanım

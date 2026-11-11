@@ -187,6 +187,70 @@
                 </Trigger>
             </DataTemplate.Triggers>
         </DataTemplate>
+
+        <DataTemplate x:Key="SkillRowTemplate" DataType="{x:Type local:SkillItemVm}">
+            <Border x:Name="SkillRow" Focusable="True" FocusVisualStyle="{x:Null}"
+                    Background="Transparent" Padding="8,6" CornerRadius="4">
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Opacity" Value="1"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsUnused}" Value="True">
+                                    <Setter Property="Opacity" Value="0.6"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            <Border Background="{DynamicResource TagBg}" CornerRadius="8" Padding="6,0" Margin="6,0,0,0"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{Binding SourceLabel}" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                            </Border>
+                        </StackPanel>
+                        <Border MaxHeight="34" ClipToBounds="True" Margin="0,2,0,0" ToolTip="{Binding Description}">
+                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Muted}"/>
+                        </Border>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Right" Margin="8,0,0,0">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <TextBlock Text="{Binding UsageLabel}" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                            <Button x:Name="SkillDeleteButton" Content="🗑" ToolTip="Sil" Margin="6,0,0,0"
+                                    Click="SkillDeleteButton_Click">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding CanDelete}" Value="True"/>
+                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=Border}, Path=IsMouseOver}" Value="True"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </MultiDataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Text="{Binding LastUsedLabel}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                   HorizontalAlignment="Right"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="SkillRow" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="SkillRow" Property="Background" Value="{DynamicResource Surface}"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -208,6 +272,8 @@
             <Button x:Name="NotesTabButton" Content="📝 Notlar" Click="NotesTab_Click"
                     Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,0"/>
             <Button x:Name="MemoryTabButton" Content="🧠 Hafıza" Click="MemoryTab_Click"
+                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,0"/>
+            <Button x:Name="SkillsTabButton" Content="🧩 Yetenekler" Click="SkillsTab_Click"
                     Style="{StaticResource FlatButton}" Padding="10,4"/>
         </StackPanel>
 
@@ -323,6 +389,90 @@
                     </DockPanel>
                 </StackPanel>
             </Border>
+        </StackPanel>
+
+        <StackPanel x:Name="SkillsHeaderPanel" Grid.Row="2" Margin="12,0,12,8" Visibility="Collapsed">
+            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                    BorderThickness="1" CornerRadius="6" Margin="0,0,0,6">
+                <Grid>
+                    <TextBox x:Name="SkillSearchBox" Background="Transparent" BorderThickness="0" Padding="8,7"
+                             Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
+                             TextChanged="SkillSearchBox_TextChanged"/>
+                    <TextBlock Text="Yeteneklerde ara..." Foreground="{DynamicResource Muted}"
+                               Margin="11,7" IsHitTestVisible="False">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=SkillSearchBox}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
+            </Border>
+            <DockPanel LastChildFill="False" Margin="0,0,0,4">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Button x:Name="SkillSortUsageButton" Content="Kullanıma göre" Click="SkillSortUsage_Click"
+                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,0"/>
+                    <Button x:Name="SkillSortNameButton" Content="Ada göre" Click="SkillSortName_Click"
+                            Style="{StaticResource FlatButton}" Padding="8,2"/>
+                </StackPanel>
+                <Button DockPanel.Dock="Right" Content="↻ Yenile" ToolTip="Yeniden tara" Click="SkillRefresh_Click"
+                        Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" Padding="8,2"/>
+            </DockPanel>
+            <Expander Header="+ Elle ekle" Foreground="{DynamicResource Muted}" IsExpanded="False">
+                <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                        BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,0">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,4" LastChildFill="True">
+                            <TextBlock DockPanel.Dock="Left" Text="AI:" Foreground="{DynamicResource Muted}"
+                                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="SkillAiBox" IsEditable="True" Width="120" HorizontalAlignment="Left"
+                                      ItemsSource="{Binding SkillAiOptions}"/>
+                        </DockPanel>
+                        <Grid Margin="0,0,0,4">
+                            <TextBox x:Name="SkillNameBox" Background="Transparent" BorderThickness="0" Padding="2"
+                                     Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"/>
+                            <TextBlock Text="Yetenek adı" Foreground="{DynamicResource Muted}" Margin="4,2" IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SkillNameBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                        <Grid Margin="0,0,0,6">
+                            <TextBox x:Name="SkillDescriptionBox" Background="Transparent" BorderThickness="0" Padding="2"
+                                     Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
+                                     TextWrapping="Wrap" AcceptsReturn="True" MinLines="2" MaxLines="4"/>
+                            <TextBlock Text="Açıklama" Foreground="{DynamicResource Muted}" Margin="4,2"
+                                       IsHitTestVisible="False" VerticalAlignment="Top">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SkillDescriptionBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                        <Button Content="Ekle" Click="SkillAdd_Click" HorizontalAlignment="Right"
+                                Style="{StaticResource FlatButton}" Background="{DynamicResource Accent}"
+                                Foreground="{DynamicResource OnAccent}" Padding="12,4"/>
+                    </StackPanel>
+                </Border>
+            </Expander>
         </StackPanel>
 
         <ItemsControl x:Name="AuthorFilterRow" Grid.Row="3" ItemsSource="{Binding AuthorFilters}" Margin="12,0,12,4">
@@ -448,6 +598,28 @@
                                     <TextBlock Text="{Binding Header}" FontSize="11" FontWeight="SemiBold"
                                                Foreground="{DynamicResource Muted}" Margin="8,0,0,4"/>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource MemoryRowTemplate}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <StackPanel x:Name="SkillsPanel" Visibility="Collapsed">
+                    <TextBlock x:Name="SkillsLoadingText" Text="Yetenekler taranıyor…" Foreground="{DynamicResource Muted}"
+                               HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
+                    <TextBlock x:Name="SkillsEmptyText" Text="Henüz yetenek bulunamadı." Foreground="{DynamicResource Muted}"
+                               HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
+                    <ItemsControl ItemsSource="{Binding SkillGroups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type local:SkillGroupVm}">
+                                <StackPanel Margin="0,8,0,0">
+                                    <StackPanel Orientation="Horizontal" Margin="8,0,0,4">
+                                        <TextBlock Text="{Binding Ai}" FontSize="12" FontWeight="SemiBold"
+                                                   Foreground="{Binding AiColor}"/>
+                                        <TextBlock Text=" · " FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                        <TextBlock Text="{Binding SummaryLabel}" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                                    </StackPanel>
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SkillRowTemplate}"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

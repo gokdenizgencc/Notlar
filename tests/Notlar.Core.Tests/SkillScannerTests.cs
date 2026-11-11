@@ -24,6 +24,13 @@ public sealed class FakeClaudeDir : IDisposable
         File.WriteAllText(Path.Combine(dir, "SKILL.md"), frontmatter);
     }
 
+    public void AddSyncedSkill(string syncId, string name, string frontmatter)
+    {
+        var dir = Path.Combine(UserSkillsDir, "synced", syncId, name);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "SKILL.md"), frontmatter);
+    }
+
     public string AddTranscript(string project, string fileName, string content)
     {
         var dir = Path.Combine(ProjectsDir, project);
@@ -141,6 +148,65 @@ public class ClaudeSkillScannerTests
     public void ScanInstalled_missing_claude_dir_returns_empty()
     {
         var skills = ClaudeSkillScanner.ScanInstalled(Path.Combine(Path.GetTempPath(), "does-not-exist-" + Guid.NewGuid()));
+        Assert.Empty(skills);
+    }
+
+    [Fact]
+    public void ScanInstalled_finds_synced_skill_nested_three_levels_deep()
+    {
+        using var dir = new FakeClaudeDir();
+        dir.AddSyncedSkill("abc123", "brainstorming", SimpleFrontmatter);
+
+        var skills = ClaudeSkillScanner.ScanInstalled(dir.Dir);
+
+        var skill = Assert.Single(skills);
+        Assert.Equal("Claude", skill.Ai);
+        Assert.Equal("brainstorming", skill.Id);
+        Assert.Equal("brainstorming", skill.Name);
+        Assert.Equal("claude.ai", skill.Source);
+    }
+
+    [Fact]
+    public void ScanInstalled_finds_both_direct_user_skill_and_synced_skill()
+    {
+        using var dir = new FakeClaudeDir();
+        dir.AddUserSkill("brainstorming", SimpleFrontmatter);
+        dir.AddSyncedSkill("abc123", "writing", """
+            ---
+            name: writing
+            description: Write things.
+            ---
+            """);
+
+        var skills = ClaudeSkillScanner.ScanInstalled(dir.Dir);
+
+        Assert.Equal(2, skills.Count);
+        Assert.Contains(skills, s => s.Name == "brainstorming" && s.Source == "kullanıcı");
+        Assert.Contains(skills, s => s.Name == "writing" && s.Source == "claude.ai");
+    }
+
+    [Fact]
+    public void ScanInstalled_ignores_trash_directory()
+    {
+        using var dir = new FakeClaudeDir();
+        dir.AddUserSkill(".trash/deleted-skill".Replace('/', Path.DirectorySeparatorChar), SimpleFrontmatter);
+
+        var skills = ClaudeSkillScanner.ScanInstalled(dir.Dir);
+
+        Assert.Empty(skills);
+    }
+
+    [Fact]
+    public void ScanInstalled_does_not_recurse_past_three_levels()
+    {
+        using var dir = new FakeClaudeDir();
+        // 4 levels deep under skills\ -- beyond the supported depth, should be ignored.
+        var dirPath = Path.Combine(dir.UserSkillsDir, "a", "b", "c", "toodeep");
+        Directory.CreateDirectory(dirPath);
+        File.WriteAllText(Path.Combine(dirPath, "SKILL.md"), SimpleFrontmatter);
+
+        var skills = ClaudeSkillScanner.ScanInstalled(dir.Dir);
+
         Assert.Empty(skills);
     }
 

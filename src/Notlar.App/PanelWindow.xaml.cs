@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -21,17 +22,19 @@ public partial class PanelWindow : Window
     private static readonly StringComparer TrComparer = StringComparer.Create(CultureInfo.GetCultureInfo("tr-TR"), ignoreCase: true);
     private const int RecentDays = 30;
 
-    private enum UndoKind { Note, Task, Memory }
+    private enum UndoKind { Note, Task, Memory, Skill }
 
-    /// <summary>Panelin görünür modu: normal not günlüğü, görünür hafıza kartları sekmesi ya da üçlü
-    /// tıklamayla açılan gizli kişisel liste.</summary>
-    private enum Mode { Notes, Memory, Personal }
+    /// <summary>Panelin görünür modu: normal not günlüğü, görünür hafıza kartları sekmesi, görünür
+    /// yetenek kataloğu sekmesi ya da üçlü tıklamayla açılan gizli kişisel liste.</summary>
+    private enum Mode { Notes, Memory, Skills, Personal }
 
     private static readonly CultureInfo TrTr = CultureInfo.GetCultureInfo("tr-TR");
 
     private readonly NoteStore _store;
     private readonly TaskStore _taskStore;
     private readonly MemoryStore _memoryStore;
+    private readonly SkillRegistry _skillRegistry;
+    private readonly SkillUsageCache _skillUsageCache = new();
     private readonly DispatcherTimer _undoTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly DispatcherTimer _errorTimer = new() { Interval = TimeSpan.FromSeconds(4) };
     private AppSettings _settings;
@@ -47,6 +50,14 @@ public partial class PanelWindow : Window
     private DateTime _lastHiddenAt = DateTime.MinValue;
     private readonly List<DayWindow> _dayWindows = [];
 
+    private IReadOnlyList<SkillInfo>? _skillInstalledCache;
+    private IReadOnlyDictionary<string, SkillUsage>? _skillUsageDataCache;
+    private IReadOnlyList<RegistrySkill>? _skillRegistryCache;
+    private bool _skillLoading;
+    private bool _skillLoadRequested;
+    private string _skillSearch = "";
+    private bool _skillSortByUsage = true;
+
     public ObservableCollection<DayListItem> Days { get; } = [];
     public ObservableCollection<NoteItem> DayNotes { get; } = [];
     public ObservableCollection<TagChip> Tags { get; } = [];
@@ -54,12 +65,15 @@ public partial class PanelWindow : Window
     public ObservableCollection<TaskItemVm> Tasks { get; } = [];
     public ObservableCollection<MemoryGroupVm> MemoryGroups { get; } = [];
     public ObservableCollection<string> MemoryCategories { get; } = [];
+    public ObservableCollection<SkillGroupVm> SkillGroups { get; } = [];
+    public ObservableCollection<string> SkillAiOptions { get; } = [];
 
-    public PanelWindow(NoteStore store, TaskStore taskStore, MemoryStore memoryStore)
+    public PanelWindow(NoteStore store, TaskStore taskStore, MemoryStore memoryStore, SkillRegistry skillRegistry)
     {
         _store = store;
         _taskStore = taskStore;
         _memoryStore = memoryStore;
+        _skillRegistry = skillRegistry;
         _settings = AppSettings.Load();
         InitializeComponent();
         DataContext = this;
@@ -99,6 +113,7 @@ public partial class PanelWindow : Window
         {
             case Mode.Personal: TaskInputBox.Focus(); break;
             case Mode.Memory: MemorySearchBox.Focus(); break;
+            case Mode.Skills: SkillSearchBox.Focus(); break;
             default: InputBox.Focus(); break;
         }
     }
@@ -156,20 +171,25 @@ public partial class PanelWindow : Window
             {
                 Mode.Personal => "🔒 Kişisel",
                 Mode.Memory => "🧠 Hafıza",
+                Mode.Skills => "🧩 Yetenekler",
                 _ => "📝 Notlar",
             };
             TabsRow.Visibility = _mode == Mode.Personal ? Visibility.Collapsed : Visibility.Visible;
             SetTabStyle(NotesTabButton, _mode == Mode.Notes);
             SetTabStyle(MemoryTabButton, _mode == Mode.Memory);
+            SetTabStyle(SkillsTabButton, _mode == Mode.Skills);
 
             NotesInputBorder.Visibility = _mode == Mode.Notes ? Visibility.Visible : Visibility.Collapsed;
             TaskInputBorder.Visibility = _mode == Mode.Personal ? Visibility.Visible : Visibility.Collapsed;
             MemoryInputPanel.Visibility = _mode == Mode.Memory ? Visibility.Visible : Visibility.Collapsed;
+            SkillsHeaderPanel.Visibility = _mode == Mode.Skills ? Visibility.Visible : Visibility.Collapsed;
             TasksPanel.Visibility = _mode == Mode.Personal ? Visibility.Visible : Visibility.Collapsed;
             MemoryPanel.Visibility = _mode == Mode.Memory ? Visibility.Visible : Visibility.Collapsed;
+            SkillsPanel.Visibility = _mode == Mode.Skills ? Visibility.Visible : Visibility.Collapsed;
 
             ReloadTasks();
             ReloadMemory();
+            if (_mode == Mode.Skills) EnsureSkillsLoaded(forceRescan: false);
 
             if (_mode != Mode.Notes)
             {
@@ -332,6 +352,14 @@ public partial class PanelWindow : Window
         if (_mode == Mode.Personal) return;
         CancelAllEdits();
         _mode = Mode.Memory;
+        Reload();
+    }
+
+    private void SkillsTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (_mode == Mode.Personal) return;
+        CancelAllEdits();
+        _mode = Mode.Skills;
         Reload();
     }
 
@@ -654,6 +682,7 @@ public partial class PanelWindow : Window
             {
                 case UndoKind.Task: Try(() => { _taskStore.Restore(id); Reload(); }); break;
                 case UndoKind.Memory: Try(() => { _memoryStore.Restore(id); Reload(); }); break;
+                case UndoKind.Skill: Try(() => { _skillRegistry.Restore(id); RefreshSkillRegistryCache(); }); break;
                 default: Try(() => { _store.Restore(id); Reload(); }); break;
             }
         }
@@ -764,6 +793,192 @@ public partial class PanelWindow : Window
         _undoTimer.Stop();
         _undoId = null;
         UndoBar.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Yetenek kataloğunu (gerekirse) UI dışı bir iş parçacığında kurar: tarama + kullanım
+    /// sayımı + kayıt listesi oluşturma pahalı olabileceğinden (ilk kullanım taraması ~5 sn, sonraki
+    /// taramalar dosya önbelleği sayesinde ~0.2 sn) yalnızca ilk açılışta ya da "↻ Yenile" ile
+    /// yeniden taranır; aradaki sekme değişimlerinde bellekteki sonuç kullanılır.</summary>
+    private void EnsureSkillsLoaded(bool forceRescan)
+    {
+        if (!forceRescan && (_skillInstalledCache is not null || _skillLoadRequested))
+        {
+            RenderSkills();
+            return;
+        }
+        _skillLoadRequested = true;
+        _skillLoading = true;
+        RenderSkills();
+
+        var registry = _skillRegistry;
+        var usageCache = _skillUsageCache;
+        Task.Run(() =>
+        {
+            var installed = ClaudeSkillScanner.ScanInstalled();
+            var usage = usageCache.GetUsage();
+            var regList = registry.List();
+            return (installed, usage, regList);
+        }).ContinueWith(t => Dispatcher.InvokeAsync(() =>
+        {
+            _skillLoading = false;
+            if (t.IsFaulted)
+            {
+                AppLog.Write(t.Exception);
+                RenderSkills();
+                return;
+            }
+            var (installed, usage, regList) = t.Result;
+            _skillInstalledCache = installed;
+            _skillUsageDataCache = usage;
+            _skillRegistryCache = regList;
+            RenderSkills();
+        }), TaskScheduler.Default);
+    }
+
+    /// <summary>Yalnızca kayıt tablosunu (ucuz bir SQLite sorgusu) yeniden okuyup görünümü tazeler;
+    /// kurulu skill taraması ve kullanım sayımı yeniden yapılmaz.</summary>
+    private void RefreshSkillRegistryCache()
+    {
+        _skillRegistryCache = _skillRegistry.List();
+        RenderSkills();
+    }
+
+    private void RenderSkills()
+    {
+        SkillsLoadingText.Visibility = _skillLoading ? Visibility.Visible : Visibility.Collapsed;
+        if (_skillLoading)
+        {
+            SkillGroups.Clear();
+            SkillsEmptyText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var installed = _skillInstalledCache ?? [];
+        var usage = _skillUsageDataCache ?? new Dictionary<string, SkillUsage>();
+        var registry = _skillRegistryCache ?? [];
+        var catalog = SkillCatalog.Build(installed, usage, registry);
+
+        var query = _skillSearch.Trim();
+        var filtered = query.Length == 0
+            ? catalog
+            : catalog.Where(e => TrContains(e.Name, query) || TrContains(e.Description, query)).ToList();
+
+        SkillGroups.Clear();
+        foreach (var group in filtered.GroupBy(e => e.Ai).OrderBy(g => g.Key, TrComparer))
+        {
+            var orderedItems = _skillSortByUsage
+                ? group.OrderByDescending(e => e.UsageCount).ThenBy(e => e.Name, TrComparer)
+                : group.OrderBy(e => e.Name, TrComparer);
+            var items = orderedItems.Select(e => ToSkillItemVm(e, registry)).ToList();
+            var totalUsage = group.Sum(e => e.UsageCount);
+            var aiColor = AuthorColors.For(group.Key, _settings) ?? (Brush)FindResource("Fg");
+            SkillGroups.Add(new SkillGroupVm(group.Key, aiColor, $"{group.Count()} yetenek · {totalUsage} kullanım", items));
+        }
+        SkillsEmptyText.Visibility = SkillGroups.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        SetSkillSortStyle();
+        RebuildSkillAiOptions(registry);
+    }
+
+    private static SkillItemVm ToSkillItemVm(SkillEntry e, IReadOnlyList<RegistrySkill> registry)
+    {
+        var canDelete = e.Source == SkillCatalog.RegisteredSource;
+        var registryId = canDelete
+            ? registry.FirstOrDefault(r => string.Equals(r.Ai, e.Ai, StringComparison.Ordinal)
+                                            && string.Equals(r.Name, e.Name, StringComparison.Ordinal))?.Id
+            : null;
+        var usageLabel = e.UsageCount > 0 ? $"{e.UsageCount} kez" : "kullanılmadı";
+        var lastUsedLabel = e.LastUsed is { } lastUsed ? $"son: {lastUsed.ToString("d MMMM", TrTr)}" : "";
+        return new SkillItemVm(e.Id, e.Ai, e.Name, e.Description, e.Source, usageLabel, lastUsedLabel,
+            e.UsageCount == 0, canDelete, registryId);
+    }
+
+    /// <summary>tr-TR, büyük/küçük harfe duyarsız "içerir" araması.</summary>
+    private static bool TrContains(string? haystack, string needle) =>
+        TrTr.CompareInfo.IndexOf(haystack ?? "", needle, CompareOptions.IgnoreCase) >= 0;
+
+    private void RebuildSkillAiOptions(IReadOnlyList<RegistrySkill> registry)
+    {
+        var names = new List<string>();
+        if (_settings.AuthorColors is not null)
+            names.AddRange(_settings.AuthorColors.Keys);
+        foreach (var n in new[] { "ChatGPT", "Gemini" })
+            if (!names.Contains(n, StringComparer.OrdinalIgnoreCase)) names.Add(n);
+        foreach (var r in registry)
+            if (!names.Contains(r.Ai, StringComparer.OrdinalIgnoreCase)) names.Add(r.Ai);
+
+        var ordered = names
+            .Where(n => !string.Equals(n, "Ben", StringComparison.OrdinalIgnoreCase))
+            .Order(TrComparer)
+            .ToList();
+
+        if (SkillAiOptions.SequenceEqual(ordered)) return;
+        SkillAiOptions.Clear();
+        foreach (var n in ordered) SkillAiOptions.Add(n);
+    }
+
+    private void SetSkillSortStyle()
+    {
+        SetTabStyle(SkillSortUsageButton, _skillSortByUsage);
+        SetTabStyle(SkillSortNameButton, !_skillSortByUsage);
+    }
+
+    private void SkillSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        _skillSearch = SkillSearchBox.Text;
+        if (_mode == Mode.Skills) RenderSkills();
+    }
+
+    private void SkillSortUsage_Click(object sender, RoutedEventArgs e)
+    {
+        _skillSortByUsage = true;
+        RenderSkills();
+    }
+
+    private void SkillSortName_Click(object sender, RoutedEventArgs e)
+    {
+        _skillSortByUsage = false;
+        RenderSkills();
+    }
+
+    private void SkillRefresh_Click(object sender, RoutedEventArgs e) => EnsureSkillsLoaded(forceRescan: true);
+
+    private void SkillAdd_Click(object sender, RoutedEventArgs e)
+    {
+        var ai = SkillAiBox.Text.Trim();
+        var name = SkillNameBox.Text.Trim();
+        if (ai.Length == 0 || name.Length == 0) return;
+        var description = SkillDescriptionBox.Text.Trim();
+        Try(() =>
+        {
+            _skillRegistry.Upsert(ai, name, description);
+            SkillAiBox.Text = "";
+            SkillNameBox.Clear();
+            SkillDescriptionBox.Clear();
+            RefreshSkillRegistryCache();
+        });
+    }
+
+    private void SkillDeleteButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: SkillItemVm item })
+            DeleteSkill(item);
+    }
+
+    private void DeleteSkill(SkillItemVm item)
+    {
+        if (item.RegistryId is not { } id) return;
+        Try(() =>
+        {
+            _skillRegistry.Delete(id);
+            _undoId = id;
+            _undoKind = UndoKind.Skill;
+            UndoText.Text = "Yetenek silindi.";
+            UndoBar.Visibility = Visibility.Visible;
+            _undoTimer.Stop();
+            _undoTimer.Start();
+            RefreshSkillRegistryCache();
+        });
     }
 
     private void Try(Action action)
