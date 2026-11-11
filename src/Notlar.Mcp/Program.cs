@@ -45,6 +45,10 @@ builder.Services.AddSingleton(sp => new SkillTranslations(
     AppPaths.DbPath,
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<IChangeSignal>()));
+builder.Services.AddSingleton(sp => new PlanStore(
+    AppPaths.DbPath,
+    sp.GetRequiredService<TimeProvider>(),
+    sp.GetRequiredService<IChangeSignal>()));
 
 builder.Services
     .AddMcpServer()
