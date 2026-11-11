@@ -39,24 +39,43 @@
         <TextBlock Grid.Row="1" x:Name="QuestionText" TextWrapping="Wrap" Margin="0,0,0,12"/>
 
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" MaxHeight="340">
-            <ItemsControl x:Name="StepsList">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Margin="0,0,0,6">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{Binding Number}" Foreground="{DynamicResource Muted}" Margin="0,0,8,0"/>
-                            <StackPanel Grid.Column="1">
-                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
-                                <TextBlock Text="{Binding AuthorLabel}" FontSize="11" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Accent}" Visibility="{Binding AuthorLabelVisibility}"/>
-                            </StackPanel>
-                        </Grid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <StackPanel>
+                <StackPanel x:Name="ExtraFoldersPanel" Visibility="Collapsed" Margin="0,0,0,10">
+                    <TextBlock Text="Ek klasörler (erişim verilecek):" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,4"/>
+                    <ItemsControl x:Name="ExtraFoldersList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="12"
+                                           Foreground="{DynamicResource Muted}" Margin="0,0,0,2"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <ItemsControl x:Name="StepsList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Number}" Foreground="{DynamicResource Muted}" Margin="0,0,8,0"/>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding AuthorLabel}" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Accent}" Visibility="{Binding AuthorLabelVisibility}"
+                                                   Margin="0,0,6,0"/>
+                                        <TextBlock Text="{Binding ProjectLabel}" FontSize="11"
+                                                   Foreground="{DynamicResource Muted}" Visibility="{Binding ProjectLabelVisibility}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
         </ScrollViewer>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">

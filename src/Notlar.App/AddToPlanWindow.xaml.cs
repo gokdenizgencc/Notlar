@@ -17,6 +17,7 @@ namespace Notlar.App;
 public partial class AddToPlanWindow : Window
 {
     private readonly PlanStore _planStore;
+    private readonly ProjectStore _projectStore;
     private readonly IReadOnlyList<string> _noteTexts;
     private List<Plan> _allPlans = [];
     private Plan? _selectedPlan;
@@ -30,9 +31,10 @@ public partial class AddToPlanWindow : Window
 
     public sealed record StepPickItem(int Order, string Label);
 
-    public AddToPlanWindow(PlanStore planStore, IReadOnlyList<string> noteTexts)
+    public AddToPlanWindow(PlanStore planStore, ProjectStore projectStore, IReadOnlyList<string> noteTexts)
     {
         _planStore = planStore;
+        _projectStore = projectStore;
         _noteTexts = noteTexts;
         InitializeComponent();
         LoadPlans();
@@ -124,6 +126,16 @@ public partial class AddToPlanWindow : Window
 
         EndRadio.IsChecked = true;
         AddButton.IsEnabled = true;
+
+        var planProjectIds = _planStore.GetPlanProjects(plan.Id);
+        var liveProjects = _projectStore.List();
+        var options = new List<ProjectComboItem> { new(null, "—") };
+        options.AddRange(planProjectIds
+            .Select(id => liveProjects.FirstOrDefault(p => p.Id == id))
+            .Where(p => p is not null)
+            .Select(p => new ProjectComboItem(p!.Id, p.Name)));
+        StepProjectBox.ItemsSource = options;
+        StepProjectBox.SelectedIndex = 0;
     }
 
     private static string FlattenStepText(string text) =>
@@ -149,10 +161,12 @@ public partial class AddToPlanWindow : Window
                     ? step.Order + 1
                     : null; // "En sona ekle" (varsayılan)
 
+            var projectId = (StepProjectBox.SelectedItem as ProjectComboItem)?.Id;
+
             for (var i = 0; i < _noteTexts.Count; i++)
             {
                 var position = basePosition is { } p ? p + i : (int?)null;
-                _planStore.AddStep(plan.Id, _noteTexts[i], position);
+                _planStore.AddStep(plan.Id, _noteTexts[i], position, projectId: projectId);
             }
 
             ResultPlanId = plan.Id;

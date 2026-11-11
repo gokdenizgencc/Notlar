@@ -68,6 +68,7 @@ public partial class PanelWindow : Window
     private bool _planProjectEditing;
     private bool _plansShowProjects;
     private string? _planNewFolderOverride;
+    private readonly List<long> _planNewProjectIds = [];
 
     private IReadOnlyList<SkillInfo>? _skillInstalledCache;
     private IReadOnlyDictionary<string, SkillUsage>? _skillUsageDataCache;
@@ -96,6 +97,9 @@ public partial class PanelWindow : Window
     public ObservableCollection<PlanStepItemVm> PlanDetailSteps { get; } = [];
     public ObservableCollection<ProjectItemVm> Projects { get; } = [];
     public ObservableCollection<ProjectComboItem> PlanProjectOptions { get; } = [];
+    public ObservableCollection<PlanProjectChipVm> PlanNewProjectChips { get; } = [];
+    public ObservableCollection<PlanProjectChipVm> PlanDetailProjectChips { get; } = [];
+    public ObservableCollection<PlanStepProjectOption> PlanStepProjectOptions { get; } = [];
 
     public PanelWindow(NoteStore store, TaskStore taskStore, MemoryStore memoryStore, SkillRegistry skillRegistry,
         SkillTranslations skillTranslations, PlanStore planStore, ProjectStore projectStore, AppFlags? appFlags = null)
@@ -1082,7 +1086,7 @@ public partial class PanelWindow : Window
 
     private void OpenAddToPlanDialog(IReadOnlyList<string> texts)
     {
-        var dialog = new AddToPlanWindow(_planStore, texts) { Owner = this };
+        var dialog = new AddToPlanWindow(_planStore, _projectStore, texts) { Owner = this };
         if (dialog.ShowDialog() != true) return;
 
         if (_selectMode) ResetSelectMode();
@@ -1894,6 +1898,53 @@ public partial class PanelWindow : Window
             PlanProjectOptions.Add(new ProjectComboItem(project.Id, project.Name));
     }
 
+    /// <summary>"+ Yeni plan" formundaki proje çiplerini (<see cref="_planNewProjectIds"/>'den, ilki ana
+    /// proje) ve adım düzenleyicisindeki proje seçeneklerini yeniden kurar. Hiç proje seçili değilse tek
+    /// seferlik klasör seçimi tekrar gösterilir (ikisi birbirini dışlar).</summary>
+    private void RebuildPlanNewProjectChips()
+    {
+        var projects = _projectStore.List();
+        PlanNewProjectChips.Clear();
+        var resolved = new List<(long Id, string Name)>();
+        for (var i = 0; i < _planNewProjectIds.Count; i++)
+        {
+            var id = _planNewProjectIds[i];
+            var project = projects.FirstOrDefault(p => p.Id == id);
+            if (project is null) continue;
+            PlanNewProjectChips.Add(new PlanProjectChipVm(project.Id, project.Name, IsMain: i == 0));
+            resolved.Add((project.Id, project.Name));
+        }
+
+        PlanNewFolderRow.Visibility = resolved.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (resolved.Count > 0) SetPlanNewFolderOverride(null);
+
+        PlanStepsEditorControl.SetAvailableProjects(resolved);
+    }
+
+    /// <summary>"+ Proje ekle ▾" tıklamasında, henüz seçilmemiş canlı projeleri listeleyen bir ContextMenu
+    /// açar; seçilen proje <paramref name="onPick"/> ile eklenir.</summary>
+    private void ShowAddProjectMenu(FrameworkElement anchor, IReadOnlyList<long> alreadySelected, Action<Project> onPick)
+    {
+        var candidates = _projectStore.List().Where(p => !alreadySelected.Contains(p.Id)).ToList();
+        var menu = new ContextMenu();
+        if (candidates.Count == 0)
+        {
+            menu.Items.Add(new MenuItem { Header = "(eklenecek başka proje yok)", IsEnabled = false });
+        }
+        else
+        {
+            foreach (var project in candidates)
+            {
+                var item = new MenuItem { Header = project.Name };
+                item.Click += (_, _) => onPick(project);
+                menu.Items.Add(item);
+            }
+        }
+        anchor.ContextMenu = menu;
+        menu.PlacementTarget = anchor;
+        menu.IsOpen = true;
+    }
+
     private void RenderProjects(IReadOnlyList<Project> projects)
     {
         Projects.Clear();
@@ -2032,10 +2083,11 @@ public partial class PanelWindow : Window
         if (!_planTitleEditing)
             PlanDetailTitleText.Text = plan.Title;
 
+        var allProjects = _projectStore.List();
+
         if (!_planProjectEditing)
         {
-            var projects = _projectStore.List();
-            var (full, _) = DescribePlanLocation(plan, projects);
+            var (full, _) = DescribePlanLocation(plan, allProjects);
             PlanDetailPathText.Text = full;
             PlanDetailPathText.ToolTip = full;
         }
@@ -2048,9 +2100,30 @@ public partial class PanelWindow : Window
         PlanPathEditButton.Visibility = _planProjectEditing ? Visibility.Collapsed : Visibility.Visible;
         PlanPathEditRow.Visibility = _planProjectEditing ? Visibility.Visible : Visibility.Collapsed;
 
+        // Planın bağlı olduğu projeler (çoklu proje desteği): ilki ana proje.
+        var planProjectIds = _planStore.GetPlanProjects(plan.Id);
+        PlanDetailProjectChips.Clear();
+        var planProjects = new List<(long Id, string Name)>();
+        for (var i = 0; i < planProjectIds.Count; i++)
+        {
+            var project = allProjects.FirstOrDefault(p => p.Id == planProjectIds[i]);
+            if (project is null) continue;
+            PlanDetailProjectChips.Add(new PlanProjectChipVm(project.Id, project.Name, IsMain: i == 0));
+            planProjects.Add((project.Id, project.Name));
+        }
+
+        PlanStepProjectOptions.Clear();
+        PlanStepProjectOptions.Add(new PlanStepProjectOption(null, "Proje: —"));
+        foreach (var (projId, projName) in planProjects)
+            PlanStepProjectOptions.Add(new PlanStepProjectOption(projId, projName));
+
+        var projectNameById = allProjects.ToDictionary(p => p.Id, p => p.Name);
         PlanDetailSteps.Clear();
         foreach (var step in steps)
-            PlanDetailSteps.Add(new PlanStepItemVm(step));
+        {
+            var name = step.ProjectId is { } pid && projectNameById.TryGetValue(pid, out var n) ? n : null;
+            PlanDetailSteps.Add(new PlanStepItemVm(step, name));
+        }
     }
 
     private static string PlanStatusLabel(PlanStatus status) => status switch
@@ -2100,7 +2173,8 @@ public partial class PanelWindow : Window
 
     private void PlanAddExpander_Expanded(object sender, RoutedEventArgs e)
     {
-        PlanProjectBox.SelectedIndex = PlanProjectOptions.Count > 0 ? 0 : -1;
+        _planNewProjectIds.Clear();
+        RebuildPlanNewProjectChips();
         SetPlanNewFolderOverride(null);
         PlanStepsEditorControl.Clear();
         Dispatcher.InvokeAsync(() => PlanTitleBox.Focus(), DispatcherPriority.Input);
@@ -2115,13 +2189,32 @@ public partial class PanelWindow : Window
         PlanNewFolderClearButton.Visibility = folder is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private void PlanProjectBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void PlanNewFolderClear_Click(object sender, RoutedEventArgs e) => SetPlanNewFolderOverride(null);
+
+    private void PlanNewProjectAdd_Click(object sender, RoutedEventArgs e)
     {
-        if ((PlanProjectBox.SelectedItem as ProjectComboItem)?.Id is not null)
-            SetPlanNewFolderOverride(null);
+        if (sender is not FrameworkElement anchor) return;
+        ShowAddProjectMenu(anchor, _planNewProjectIds, project =>
+        {
+            _planNewProjectIds.Add(project.Id);
+            RebuildPlanNewProjectChips();
+        });
     }
 
-    private void PlanNewFolderClear_Click(object sender, RoutedEventArgs e) => SetPlanNewFolderOverride(null);
+    private void PlanNewProjectRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PlanProjectChipVm chip }) return;
+        _planNewProjectIds.Remove(chip.Id);
+        RebuildPlanNewProjectChips();
+    }
+
+    private void PlanNewProjectPromote_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PlanProjectChipVm chip }) return;
+        _planNewProjectIds.Remove(chip.Id);
+        _planNewProjectIds.Insert(0, chip.Id);
+        RebuildPlanNewProjectChips();
+    }
 
     /// <summary>Panel Topmost olduğundan, WinForms klasör seçici için panelin kendi pencere tutamacını
     /// sahip (owner) olarak verir; aksi halde dialog panelin arkasında kalabilir.</summary>
@@ -2138,24 +2231,27 @@ public partial class PanelWindow : Window
         if (_planNewFolderOverride is { } current && Directory.Exists(current)) dialog.SelectedPath = current;
         if (dialog.ShowDialog(DialogOwner) != Forms.DialogResult.OK) return;
         SetPlanNewFolderOverride(dialog.SelectedPath);
-        PlanProjectBox.SelectedIndex = 0; // "(Proje yok)": tek seferlik klasör ile proje seçimi birbirini dışlar.
     }
 
     private void PlanCreate_Click(object sender, RoutedEventArgs e)
     {
         var title = PlanTitleBox.Text.Trim();
-        var steps = PlanStepsEditorControl.Steps;
+        var stepItems = PlanStepsEditorControl.StepItems;
         if (title.Length == 0) { ShowError("Plan başlığı boş olamaz."); return; }
-        if (steps.Count == 0) { ShowError("En az bir adım eklemelisiniz."); return; }
+        if (stepItems.Count == 0) { ShowError("En az bir adım eklemelisiniz."); return; }
 
-        var projectId = (PlanProjectBox.SelectedItem as ProjectComboItem)?.Id;
-        var folder = projectId is null ? _planNewFolderOverride : null;
+        var projectIds = _planNewProjectIds.Count > 0 ? (IReadOnlyList<long>)_planNewProjectIds : null;
+        var folder = projectIds is null ? _planNewFolderOverride : null;
 
         Try(() =>
         {
-            _planStore.CreatePlan(title, folder, steps, projectId);
+            var plan = _planStore.CreatePlan(title, folder, steps: [], projectIds: projectIds);
+            foreach (var item in stepItems)
+                _planStore.AddStep(plan.Id, item.Text, projectId: item.ProjectId);
+
             PlanTitleBox.Clear();
             PlanStepsEditorControl.Clear();
+            _planNewProjectIds.Clear();
             SetPlanNewFolderOverride(null);
             PlanAddExpander.IsExpanded = false;
             Reload();
@@ -2221,13 +2317,14 @@ public partial class PanelWindow : Window
             return;
         }
 
-        var effectiveFolder = PlanFolder.Resolve(plan, _projectStore);
-        var folderLabel = effectiveFolder ?? "Kullanıcı klasörü (proje bağlı değil)";
-        var confirmWindow = new RunPlanConfirmWindow(plan.Title, folderLabel, steps) { Owner = this };
+        var (mainFolder, extraFolders) = PlanFolder.ResolveAll(plan, _projectStore, _planStore);
+        var folderLabel = mainFolder ?? "Kullanıcı klasörü (proje bağlı değil)";
+        var projectNameById = _projectStore.List().ToDictionary(p => p.Id, p => p.Name);
+        var confirmWindow = new RunPlanConfirmWindow(plan.Title, folderLabel, extraFolders, steps, projectNameById) { Owner = this };
         confirmWindow.ShowDialog();
         if (!confirmWindow.Confirmed) return;
 
-        Try(() => PlanLauncher.Launch(plan, effectiveFolder));
+        Try(() => PlanLauncher.Launch(plan, mainFolder, extraFolders));
     }
 
     private void PlanTitleEditButton_Click(object sender, RoutedEventArgs e)
@@ -2350,6 +2447,47 @@ public partial class PanelWindow : Window
         });
     }
 
+    /// <summary>Plan detayındaki proje çipleri satırına yeni bir proje ekler (bkz. <see cref="PlanStore.SetPlanProjects"/>).
+    /// Hiç proje seçilmemişken ilk eklenen ana proje olur.</summary>
+    private void PlanDetailProjectAdd_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPlan is not { } plan || sender is not FrameworkElement anchor) return;
+        var current = _planStore.GetPlanProjects(plan.Id);
+        ShowAddProjectMenu(anchor, current, project =>
+        {
+            Try(() =>
+            {
+                _planStore.SetPlanProjects(plan.Id, [.. current, project.Id]);
+                Reload();
+            });
+        });
+    }
+
+    private void PlanDetailProjectRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPlan is not { } plan) return;
+        if (sender is not FrameworkElement { DataContext: PlanProjectChipVm chip }) return;
+        Try(() =>
+        {
+            var current = _planStore.GetPlanProjects(plan.Id).Where(id => id != chip.Id).ToList();
+            _planStore.SetPlanProjects(plan.Id, current);
+            Reload();
+        });
+    }
+
+    private void PlanDetailProjectPromote_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPlan is not { } plan) return;
+        if (sender is not FrameworkElement { DataContext: PlanProjectChipVm chip }) return;
+        Try(() =>
+        {
+            var current = _planStore.GetPlanProjects(plan.Id).Where(id => id != chip.Id).ToList();
+            current.Insert(0, chip.Id);
+            _planStore.SetPlanProjects(plan.Id, current);
+            Reload();
+        });
+    }
+
     private void PlanStepUp_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: PlanStepItemVm item })
@@ -2366,6 +2504,7 @@ public partial class PanelWindow : Window
     {
         if (sender is not FrameworkElement { DataContext: PlanStepItemVm item }) return;
         item.EditText = item.Text;
+        item.EditProjectId = item.Step.ProjectId;
         item.IsEditing = true;
     }
 
@@ -2375,17 +2514,35 @@ public partial class PanelWindow : Window
         if (e.Key == Key.Enter)
         {
             e.Handled = true;
-            var text = item.EditText.Trim();
-            item.IsEditing = false;
-            if (text.Length > 0 && text != item.Text)
-                Try(() => _planStore.UpdateStep(item.Id, text));
-            Reload();
+            SaveStepEdit(item);
         }
         else if (e.Key == Key.Escape)
         {
             e.Handled = true;
             CancelPlanStepEdit(item);
         }
+    }
+
+    private void PlanStepEditSave_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PlanStepItemVm item }) SaveStepEdit(item);
+    }
+
+    /// <summary>Adım düzenlemesini kaydeder: metin değiştiyse <see cref="PlanStore.UpdateStep"/>, bağlı proje
+    /// değiştiyse <see cref="PlanStore.SetStepProject"/> çağrılır (ikisi de değişmediyse hiçbir şey yapılmaz).</summary>
+    private void SaveStepEdit(PlanStepItemVm item)
+    {
+        var text = item.EditText.Trim();
+        var newProjectId = item.EditProjectId;
+        item.IsEditing = false;
+        Try(() =>
+        {
+            if (text.Length > 0 && text != item.Text)
+                _planStore.UpdateStep(item.Id, text);
+            if (newProjectId != item.Step.ProjectId)
+                _planStore.SetStepProject(item.Id, newProjectId);
+            Reload();
+        });
     }
 
     private void CancelPlanStepEdit(PlanStepItemVm item)

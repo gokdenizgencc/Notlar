@@ -121,11 +121,15 @@
                 <TextBlock Text="Nereye eklensin?" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,4"/>
                 <RadioButton x:Name="StartRadio" Content="En başa" GroupName="Position" Margin="0,0,0,4"/>
                 <RadioButton x:Name="EndRadio" Content="En sona ekle" GroupName="Position" IsChecked="True" Margin="0,0,0,4"/>
-                <DockPanel Margin="0,0,0,4" LastChildFill="True">
+                <DockPanel Margin="0,0,0,8" LastChildFill="True">
                     <RadioButton x:Name="AfterStepRadio" DockPanel.Dock="Left" Content="Şu adımdan sonra:" GroupName="Position"
                                  VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <ComboBox x:Name="AfterStepBox" DisplayMemberPath="Label"/>
                 </DockPanel>
+
+                <TextBlock Text="Adımların projesi" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,0,0,4"/>
+                <ComboBox x:Name="StepProjectBox" DisplayMemberPath="Name"
+                          ToolTip="Eklenecek adımlar bu projeye bağlanır (isteğe bağlı)"/>
             </StackPanel>
         </Grid>
 

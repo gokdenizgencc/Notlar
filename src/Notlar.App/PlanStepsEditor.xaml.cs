@@ -20,14 +20,17 @@ public partial class PlanStepsEditor : UserControl
         public required TextBlock Number;
         public required TextBox Box;
         public required TextBlock Placeholder;
+        public required ComboBox ProjectCombo;
         public required Button Up;
         public required Button Down;
         public required Button Remove;
     }
 
     private const string PlaceholderText = "Adım yaz…";
+    private static readonly PlanStepProjectOption NoProjectOption = new(null, "Proje: —");
 
     private readonly List<StepRow> _rows = new();
+    private List<PlanStepProjectOption> _projectOptions = new() { NoProjectOption };
     private bool _suppressEvents;
 
     public event EventHandler? StepsChanged;
@@ -51,6 +54,38 @@ public partial class PlanStepsEditor : UserControl
         }
     }
 
+    /// <summary>Boş olmayan adımlar, her biri isteğe bağlı bağlı olduğu proje id'siyle birlikte, sıralı.</summary>
+    public IReadOnlyList<(string Text, long? ProjectId)> StepItems
+    {
+        get
+        {
+            return _rows
+                .Select(r => (Text: r.Box.Text.Trim(), ProjectId: (r.ProjectCombo.SelectedItem as PlanStepProjectOption)?.Id))
+                .Where(t => t.Text.Length > 0)
+                .ToList();
+        }
+    }
+
+    /// <summary>Her adım satırındaki proje ComboBox'ının seçeneklerini günceller: "Proje: —" artı verilen
+    /// projeler. Proje listesi boşsa ComboBox satırları gizlenir (adım projeye bağlanamaz).</summary>
+    public void SetAvailableProjects(IReadOnlyList<(long Id, string Name)> projects)
+    {
+        var previousSelections = _rows.ToDictionary(r => r, r => (r.ProjectCombo.SelectedItem as PlanStepProjectOption)?.Id);
+
+        _projectOptions = new List<PlanStepProjectOption> { NoProjectOption };
+        foreach (var p in projects)
+            _projectOptions.Add(new PlanStepProjectOption(p.Id, p.Name));
+
+        var showCombo = projects.Count > 0;
+        foreach (var row in _rows)
+        {
+            var prevId = previousSelections[row];
+            row.ProjectCombo.ItemsSource = _projectOptions;
+            row.ProjectCombo.SelectedItem = _projectOptions.FirstOrDefault(o => o.Id == prevId) ?? _projectOptions[0];
+            row.ProjectCombo.Visibility = showCombo ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
     public void SetSteps(IEnumerable<string> steps)
     {
         _suppressEvents = true;
@@ -62,13 +97,46 @@ public partial class PlanStepsEditor : UserControl
             var list = steps?.Where(s => !string.IsNullOrWhiteSpace(s)).ToList() ?? new List<string>();
             if (list.Count == 0)
             {
-                AddRowInternal(string.Empty);
+                AddRowInternal(string.Empty, null);
             }
             else
             {
                 foreach (var s in list)
                 {
-                    AddRowInternal(s);
+                    AddRowInternal(s, null);
+                }
+            }
+        }
+        finally
+        {
+            _suppressEvents = false;
+        }
+
+        RefreshNumbers();
+        RaiseStepsChanged();
+    }
+
+    /// <summary>Adımları, her birinin bağlı olduğu proje id'siyle birlikte ayarlar (bkz. <see cref="StepItems"/>).
+    /// Proje id'si verilen seçenekler arasında yoksa (ör. proje artık planın proje listesinde değilse)
+    /// "Proje: —" seçili kalır.</summary>
+    public void SetSteps(IEnumerable<(string Text, long? ProjectId)> steps)
+    {
+        _suppressEvents = true;
+        try
+        {
+            StepsPanel.Children.Clear();
+            _rows.Clear();
+
+            var list = steps?.Where(s => !string.IsNullOrWhiteSpace(s.Text)).ToList() ?? new List<(string, long?)>();
+            if (list.Count == 0)
+            {
+                AddRowInternal(string.Empty, null);
+            }
+            else
+            {
+                foreach (var s in list)
+                {
+                    AddRowInternal(s.Text, s.ProjectId);
                 }
             }
         }
@@ -88,7 +156,7 @@ public partial class PlanStepsEditor : UserControl
 
     private StepRow AddRow(string text, bool focus)
     {
-        var row = AddRowInternal(text);
+        var row = AddRowInternal(text, null);
         RefreshNumbers();
         if (focus)
         {
@@ -99,12 +167,14 @@ public partial class PlanStepsEditor : UserControl
         return row;
     }
 
-    private StepRow AddRowInternal(string text)
+    private StepRow AddRowInternal(string text, long? projectId)
     {
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var number = new TextBlock
         {
@@ -114,6 +184,7 @@ public partial class PlanStepsEditor : UserControl
             MinWidth = 18,
         };
         Grid.SetColumn(number, 0);
+        Grid.SetRow(number, 0);
 
         var box = new TextBox
         {
@@ -133,6 +204,7 @@ public partial class PlanStepsEditor : UserControl
         box.PreviewKeyDown += Box_PreviewKeyDown;
         DataObject.AddPastingHandler(box, Box_Pasting);
         Grid.SetColumn(box, 1);
+        Grid.SetRow(box, 0);
 
         var placeholder = new TextBlock
         {
@@ -144,6 +216,7 @@ public partial class PlanStepsEditor : UserControl
             Visibility = text.Length == 0 ? Visibility.Visible : Visibility.Collapsed,
         };
         Grid.SetColumn(placeholder, 1);
+        Grid.SetRow(placeholder, 0);
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Top };
         var up = new Button { Content = "↑", ToolTip = "Yukarı taşı", Style = (Style)FindResource("PlanFlatButton") };
@@ -156,15 +229,36 @@ public partial class PlanStepsEditor : UserControl
         buttons.Children.Add(down);
         buttons.Children.Add(remove);
         Grid.SetColumn(buttons, 2);
+        Grid.SetRow(buttons, 0);
+
+        var projectCombo = new ComboBox
+        {
+            ItemsSource = _projectOptions,
+            FontSize = 11,
+            Padding = new Thickness(4, 1, 4, 1),
+            Margin = new Thickness(0, 0, 6, 4),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            MinWidth = 110,
+            Visibility = _projectOptions.Count > 1 ? Visibility.Visible : Visibility.Collapsed,
+        };
+        projectCombo.SelectedItem = _projectOptions.FirstOrDefault(o => o.Id == projectId) ?? _projectOptions[0];
+        projectCombo.SelectionChanged += (_, _) => { if (!_suppressEvents) RaiseStepsChanged(); };
+        Grid.SetColumn(projectCombo, 1);
+        Grid.SetRow(projectCombo, 1);
 
         grid.Children.Add(number);
         grid.Children.Add(box);
         grid.Children.Add(placeholder);
         grid.Children.Add(buttons);
+        grid.Children.Add(projectCombo);
 
         var root = new Border { Child = grid, Padding = new Thickness(0, 2, 0, 2) };
 
-        var row = new StepRow { Root = root, Number = number, Box = box, Placeholder = placeholder, Up = up, Down = down, Remove = remove };
+        var row = new StepRow
+        {
+            Root = root, Number = number, Box = box, Placeholder = placeholder,
+            ProjectCombo = projectCombo, Up = up, Down = down, Remove = remove,
+        };
         _rows.Add(row);
         StepsPanel.Children.Add(root);
         return row;
@@ -288,7 +382,7 @@ public partial class PlanStepsEditor : UserControl
 
     private StepRow InsertRowAfter(int index, string text)
     {
-        var row = AddRowInternal(text);
+        var row = AddRowInternal(text, null);
         var currentIndex = _rows.Count - 1;
         var target = index + 1;
         if (target != currentIndex)
@@ -340,7 +434,7 @@ public partial class PlanStepsEditor : UserControl
         for (var i = 1; i < lines.Length; i++)
         {
             var lineText = i == lines.Length - 1 ? lines[i] + after : lines[i];
-            var newRow = AddRowInternal(lineText);
+            var newRow = AddRowInternal(lineText, null);
             var currentIndex = _rows.Count - 1;
             _rows.RemoveAt(currentIndex);
             _rows.Insert(insertAt, newRow);

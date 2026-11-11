@@ -253,11 +253,25 @@ public sealed record ProjectComboItem(long? Id, string Name)
     public override string ToString() => Name;
 }
 
+/// <summary>Bir adım satırındaki proje seçim ComboBox'ında bir seçenek ("Proje: —" için Id null'dur).</summary>
+public sealed record PlanStepProjectOption(long? Id, string Label)
+{
+    public override string ToString() => Label;
+}
+
+/// <summary>Bir planın bağlı olduğu projelerden biri, çip (chip) olarak gösterilir. İlk eklenen proje ana
+/// projedir (<see cref="IsMain"/>); terminal bu projenin klasöründe açılır.</summary>
+public sealed record PlanProjectChipVm(long Id, string Name, bool IsMain)
+{
+    public bool CanPromote => !IsMain;
+}
+
 /// <summary>Plan detay görünümünde bir adımın görünüm modeli (satır içi düzenleme desteğiyle).</summary>
-public sealed class PlanStepItemVm(PlanStep step) : INotifyPropertyChanged
+public sealed class PlanStepItemVm(PlanStep step, string? projectName) : INotifyPropertyChanged
 {
     private bool _isEditing;
     private string _editText = "";
+    private long? _editProjectId;
 
     public PlanStep Step { get; } = step;
     public long Id => Step.Id;
@@ -265,6 +279,10 @@ public sealed class PlanStepItemVm(PlanStep step) : INotifyPropertyChanged
     public string Text => Step.Text;
     public string? Result => Step.Result;
     public bool HasResult => !string.IsNullOrWhiteSpace(Step.Result);
+
+    /// <summary>Adımın bağlı olduğu projenin adı (ad çözülemediyse, ör. proje silinmişse, null).</summary>
+    public string? ProjectName { get; } = projectName;
+    public bool HasProject => !string.IsNullOrEmpty(ProjectName);
 
     /// <summary>Adımı kullanıcı dışında biri eklediyse "(ekleyen: &lt;yazar&gt;)"; aksi halde boş.</summary>
     public string AuthorLabel => Step.Author == NoteAuthor.Ben ? "" : $"(ekleyen: {Step.Author})";
@@ -308,6 +326,13 @@ public sealed class PlanStepItemVm(PlanStep step) : INotifyPropertyChanged
     {
         get => _editText;
         set { _editText = value; OnChanged(); }
+    }
+
+    /// <summary>Satır içi düzenleme sırasında seçilen proje id'si (ComboBox'ın SelectedValue'su).</summary>
+    public long? EditProjectId
+    {
+        get => _editProjectId;
+        set { _editProjectId = value; OnChanged(); }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

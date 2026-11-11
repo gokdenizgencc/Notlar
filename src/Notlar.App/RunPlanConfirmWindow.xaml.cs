@@ -19,13 +19,27 @@ public partial class RunPlanConfirmWindow : Window
         public required string Text { get; init; }
         public required string AuthorLabel { get; init; }
         public Visibility AuthorLabelVisibility => AuthorLabel.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        public required string ProjectLabel { get; init; }
+        public Visibility ProjectLabelVisibility => ProjectLabel.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    public RunPlanConfirmWindow(string planTitle, string folderLabel, IReadOnlyList<PlanStep> steps)
+    /// <summary><paramref name="extraFolders"/>: planın bağlı olduğu ana projeden başka projelerin klasörleri
+    /// (bkz. PlanFolder.ResolveAll); Claude Code'a --add-dir ile erişim verilecektir.
+    /// <paramref name="projectNamesById"/>: adımların pill'lerinde proje adını göstermek için.</summary>
+    public RunPlanConfirmWindow(
+        string planTitle, string folderLabel, IReadOnlyList<string> extraFolders,
+        IReadOnlyList<PlanStep> steps, IReadOnlyDictionary<long, string> projectNamesById)
     {
         InitializeComponent();
         TitleText.Text = planTitle;
         QuestionText.Text = $"Claude Code bu klasörde açılıp planı uygulamaya başlayacak: {folderLabel}. Devam edilsin mi?";
+
+        if (extraFolders.Count > 0)
+        {
+            ExtraFoldersPanel.Visibility = Visibility.Visible;
+            ExtraFoldersList.ItemsSource = extraFolders;
+        }
+
         StepsList.ItemsSource = steps
             .OrderBy(s => s.Order)
             .Select((s, i) => new StepRow
@@ -33,6 +47,7 @@ public partial class RunPlanConfirmWindow : Window
                 Number = $"{i + 1}.",
                 Text = s.Text,
                 AuthorLabel = s.Author == NoteAuthor.Ben ? "" : $"(ekleyen: {s.Author})",
+                ProjectLabel = s.ProjectId is { } pid && projectNamesById.TryGetValue(pid, out var name) ? $"[{name}]" : "",
             })
             .ToList();
     }
