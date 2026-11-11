@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
@@ -6,7 +7,7 @@ using Notlar.Core;
 
 namespace Notlar.App;
 
-public sealed record DayGroupItem(string Header, IReadOnlyList<NoteItem> Notes);
+public sealed record DayListItem(DateOnly Date, string Header, int Count);
 
 public sealed record TagChip(string? Tag, string Label, bool IsSelected);
 

@@ -26,9 +26,11 @@ public partial class PanelWindow : Window
     private long? _undoId;
     private bool _reloadPending;
     private bool _showAll;
+    private DateOnly? _selectedDay;
     private DateTime _lastHiddenAt = DateTime.MinValue;
 
-    public ObservableCollection<DayGroupItem> Groups { get; } = [];
+    public ObservableCollection<DayListItem> Days { get; } = [];
+    public ObservableCollection<NoteItem> DayNotes { get; } = [];
     public ObservableCollection<TagChip> Tags { get; } = [];
 
     public PanelWindow(NoteStore store)
@@ -40,7 +42,7 @@ public partial class PanelWindow : Window
         _errorTimer.Tick += (_, _) => { _errorTimer.Stop(); ErrorBar.Visibility = Visibility.Collapsed; };
     }
 
-    private bool AnyEditing => Groups.SelectMany(g => g.Notes).Any(n => n.IsEditing);
+    private bool AnyEditing => DayNotes.Any(n => n.IsEditing);
 
     /// <summary>Tray sol tık. Panel açıkken tıklama önce Deactivated'ı tetikler; hemen yeniden açmayı engelle.</summary>
     public void Toggle()
@@ -66,12 +68,13 @@ public partial class PanelWindow : Window
         Hide();
         _lastHiddenAt = DateTime.Now;
         _showAll = false;
+        _selectedDay = null;
     }
 
     /// <summary>Açık düzenlemeleri kaydetmeden kapatır, böylece ardından çağrılan Reload() ertelenmez.</summary>
     private void CancelAllEdits()
     {
-        foreach (var note in Groups.SelectMany(g => g.Notes))
+        foreach (var note in DayNotes)
             note.IsEditing = false;
     }
 
@@ -107,16 +110,33 @@ public partial class PanelWindow : Window
             TagRow.Visibility = tags.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
             var visible = _tagFilter is null ? all : all.Where(n => n.Tags.Contains(_tagFilter)).ToList();
-            Groups.Clear();
-            foreach (var group in DayGrouper.Group(visible))
-                Groups.Add(new DayGroupItem(DayGrouper.Header(group.Date, today), group.Notes.Select(n => new NoteItem(n)).ToList()));
+            var groups = DayGrouper.Group(visible);
+
+            Days.Clear();
+            foreach (var group in groups)
+                Days.Add(new DayListItem(group.Date, DayGrouper.Header(group.Date, today), group.Notes.Count));
+
+            var selectedGroup = _selectedDay is { } day ? groups.FirstOrDefault(g => g.Date == day) : null;
+            if (_selectedDay is not null && selectedGroup is null)
+                _selectedDay = null;
+
+            DayNotes.Clear();
+            if (selectedGroup is not null)
+            {
+                foreach (var note in selectedGroup.Notes)
+                    DayNotes.Add(new NoteItem(note));
+                DayViewHeader.Text = DayGrouper.Header(selectedGroup.Date, today);
+            }
+
+            DayListPanel.Visibility = _selectedDay is null ? Visibility.Visible : Visibility.Collapsed;
+            DayViewPanel.Visibility = _selectedDay is null ? Visibility.Collapsed : Visibility.Visible;
 
             var hasOlderDone = !_showAll && _store.HasDoneBefore(since);
             OlderToggle.Visibility = _showAll || hasOlderDone ? Visibility.Visible : Visibility.Collapsed;
             OlderToggle.Content = _showAll ? "Sadece son 30 günü göster" : "Daha eski notları göster";
 
-            EmptyText.Visibility = Groups.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            EmptyText.Text = Groups.Count == 0 && !_showAll && hasOlderDone
+            EmptyText.Visibility = Days.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            EmptyText.Text = Days.Count == 0 && !_showAll && hasOlderDone
                 ? "Son 30 günde not yok."
                 : "Henüz not yok.";
         });
@@ -137,7 +157,15 @@ public partial class PanelWindow : Window
         if (AnyEditing) return; // Düzenleme kutusu Enter/Esc'i kendisi işler.
         if (e.Key == Key.Escape)
         {
-            HidePanel();
+            if (_selectedDay is not null)
+            {
+                _selectedDay = null;
+                Reload();
+            }
+            else
+            {
+                HidePanel();
+            }
             e.Handled = true;
         }
         else if (e.Key == Key.Delete && Keyboard.FocusedElement is FrameworkElement { DataContext: NoteItem item })
@@ -156,8 +184,26 @@ public partial class PanelWindow : Window
         {
             _store.Add(InputBox.Text);
             InputBox.Clear();
+            _selectedDay = DateOnly.FromDateTime(DateTime.Now);
             Reload();
         });
+    }
+
+    private void DayRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: DayListItem day })
+        {
+            CancelAllEdits();
+            _selectedDay = day.Date;
+            Reload();
+        }
+    }
+
+    private void BackButton_Click(object sender, RoutedEventArgs e)
+    {
+        CancelAllEdits();
+        _selectedDay = null;
+        Reload();
     }
 
     private void TagChip_Click(object sender, RoutedEventArgs e)
