@@ -127,8 +127,9 @@ Markdown dışa aktarma: `Belgeler\Notlar-YYYY-MM-DD.md`, sonra Explorer'da seç
 
 ## Kurulum
 
-- `dotnet publish` → framework-dependent, `%LOCALAPPDATA%\Programs\Notlar\`.
-- `kur.ps1` betiği: publish, kopyala, Run anahtarını yaz, MCP'yi kaydet, uygulamayı başlat.
+- `dotnet publish` → framework-dependent: `%LOCALAPPDATA%\Programs\Notlar\app\` ve `...\mcp\` (ayrı klasörler, bağımlılık çakışması yok).
+- `kur.ps1`: çalışan süreçleri kapatır, publish eder, MCP'yi `--scope user` kaydeder, `~/.claude/CLAUDE.md`'ye yönerge satırı ekler (yoksa), uygulamayı başlatır.
+- Run anahtarını uygulama yazar: ilk açılışta açar, sonraki açılışlarda açıksa yolu günceller.
 
 ## Test
 
