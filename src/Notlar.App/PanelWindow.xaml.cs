@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -23,15 +24,18 @@ public partial class PanelWindow : Window
     private readonly DispatcherTimer _undoTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly DispatcherTimer _errorTimer = new() { Interval = TimeSpan.FromSeconds(4) };
     private string? _tagFilter;
+    private NoteAuthor? _authorFilter;
     private long? _undoId;
     private bool _reloadPending;
     private bool _showAll;
     private DateOnly? _selectedDay;
     private DateTime _lastHiddenAt = DateTime.MinValue;
+    private readonly List<DayWindow> _dayWindows = [];
 
     public ObservableCollection<DayListItem> Days { get; } = [];
     public ObservableCollection<NoteItem> DayNotes { get; } = [];
     public ObservableCollection<TagChip> Tags { get; } = [];
+    public ObservableCollection<AuthorChip> AuthorFilters { get; } = [];
 
     public PanelWindow(NoteStore store)
     {
@@ -69,6 +73,7 @@ public partial class PanelWindow : Window
         _lastHiddenAt = DateTime.Now;
         _showAll = false;
         _selectedDay = null;
+        _authorFilter = null;
     }
 
     /// <summary>Açık düzenlemeleri kaydetmeden kapatır, böylece ardından çağrılan Reload() ertelenmez.</summary>
@@ -82,8 +87,16 @@ public partial class PanelWindow : Window
     /// ShowNearTray açılışta zaten koşulsuz yeniden yükler.</summary>
     public void Reload()
     {
+        ReloadDayWindows();
         if (!IsVisible) return;
         ReloadCore();
+    }
+
+    /// <summary>Açık DayWindow'ları (varsa) güncel veriyle tazeler. Panel gizliyken de çalışır.</summary>
+    public void ReloadDayWindows()
+    {
+        foreach (var window in _dayWindows.ToList())
+            window.Reload();
     }
 
     private void ReloadCore()
@@ -99,7 +112,15 @@ public partial class PanelWindow : Window
             var today = DateOnly.FromDateTime(DateTime.Now);
             var since = today.AddDays(-(RecentDays - 1));
             var all = _showAll ? _store.List(new NoteFilter()) : _store.ListRecentAndOpen(since);
-            var tags = all.SelectMany(n => n.Tags).Distinct().Order(TrComparer).ToList();
+
+            AuthorFilters.Clear();
+            AuthorFilters.Add(new AuthorChip(null, "Tümü", _authorFilter is null));
+            AuthorFilters.Add(new AuthorChip(NoteAuthor.Ben, "Ben", _authorFilter == NoteAuthor.Ben));
+            AuthorFilters.Add(new AuthorChip(NoteAuthor.Claude, "Claude", _authorFilter == NoteAuthor.Claude));
+
+            var byAuthor = _authorFilter is null ? all : all.Where(n => n.Author == _authorFilter).ToList();
+
+            var tags = byAuthor.SelectMany(n => n.Tags).Distinct().Order(TrComparer).ToList();
             if (_tagFilter is not null && !tags.Contains(_tagFilter))
                 _tagFilter = null;
 
@@ -109,7 +130,7 @@ public partial class PanelWindow : Window
                 Tags.Add(new TagChip(tag, "#" + tag, tag == _tagFilter));
             TagRow.Visibility = tags.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-            var visible = _tagFilter is null ? all : all.Where(n => n.Tags.Contains(_tagFilter)).ToList();
+            var visible = _tagFilter is null ? byAuthor : byAuthor.Where(n => n.Tags.Contains(_tagFilter)).ToList();
             var groups = DayGrouper.Group(visible);
 
             Days.Clear();
@@ -214,6 +235,31 @@ public partial class PanelWindow : Window
             _tagFilter = chip.Tag;
             Reload();
         }
+    }
+
+    private void AuthorChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: AuthorChip chip })
+        {
+            CancelAllEdits();
+            _authorFilter = chip.Author;
+            Reload();
+        }
+    }
+
+    private void ExpandButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedDay is not { } day) return;
+        var existing = _dayWindows.FirstOrDefault(w => w.Day == day);
+        if (existing is not null)
+        {
+            existing.Activate();
+            return;
+        }
+        var window = new DayWindow(_store, day);
+        window.Closed += (_, _) => _dayWindows.Remove(window);
+        _dayWindows.Add(window);
+        window.Show();
     }
 
     private void Row_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => ((UIElement)sender).Focus();

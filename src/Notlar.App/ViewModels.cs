@@ -11,6 +11,8 @@ public sealed record DayListItem(DateOnly Date, string Header, int Count);
 
 public sealed record TagChip(string? Tag, string Label, bool IsSelected);
 
+public sealed record AuthorChip(NoteAuthor? Author, string Label, bool IsSelected);
+
 public sealed class NoteItem(Note note) : INotifyPropertyChanged
 {
     private bool _isEditing;
@@ -22,6 +24,9 @@ public sealed class NoteItem(Note note) : INotifyPropertyChanged
     public string Time => Note.CreatedAt.ToString("HH:mm", CultureInfo.InvariantCulture);
     public string DisplayText => Note.DisplayText;
     public IReadOnlyList<string> Tags => Note.Tags;
+    public NoteAuthor Author => Note.Author;
+    public string AuthorLabel => Note.Author.DisplayName();
+    public bool IsClaude => Note.Author == NoteAuthor.Claude;
 
     public bool IsEditing
     {

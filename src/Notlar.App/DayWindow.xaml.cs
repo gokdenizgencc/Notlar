@@ -74,15 +74,30 @@ public partial class DayWindow : Window
         Grid.SetColumn(checkBox, 0);
         grid.Children.Add(checkBox);
 
-        var timeText = new TextBlock
+        var timePanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 12, 0), VerticalAlignment = VerticalAlignment.Top };
+        timePanel.Children.Add(new TextBlock
         {
             Text = note.CreatedAt.ToString("HH:mm"),
             Foreground = (Brush)FindResource("Muted"),
-            Margin = new Thickness(0, 2, 12, 0),
-            VerticalAlignment = VerticalAlignment.Top,
+        });
+        var isClaude = note.Author == NoteAuthor.Claude;
+        var authorBadge = new Border
+        {
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(5, 0, 5, 0),
+            Margin = new Thickness(4, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = isClaude ? (Brush)FindResource("TagBg") : Brushes.Transparent,
         };
-        Grid.SetColumn(timeText, 1);
-        grid.Children.Add(timeText);
+        authorBadge.Child = new TextBlock
+        {
+            Text = note.Author.DisplayName(),
+            FontSize = 10,
+            Foreground = isClaude ? (Brush)FindResource("Accent") : (Brush)FindResource("Muted"),
+        };
+        timePanel.Children.Add(authorBadge);
+        Grid.SetColumn(timePanel, 1);
+        grid.Children.Add(timePanel);
 
         var body = new StackPanel();
         Grid.SetColumn(body, 2);
