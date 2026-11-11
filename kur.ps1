@@ -21,7 +21,7 @@ if (Test-Path $appDir) { Remove-Item $appDir -Recurse -Force }
 if (Test-Path $mcpDir) { Remove-Item $mcpDir -Recurse -Force }
 
 Write-Host '> Derleniyor...'
-dotnet publish (Join-Path $root 'src\Notlar.App\Notlar.App.csproj') -c Release -o $appDir --nologo -r win-x64 --self-contained false -p:PublishReadyToRun=true
+dotnet publish (Join-Path $root 'src\Notlar.App\Notlar.App.csproj') -c Release -o $appDir --nologo
 if ($LASTEXITCODE -ne 0) { throw 'NotlarApp derlenemedi.' }
 dotnet publish (Join-Path $root 'src\Notlar.Mcp\Notlar.Mcp.csproj') -c Release -o $mcpDir --nologo -r win-x64 --self-contained false -p:PublishReadyToRun=true
 if ($LASTEXITCODE -ne 0) { throw 'NotlarMcp derlenemedi.' }
