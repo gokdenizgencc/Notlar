@@ -13,12 +13,14 @@ public sealed class PlanFixture : IDisposable
     public FakeTime Time { get; } = new(new DateTimeOffset(2026, 11, 11, 14, 32, 0, Tr));
     public CountingSignal Signal { get; } = new();
     public PlanStore Store { get; }
+    public ProjectStore Projects { get; }
 
     public PlanFixture()
     {
         ProjectDir = Path.Combine(Dir, "proje");
         Directory.CreateDirectory(ProjectDir);
         Store = new PlanStore(DbPath, Time, Signal);
+        Projects = new ProjectStore(DbPath, Time, Signal);
     }
 
     public PlanStore Reopen() => new(DbPath, Time, Signal);
@@ -292,5 +294,94 @@ public class PlanStoreTests
         Assert.Equal("bir görev", taskStore.List().Single(t => t.Id == task.Id).Title);
         Assert.Equal("bir hafıza", memStore.List().Single(m => m.Id == mem.Id).Title);
         Assert.Equal("bir plan", f.Store.ListPlans().Single(p => p.Id == plan.Id).Title);
+    }
+
+    [Fact]
+    public void CreatePlan_allows_null_project_path()
+    {
+        using var f = new PlanFixture();
+        var plan = f.Store.CreatePlan("bağımsız plan", null, ["adım"]);
+
+        Assert.Null(plan.ProjectPath);
+        Assert.Null(plan.ProjectId);
+        var (gotPlan, _) = f.Store.GetPlan(plan.Id);
+        Assert.Null(gotPlan.ProjectPath);
+    }
+
+    [Fact]
+    public void CreatePlan_with_projectId_stores_both_path_and_id()
+    {
+        using var f = new PlanFixture();
+        var project = f.Projects.Add("Benim Projem", f.ProjectDir);
+
+        var plan = f.Store.CreatePlan("plana bağlı", f.ProjectDir, ["adım"], project.Id);
+
+        Assert.Equal(project.Id, plan.ProjectId);
+        Assert.Equal(f.ProjectDir, plan.ProjectPath);
+    }
+
+    [Fact]
+    public void UpdatePlan_clearProject_nulls_path_and_projectId()
+    {
+        using var f = new PlanFixture();
+        var project = f.Projects.Add("P", f.ProjectDir);
+        var plan = f.Store.CreatePlan("plan", f.ProjectDir, ["a"], project.Id);
+
+        var updated = f.Store.UpdatePlan(plan.Id, clearProject: true);
+
+        Assert.Null(updated.ProjectPath);
+        Assert.Null(updated.ProjectId);
+    }
+
+    [Fact]
+    public void UpdatePlan_can_set_projectId_without_changing_path()
+    {
+        using var f = new PlanFixture();
+        var project = f.Projects.Add("P", f.ProjectDir);
+        var plan = f.Store.CreatePlan("plan", null, ["a"]);
+
+        var updated = f.Store.UpdatePlan(plan.Id, projectId: project.Id);
+
+        Assert.Equal(project.Id, updated.ProjectId);
+    }
+
+    [Fact]
+    public void Existing_database_with_NOT_NULL_project_path_is_migrated_idempotently()
+    {
+        using var f = new PlanFixture();
+        f.Store.CreatePlan("eski plan", f.ProjectDir, ["a"]);
+
+        // Eski şemayı simüle et: project_path'i NOT NULL yapan, project_id'si olmayan bir tablo.
+        using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = f.DbPath }.ToString()))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE plans_old (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title        TEXT    NOT NULL,
+                    project_path TEXT    NOT NULL,
+                    status       TEXT    NOT NULL DEFAULT 'taslak',
+                    created_at   TEXT    NOT NULL,
+                    updated_at   TEXT    NOT NULL,
+                    deleted_at   TEXT    NULL
+                );
+                INSERT INTO plans_old (id, title, project_path, status, created_at, updated_at, deleted_at)
+                SELECT id, title, project_path, status, created_at, updated_at, deleted_at FROM plans;
+                DROP TABLE plans;
+                ALTER TABLE plans_old RENAME TO plans;
+                """;
+            cmd.ExecuteNonQuery();
+        }
+        SqliteConnection.ClearAllPools();
+
+        // PlanStore yeniden açılınca eski şemayı migrate etmeli; iki kez açmak idempotent olmalı.
+        var reopened1 = f.Reopen();
+        var reopened2 = f.Reopen();
+        _ = reopened2;
+
+        var plan = reopened1.CreatePlan("yeni plan", null, ["x"]);
+        Assert.Null(plan.ProjectPath);
+        Assert.Equal("eski plan", reopened1.ListPlans().First(p => p.Title == "eski plan").Title);
     }
 }

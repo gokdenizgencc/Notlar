@@ -9,7 +9,7 @@ namespace Notlar.Core;
 public sealed class PlanStore
 {
     private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:ss.fffzzz";
-    private const string PlanColumns = "id, title, project_path, status, created_at, updated_at";
+    private const string PlanColumns = "id, title, project_path, status, created_at, updated_at, project_id";
     private const string StepColumns = "id, plan_id, step_order, text, status, result, updated_at";
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -32,7 +32,8 @@ public sealed class PlanStore
             CREATE TABLE IF NOT EXISTS plans (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 title        TEXT    NOT NULL,
-                project_path TEXT    NOT NULL,
+                project_path TEXT    NULL,
+                project_id   INTEGER NULL,
                 status       TEXT    NOT NULL DEFAULT 'taslak',
                 created_at   TEXT    NOT NULL,
                 updated_at   TEXT    NOT NULL,
@@ -49,12 +50,68 @@ public sealed class PlanStore
             );
             """;
         cmd.ExecuteNonQuery();
+
+        MigratePlansTable(conn);
     }
 
-    public Plan CreatePlan(string title, string projectPath, IEnumerable<string> steps)
+    /// <summary>Eski veritabanlarını yeni şemaya taşır: project_id sütunu yoksa ekler; project_path hâlâ
+    /// NOT NULL ise (SQLite ALTER COLUMN desteklemediğinden) tabloyu yeniden oluşturup veriyi kopyalar.
+    /// İdempotenttir: her iki adım da zaten uygulanmışsa hiçbir şey yapmaz.</summary>
+    private static void MigratePlansTable(SqliteConnection conn)
+    {
+        var columns = new List<(string Name, bool NotNull)>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(plans)";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                columns.Add((reader.GetString(1), reader.GetInt32(3) == 1));
+        }
+
+        if (!columns.Any(c => c.Name == "project_id"))
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "ALTER TABLE plans ADD COLUMN project_id INTEGER NULL";
+            cmd.ExecuteNonQuery();
+        }
+
+        var projectPathNotNull = columns.FirstOrDefault(c => c.Name == "project_path").NotNull;
+        if (!projectPathNotNull) return;
+
+        using var tx = conn.BeginTransaction();
+        void Exec(string sql)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = sql;
+            cmd.ExecuteNonQuery();
+        }
+
+        Exec("""
+            CREATE TABLE plans_new (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                title        TEXT    NOT NULL,
+                project_path TEXT    NULL,
+                project_id   INTEGER NULL,
+                status       TEXT    NOT NULL DEFAULT 'taslak',
+                created_at   TEXT    NOT NULL,
+                updated_at   TEXT    NOT NULL,
+                deleted_at   TEXT    NULL
+            )
+            """);
+        Exec("""
+            INSERT INTO plans_new (id, title, project_path, project_id, status, created_at, updated_at, deleted_at)
+            SELECT id, title, project_path, project_id, status, created_at, updated_at, deleted_at FROM plans
+            """);
+        Exec("DROP TABLE plans");
+        Exec("ALTER TABLE plans_new RENAME TO plans");
+        tx.Commit();
+    }
+
+    public Plan CreatePlan(string title, string? projectPath, IEnumerable<string> steps, long? projectId = null)
     {
         var cleanTitle = ValidateTitle(title);
-        var cleanPath = ValidateProjectPath(projectPath);
+        var cleanPath = projectPath is null ? null : ValidateProjectPath(projectPath);
         var stepTexts = steps.Select(ValidateStepText).ToList();
         var now = Now();
 
@@ -66,11 +123,12 @@ public sealed class PlanStore
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = """
-                    INSERT INTO plans(title, project_path, status, created_at, updated_at)
-                    VALUES ($title, $path, 'taslak', $now, $now) RETURNING id
+                    INSERT INTO plans(title, project_path, project_id, status, created_at, updated_at)
+                    VALUES ($title, $path, $projectId, 'taslak', $now, $now) RETURNING id
                     """;
                 cmd.Parameters.AddWithValue("$title", cleanTitle);
-                cmd.Parameters.AddWithValue("$path", cleanPath);
+                cmd.Parameters.AddWithValue("$path", (object?)cleanPath ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$projectId", (object?)projectId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$now", now);
                 planId = (long)cmd.ExecuteScalar()!;
             }
@@ -115,22 +173,40 @@ public sealed class PlanStore
         return plans;
     }
 
-    public Plan UpdatePlan(long id, string? title = null, string? projectPath = null)
+    public Plan UpdatePlan(
+        long id,
+        string? title = null,
+        string? projectPath = null,
+        long? projectId = null,
+        bool clearProject = false)
     {
         var current = GetPlanOnly(id) ?? throw new PlanNotFoundException(id);
         var newTitle = title is null ? current.Title : ValidateTitle(title);
-        var newPath = projectPath is null ? current.ProjectPath : ValidateProjectPath(projectPath);
+
+        string? newPath;
+        long? newProjectId;
+        if (clearProject)
+        {
+            newPath = null;
+            newProjectId = null;
+        }
+        else
+        {
+            newPath = projectPath is null ? current.ProjectPath : ValidateProjectPath(projectPath);
+            newProjectId = projectId ?? current.ProjectId;
+        }
 
         using (var conn = Open())
         using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                UPDATE plans SET title = $title, project_path = $path, updated_at = $now
+                UPDATE plans SET title = $title, project_path = $path, project_id = $projectId, updated_at = $now
                 WHERE id = $id AND deleted_at IS NULL
                 """;
             cmd.Parameters.AddWithValue("$id", id);
             cmd.Parameters.AddWithValue("$title", newTitle);
-            cmd.Parameters.AddWithValue("$path", newPath);
+            cmd.Parameters.AddWithValue("$path", (object?)newPath ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$projectId", (object?)newProjectId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$now", Now());
             if (cmd.ExecuteNonQuery() == 0)
                 throw new PlanNotFoundException(id);
@@ -533,10 +609,11 @@ public sealed class PlanStore
     private static Plan MapPlan(SqliteDataReader r) => new(
         r.GetInt64(0),
         r.GetString(1),
-        r.GetString(2),
+        r.IsDBNull(2) ? null : r.GetString(2),
         ParsePlanStatusDb(r.GetString(3)),
         Parse(r.GetString(4)),
-        Parse(r.GetString(5)));
+        Parse(r.GetString(5)),
+        r.IsDBNull(6) ? null : r.GetInt64(6));
 
     private static PlanStep MapStep(SqliteDataReader r) => new(
         r.GetInt64(0),

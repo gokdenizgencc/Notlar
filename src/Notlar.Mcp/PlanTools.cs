@@ -12,10 +12,10 @@ namespace Notlar.Mcp;
 /// oturumu açılır; o oturum plan_getir ile planı okur, adımları sırayla uygular ve her adımda
 /// plan_adim_durum ile durumunu/sonucunu günceller. Panel ilerlemeyi canlı gösterir.</summary>
 [McpServerToolType]
-public sealed class PlanTools(PlanStore store)
+public sealed class PlanTools(PlanStore store, ProjectStore projects)
 {
     [McpServerTool(Name = "plan_listele")]
-    [Description("Tüm planları özetler: id, başlık, durum, proje klasörü ve adım sayıları. Hangi planın uygulanacağını bulmak için önce burayı kullan.")]
+    [Description("Tüm planları özetler: id, başlık, durum, klasör ve adım sayıları. Hangi planın uygulanacağını bulmak için önce burayı kullan.")]
     public string PlanListele() => Run(() =>
     {
         var plans = store.ListPlans();
@@ -27,7 +27,8 @@ public sealed class PlanTools(PlanStore store)
         {
             var (_, steps) = store.GetPlan(plan.Id);
             var done = steps.Count(s => s.Status is StepStatus.Bitti or StepStatus.Atlandi);
-            sb.Append($"[#{plan.Id} · {StatusText(plan.Status)}] {plan.Title} ({plan.ProjectPath}) — {done}/{steps.Count} adım\n");
+            var folder = PlanFolder.Resolve(plan, projects) ?? "klasör yok";
+            sb.Append($"[#{plan.Id} · {StatusText(plan.Status)}] {plan.Title} ({folder}) — {done}/{steps.Count} adım\n");
         }
         return sb.ToString().TrimEnd();
     });
@@ -46,7 +47,13 @@ public sealed class PlanTools(PlanStore store)
         var sb = new StringBuilder();
         sb.Append($"Plan #{plan.Id}: {plan.Title}\n");
         sb.Append($"Durum: {StatusText(plan.Status)}\n");
-        sb.Append($"Proje klasörü: {plan.ProjectPath}\n");
+        if (plan.ProjectId is { } projectId)
+        {
+            var projectName = TryGetProjectName(projectId);
+            sb.Append($"Proje: {projectName}\n");
+        }
+        var folder = PlanFolder.Resolve(plan, projects);
+        sb.Append($"Klasör: {folder ?? "(klasör yok)"}\n");
         sb.Append("Adımlar:\n");
         foreach (var step in steps)
         {
@@ -78,20 +85,38 @@ public sealed class PlanTools(PlanStore store)
         });
 
     [McpServerTool(Name = "plan_olustur")]
-    [Description("Yeni bir plan oluşturur: başlık, proje klasörü (var olan bir klasör olmalı) ve satır satır adımlar. Kullanıcı 'şu planı oluştur' dediğinde burayı kullan.")]
+    [Description("""
+        Yeni bir plan oluşturur: başlık, satır satır adımlar ve isteğe bağlı olarak bir proje. proje verilirse
+        (ad veya proje_listele'deki id), planın klasörü o projenin güncel klasörü olur; proje verilmezse ve
+        proje_klasoru doğrudan belirtilirse o kullanılır; ikisi de verilmezse plan belirli bir klasöre bağlı
+        olmadan oluşturulur. Kullanıcı 'şu planı oluştur' dediğinde burayı kullan.
+        """)]
     public string PlanOlustur(
         [Description("Planın başlığı.")] string baslik,
-        [Description("Projenin bulunduğu klasörün tam yolu; var olmalı.")] string proje_klasoru,
-        [Description("Adımlar, her satırda bir adım olacak şekilde (satır sonlarıyla ayrılmış).")] string adimlar) =>
+        [Description("Adımlar, her satırda bir adım olacak şekilde (satır sonlarıyla ayrılmış).")] string adimlar,
+        [Description("Proje adı veya id'si (opsiyonel); proje_listele ile bulunabilir.")] string? proje = null,
+        [Description("Projenin bulunduğu klasörün tam yolu (opsiyonel); var olmalı. proje verilmişse onun klasörü öncelikli kullanılır.")] string? proje_klasoru = null) =>
         Run(() =>
         {
             var steps = adimlar.Split('\n', StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => s.Trim())
                 .Where(s => s.Length > 0)
                 .ToList();
-            var plan = store.CreatePlan(baslik, proje_klasoru, steps);
+
+            Project? project = null;
+            if (!string.IsNullOrWhiteSpace(proje))
+                project = long.TryParse(proje, out var projeId) ? projects.Get(projeId) : projects.FindByName(proje);
+
+            var path = project?.Path ?? proje_klasoru;
+            var plan = store.CreatePlan(baslik, path, steps, project?.Id);
             return $"Plan oluşturuldu: #{plan.Id} {plan.Title} ({steps.Count} adım).";
         });
+
+    private string TryGetProjectName(long projectId)
+    {
+        try { return projects.Get(projectId).Name; }
+        catch (ProjectNotFoundException) { return "(silinmiş proje)"; }
+    }
 
     [McpServerTool(Name = "plan_adim_ekle")]
     [Description("Var olan bir plana yeni bir adım ekler; sira verilmezse sona eklenir, verilirse o konuma eklenip sonrakiler kaydırılır.")]
@@ -130,7 +155,7 @@ public sealed class PlanTools(PlanStore store)
         {
             return action();
         }
-        catch (Exception ex) when (ex is PlanNotFoundException or PlanStepNotFoundException or ArgumentException)
+        catch (Exception ex) when (ex is PlanNotFoundException or PlanStepNotFoundException or ProjectNotFoundException or ArgumentException)
         {
             throw new McpException(ex.Message, ex);
         }
