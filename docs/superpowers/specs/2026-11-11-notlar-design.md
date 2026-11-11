@@ -37,7 +37,7 @@ Claude Code ──stdio──► NotlarMcp.exe ─┐
 Tray ikonu ──tıkla──► NotlarApp.exe ──┘
 ```
 
-Solution: `C:\Users\kullanici\source\repos\Notlar\Notlar.sln`
+Solution: `C:\Users\kullanici\source\repos\Notlar\Notlar.slnx`
 
 | Proje | Görev | Bağımlılık |
 |---|---|---|
@@ -73,7 +73,7 @@ Tablo `notes`:
 
 ## MCP sunucusu (`NotlarMcp.exe`)
 
-Kayıt: `claude mcp add notlar --scope user -- "%LOCALAPPDATA%\Programs\Notlar\NotlarMcp.exe"`
+Kayıt: `claude mcp add notlar --scope user -- "%LOCALAPPDATA%\Programs\Notlar\mcp\NotlarMcp.exe"`
 
 Araçlar:
 

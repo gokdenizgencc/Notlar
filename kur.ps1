@@ -1,5 +1,10 @@
 ﻿#Requires -Version 5.1
 # Notlar'ı derler, %LOCALAPPDATA%\Programs\Notlar'a kurar, Claude Code'a MCP olarak kaydeder ve başlatır.
+$isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if ($isElevated) {
+    Write-Host "Lütfen kur.ps1'i yönetici OLMAYAN bir PowerShell'de çalıştır."
+    exit 1
+}
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $target = Join-Path $env:LOCALAPPDATA 'Programs\Notlar'
@@ -8,8 +13,12 @@ $mcpDir = Join-Path $target 'mcp'
 $mcpExe = Join-Path $mcpDir 'NotlarMcp.exe'
 
 Write-Host '> Çalışan Notlar süreçleri kapatılıyor...'
-Get-Process NotlarApp, NotlarMcp -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Sleep -Milliseconds 500
+Get-Process NotlarApp, NotlarMcp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Wait-Process -Name NotlarApp, NotlarMcp -Timeout 5 -ErrorAction SilentlyContinue
+
+Write-Host '> Eski kurulum temizleniyor...'
+if (Test-Path $appDir) { Remove-Item $appDir -Recurse -Force }
+if (Test-Path $mcpDir) { Remove-Item $mcpDir -Recurse -Force }
 
 Write-Host '> Derleniyor...'
 dotnet publish (Join-Path $root 'src\Notlar.App\Notlar.App.csproj') -c Release -o $appDir --nologo
@@ -23,7 +32,9 @@ claude mcp add notlar --scope user -- $mcpExe
 if ($LASTEXITCODE -ne 0) { throw 'MCP kaydı başarısız.' }
 
 Write-Host '> CLAUDE.md yönergesi...'
-$claudeMd = Join-Path $env:USERPROFILE '.claude\CLAUDE.md'
+$claudeDir = Join-Path $env:USERPROFILE '.claude'
+New-Item -ItemType Directory -Force -Path $claudeDir | Out-Null
+$claudeMd = Join-Path $claudeDir 'CLAUDE.md'
 $line = '- Kullanıcı "not al", "not et", "kaydet" dediğinde notu `notlar` MCP sunucusunun `not_ekle` aracıyla ekle.'
 if (-not (Test-Path $claudeMd) -or -not (Select-String -Path $claudeMd -SimpleMatch 'not_ekle' -Quiet)) {
     $utf8 = New-Object System.Text.UTF8Encoding $false
