@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using ModelContextProtocol;
 using Notlar.Core;
 using Notlar.Mcp;
@@ -100,5 +101,33 @@ public sealed class NoteToolsTests : IDisposable
 
         var ex = Assert.Throws<McpException>(() => _tools.NotSil(1));
         Assert.Equal("Not bulunamadı: 1", ex.Message);
+    }
+
+    [Fact]
+    public void NotEkle_flattens_line_endings_in_reported_line()
+    {
+        var result = _tools.NotEkle("satır1\nsatır2\r\nsatır3");
+
+        Assert.Equal(
+            "Not eklendi: [ ] 14:32 satır1 satır2 satır3  (id: 1) — 11 Kasım 2026, Çarşamba",
+            result);
+    }
+
+    [Fact]
+    public void Run_wraps_SqliteException_as_McpException_with_Turkish_message()
+    {
+        _tools.NotEkle("ilk not");
+
+        // Dosyayı SQLite için geçersiz hale getiriyoruz ki sonraki sorgu SqliteException fırlatsın.
+        SqliteConnection.ClearAllPools();
+        foreach (var suffix in new[] { "", "-wal", "-shm" })
+        {
+            var path = _f.DbPath + suffix;
+            if (File.Exists(path)) File.Delete(path);
+        }
+        File.WriteAllBytes(_f.DbPath, [1, 2, 3, 4, 5, 6, 7, 8]);
+
+        var ex = Assert.Throws<McpException>(() => _tools.NotlariListele());
+        Assert.StartsWith("Veritabanına erişilemedi", ex.Message);
     }
 }

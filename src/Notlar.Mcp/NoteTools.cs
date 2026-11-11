@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
+using Microsoft.Data.Sqlite;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using Notlar.Core;
@@ -86,7 +87,11 @@ public sealed class NoteTools(NoteStore store, TimeProvider time)
         }
         catch (Exception ex) when (ex is NoteNotFoundException or ArgumentException)
         {
-            throw new McpException(ex.Message);
+            throw new McpException(ex.Message, ex);
+        }
+        catch (SqliteException ex)
+        {
+            throw new McpException($"Veritabanına erişilemedi ({ex.SqliteErrorCode}). Biraz sonra tekrar dene.", ex);
         }
     }
 }
