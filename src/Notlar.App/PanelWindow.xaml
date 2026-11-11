@@ -495,6 +495,10 @@
             <Grid>
                 <TextBlock Text="⠿" Foreground="{DynamicResource Muted}" FontSize="14"
                            HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0">
+                    <Button x:Name="FullScreenButton" Content="⛶" ToolTip="Tam ekran" Click="FullScreenButton_Click"
+                            Style="{StaticResource FlatButton}" Padding="6,2"/>
+                </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0">
                     <Button x:Name="PinButton" Content="📌" ToolTip="Sabitle" Click="PinButton_Click"
                             Style="{StaticResource FlatButton}" Padding="6,2"/>
@@ -513,16 +517,16 @@
                        MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
         </DockPanel>
 
-        <StackPanel x:Name="TabsRow" Grid.Row="2" Orientation="Horizontal" Margin="14,0,14,8">
+        <WrapPanel x:Name="TabsRow" Grid.Row="2" Orientation="Horizontal" Margin="14,0,14,8">
             <Button x:Name="NotesTabButton" Content="📝 Notlar" Click="NotesTab_Click"
-                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,0"/>
+                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,4"/>
             <Button x:Name="MemoryTabButton" Content="🧠 Hafıza" Click="MemoryTab_Click"
-                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,0"/>
+                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,4"/>
             <Button x:Name="SkillsTabButton" Content="🧩 Yetenekler" Click="SkillsTab_Click"
-                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,0"/>
+                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,4"/>
             <Button x:Name="PlansTabButton" Content="📋 Planlar" Click="PlansTab_Click"
-                    Style="{StaticResource FlatButton}" Padding="10,4"/>
-        </StackPanel>
+                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,0,4"/>
+        </WrapPanel>
 
         <Border x:Name="NotesInputBorder" Grid.Row="3" Margin="12,0,12,8" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="6">
@@ -694,12 +698,12 @@
                 </Grid>
             </Border>
             <DockPanel LastChildFill="False" Margin="0,0,0,4">
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                <WrapPanel DockPanel.Dock="Left">
                     <Button x:Name="SkillShowInstalledButton" Content="Kurulu" Click="SkillShowInstalled_Click"
-                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,0"/>
+                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,4"/>
                     <Button x:Name="SkillShowDiscoverButton" Content="Keşfet" Click="SkillShowDiscover_Click"
-                            Style="{StaticResource FlatButton}" Padding="8,2"/>
-                </StackPanel>
+                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,0,4"/>
+                </WrapPanel>
             </DockPanel>
             <DockPanel x:Name="SkillStatusRow" Margin="0,0,0,4" Visibility="Collapsed" LastChildFill="True">
                 <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="SkillStatusClose_Click"
@@ -707,14 +711,14 @@
                 <TextBlock x:Name="SkillStatusText" Foreground="{DynamicResource Accent}" TextWrapping="Wrap"/>
             </DockPanel>
             <DockPanel x:Name="SkillSortRow" LastChildFill="False" Margin="0,0,0,4">
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                    <Button x:Name="SkillSortUsageButton" Content="Kullanıma göre" Click="SkillSortUsage_Click"
-                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,0"/>
-                    <Button x:Name="SkillSortNameButton" Content="Ada göre" Click="SkillSortName_Click"
-                            Style="{StaticResource FlatButton}" Padding="8,2"/>
-                </StackPanel>
                 <Button DockPanel.Dock="Right" Content="↻ Yenile" ToolTip="Yeniden tara" Click="SkillRefresh_Click"
                         Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" Padding="8,2"/>
+                <WrapPanel DockPanel.Dock="Left">
+                    <Button x:Name="SkillSortUsageButton" Content="Kullanıma göre" Click="SkillSortUsage_Click"
+                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,4"/>
+                    <Button x:Name="SkillSortNameButton" Content="Ada göre" Click="SkillSortName_Click"
+                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,0,4"/>
+                </WrapPanel>
             </DockPanel>
             <Expander x:Name="SkillAddExpander" Header="+ Elle ekle" Foreground="{DynamicResource Muted}" IsExpanded="False"
                       Expanded="SkillAddExpander_Expanded">
@@ -934,14 +938,14 @@
 
                     <StackPanel x:Name="DiscoverPanel" Visibility="Collapsed">
                         <DockPanel LastChildFill="False" Margin="0,0,0,4">
-                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                            <WrapPanel DockPanel.Dock="Left">
                                 <Button x:Name="DiscoverSortPopularButton" Content="Popüler" Click="DiscoverSortPopular_Click"
-                                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,0"/>
+                                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,4"/>
                                 <Button x:Name="DiscoverSortRecentButton" Content="Yeni güncellenen" Click="DiscoverSortRecent_Click"
-                                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,0"/>
+                                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,4"/>
                                 <Button x:Name="DiscoverSortNameButton" Content="Ada göre" Click="DiscoverSortName_Click"
-                                        Style="{StaticResource FlatButton}" Padding="8,2"/>
-                            </StackPanel>
+                                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,0,4"/>
+                            </WrapPanel>
                         </DockPanel>
                         <TextBlock x:Name="DiscoverHintText"
                                    Text="Henüz bir marketplace eklenmemiş. Claude Code'da /plugin ile marketplace ekleyebilirsin."
@@ -975,12 +979,12 @@
 
                 <StackPanel x:Name="PlansPanel" Visibility="Collapsed">
                     <DockPanel LastChildFill="False" Margin="0,0,0,6">
-                        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                        <WrapPanel DockPanel.Dock="Left">
                             <Button x:Name="PlansShowPlansButton" Content="📋 Planlar" Click="PlansShowPlans_Click"
-                                    Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,0"/>
+                                    Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,4"/>
                             <Button x:Name="PlansShowProjectsButton" Content="📁 Projeler" Click="PlansShowProjects_Click"
-                                    Style="{StaticResource FlatButton}" Padding="8,2"/>
-                        </StackPanel>
+                                    Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,0,4"/>
+                        </WrapPanel>
                     </DockPanel>
 
                     <StackPanel x:Name="PlansListPanel">

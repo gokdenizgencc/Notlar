@@ -53,6 +53,7 @@ public partial class PanelWindow : Window
     private DateOnly? _selectedDay;
     private DateTime _lastHiddenAt = DateTime.MinValue;
     private bool _dragging;
+    private bool _fullScreen;
     private readonly List<DayWindow> _dayWindows = [];
 
     private long? _selectedPlanId;
@@ -109,6 +110,7 @@ public partial class PanelWindow : Window
         _skillStatusTimer.Tick += (_, _) => { _skillStatusTimer.Stop(); SkillStatusRow.Visibility = Visibility.Collapsed; };
         AppSettings.Changed += OnSettingsChanged;
         UpdatePinButtonVisual();
+        UpdateFullScreenButtonVisual();
     }
 
     private bool AnyEditing => DayNotes.Any(n => n.IsEditing) || Tasks.Any(t => t.IsEditing)
@@ -192,7 +194,7 @@ public partial class PanelWindow : Window
 
     private void HidePanel()
     {
-        if (_settings.PanelLarge)
+        if (_settings.PanelLarge && !_fullScreen)
         {
             _settings.PanelLargeWidth = Width;
             _settings.PanelLargeHeight = Height;
@@ -209,6 +211,10 @@ public partial class PanelWindow : Window
         _tagFilter = null;
         _selectedPlanId = null;
         _mode = Mode.Notes;
+        // Tam ekran kalıcı değildir: panel her gizlendiğinde (tepsi tıklaması, Esc, vb.) sıfırlanır,
+        // böylece bir sonraki açılış her zaman kompakt/büyük moddan başlar.
+        _fullScreen = false;
+        UpdateFullScreenButtonVisual();
     }
 
     /// <summary>Kompakt (sabit 360×520, NoResize) ve büyük (serbest boyutlandırılabilir, ~1000×720,
@@ -223,6 +229,21 @@ public partial class PanelWindow : Window
 
     private void ApplyWindowMode()
     {
+        if (_fullScreen)
+        {
+            ResizeMode = ResizeMode.NoResize;
+            SetResizeBorder(0);
+            MinWidth = 0;
+            MinHeight = 0;
+            var fsArea = GetCurrentScreenWorkArea();
+            Width = fsArea.Width;
+            Height = fsArea.Height;
+            Left = fsArea.Left;
+            Top = fsArea.Top;
+            SizeToggleButton.Content = "⤡";
+            SizeToggleButton.ToolTip = "Küçült";
+            return;
+        }
         if (_settings.PanelLarge)
         {
             ResizeMode = ResizeMode.CanResizeWithGrip;
@@ -281,6 +302,16 @@ public partial class PanelWindow : Window
 
     private void ToggleSize()
     {
+        if (_fullScreen)
+        {
+            // Tam ekrandayken ⤢/⤡ düğmesi her zaman tam ekrandan çıkıp büyük moda geçer.
+            _fullScreen = false;
+            _settings.PanelLarge = true;
+            _settings.Save();
+            ApplyWindowMode();
+            UpdateFullScreenButtonVisual();
+            return;
+        }
         if (_settings.PanelLarge)
         {
             _settings.PanelLargeWidth = Width;
@@ -296,20 +327,46 @@ public partial class PanelWindow : Window
         _settings.Save();
         ApplyWindowMode();
         if (!_settings.PanelLarge)
+            RepositionCompact();
+    }
+
+    /// <summary>Kompakt moda geçişte (büyük/tam ekrandan çıkışta) konumu, sabitlenmiş konum varsa ona,
+    /// yoksa ekranın sağ altına yerleştirir.</summary>
+    private void RepositionCompact()
+    {
+        var area = SystemParameters.WorkArea;
+        if (_settings.PanelPinned && _settings.PanelLeft is { } left && _settings.PanelTop is { } top
+            && IsOnScreen(left, top))
         {
-            var area = SystemParameters.WorkArea;
-            if (_settings.PanelPinned && _settings.PanelLeft is { } left && _settings.PanelTop is { } top
-                && IsOnScreen(left, top))
-            {
-                Left = left;
-                Top = top;
-            }
-            else
-            {
-                Left = area.Right - Width - 8;
-                Top = area.Bottom - Height - 8;
-            }
+            Left = left;
+            Top = top;
         }
+        else
+        {
+            Left = area.Right - Width - 8;
+            Top = area.Bottom - Height - 8;
+        }
+    }
+
+    private void FullScreenButton_Click(object sender, RoutedEventArgs e) => ToggleFullScreen();
+
+    /// <summary>Panelin, geçerli monitörün görev çubuğu hariç tüm görünür alanını kaplayan tam ekran
+    /// moduna girip çıkar. Tam ekran kalıcı değildir (ayarlara yazılmaz): çıkışta önceki kompakt/büyük
+    /// moda (boyut/konumuyla birlikte) dönülür.</summary>
+    private void ToggleFullScreen()
+    {
+        _fullScreen = !_fullScreen;
+        ApplyWindowMode();
+        if (!_fullScreen && !_settings.PanelLarge)
+            RepositionCompact();
+        UpdateFullScreenButtonVisual();
+    }
+
+    private void UpdateFullScreenButtonVisual()
+    {
+        FullScreenButton.ToolTip = _fullScreen ? "Tam ekrandan çık" : "Tam ekran";
+        FullScreenButton.Background = _fullScreen ? (Brush)FindResource("Accent") : Brushes.Transparent;
+        FullScreenButton.Foreground = _fullScreen ? (Brush)FindResource("OnAccent") : (Brush)FindResource("Muted");
     }
 
     /// <summary>Başlık çubuğunun boş alanına çift tıklama, büyüt/küçült modunu değiştirir (düğmeler ve
@@ -528,7 +585,7 @@ public partial class PanelWindow : Window
 
     private void Window_Deactivated(object? sender, EventArgs e)
     {
-        if (_dragging) return;
+        if (_dragging || _fullScreen) return;
         if (!_settings.PanelPinned && !_settings.PanelLarge) HidePanel();
     }
 
@@ -538,6 +595,7 @@ public partial class PanelWindow : Window
     /// sabitlenmemiş panel gizlenmez.</summary>
     private void DragBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (_fullScreen) return; // Tam ekranda sürükleme çubuğu hiçbir şey yapmaz.
         if (e.ClickCount == 2)
         {
             ToggleSize();
@@ -637,6 +695,7 @@ public partial class PanelWindow : Window
             if (MemoryAddExpander.IsExpanded) { MemoryAddExpander.IsExpanded = false; e.Handled = true; return; }
             if (PlanAddExpander.IsExpanded) { PlanAddExpander.IsExpanded = false; e.Handled = true; return; }
             if (PlanAddStepExpander.IsExpanded) { PlanAddStepExpander.IsExpanded = false; e.Handled = true; return; }
+            if (_fullScreen) { ToggleFullScreen(); e.Handled = true; return; }
             if (_selectedPlanId is not null)
             {
                 _selectedPlanId = null;
