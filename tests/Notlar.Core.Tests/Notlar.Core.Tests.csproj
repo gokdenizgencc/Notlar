@@ -11,6 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Notlar.Core\Notlar.Core.csproj" />
+    <ProjectReference Include="..\..\src\Notlar.Mcp\Notlar.Mcp.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

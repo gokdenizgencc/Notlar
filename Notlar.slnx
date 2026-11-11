@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Notlar.Core/Notlar.Core.csproj" />
+    <Project Path="src/Notlar.Mcp/Notlar.Mcp.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Notlar.Core.Tests/Notlar.Core.Tests.csproj" />

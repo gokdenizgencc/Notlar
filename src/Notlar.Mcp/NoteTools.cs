@@ -1,0 +1,92 @@
+using System.ComponentModel;
+using System.Globalization;
+using System.Text;
+using ModelContextProtocol;
+using ModelContextProtocol.Server;
+using Notlar.Core;
+
+namespace Notlar.Mcp;
+
+[McpServerToolType]
+public sealed class NoteTools(NoteStore store, TimeProvider time)
+{
+    [McpServerTool(Name = "not_ekle")]
+    [Description("Kullanıcının kişisel not uygulamasına yeni not ekler. Kullanıcı 'not al', 'not et', 'kaydet', 'aklında tut' dediğinde bunu kullan. Kayıt saati otomatik atanır. Metindeki #kelime etiket olur.")]
+    public string NotEkle([Description("Not metni. İsteğe bağlı #etiket içerebilir.")] string metin) => Run(() =>
+    {
+        var note = store.Add(metin);
+        return $"Not eklendi: {NoteFormatter.Line(note)} — {DayGrouper.FormatDate(note.Day)}";
+    });
+
+    [McpServerTool(Name = "notlari_listele")]
+    [Description("Notları gün başlıklarına göre gruplanmış listeler. Tarih verilmezse son 7 günü gösterir.")]
+    public string NotlariListele(
+        [Description("Başlangıç tarihi (yyyy-MM-dd). Boşsa bitişten 6 gün öncesi.")] string? baslangic = null,
+        [Description("Bitiş tarihi (yyyy-MM-dd). Boşsa bugün.")] string? bitis = null,
+        [Description("Sadece bu etiketi taşıyan notlar, örn. 'iş'.")] string? etiket = null,
+        [Description("true ise yalnızca tamamlanmamış notlar.")] bool sadece_acik = false) => Run(() =>
+    {
+        var today = DateOnly.FromDateTime(time.GetLocalNow().DateTime);
+        var to = ParseDate(bitis) ?? today;
+        var from = ParseDate(baslangic) ?? to.AddDays(-6);
+        var notes = store.List(new NoteFilter(from, to, etiket, sadece_acik));
+        if (notes.Count == 0)
+            return "Bu aralıkta not yok.";
+
+        var sb = new StringBuilder();
+        foreach (var group in DayGrouper.Group(notes))
+        {
+            sb.Append("## ").Append(DayGrouper.Header(group.Date, today)).Append('\n');
+            foreach (var note in group.Notes)
+                sb.Append(NoteFormatter.Line(note)).Append('\n');
+            sb.Append('\n');
+        }
+        return sb.ToString().TrimEnd();
+    });
+
+    [McpServerTool(Name = "not_guncelle")]
+    [Description("Var olan bir notun metnini değiştirir. Kayıt saati değişmez.")]
+    public string NotGuncelle(
+        [Description("Notun id'si (notlari_listele çıktısındaki 'id').")] long id,
+        [Description("Yeni not metni.")] string metin) =>
+        Run(() => $"Not güncellendi: {NoteFormatter.Line(store.Update(id, metin))}");
+
+    [McpServerTool(Name = "not_tamamla")]
+    [Description("Notu tamamlandı olarak işaretler (üstü çizilir) veya tekrar açar.")]
+    public string NotTamamla(
+        [Description("Notun id'si.")] long id,
+        [Description("true: tamamlandı, false: tekrar aç.")] bool tamamlandi = true) => Run(() =>
+    {
+        var note = store.SetDone(id, tamamlandi);
+        return $"{(tamamlandi ? "Not tamamlandı" : "Not tekrar açıldı")}: {NoteFormatter.Line(note)}";
+    });
+
+    [McpServerTool(Name = "not_sil")]
+    [Description("Notu siler.")]
+    public string NotSil([Description("Notun id'si.")] long id) => Run(() =>
+    {
+        store.Delete(id);
+        return $"Not silindi (id: {id}).";
+    });
+
+    private static DateOnly? ParseDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        if (DateOnly.TryParseExact(value.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            return date;
+        throw new ArgumentException($"Geçersiz tarih '{value}', yyyy-MM-dd bekleniyor.");
+    }
+
+    private static string Run(Func<string> action)
+    {
+        try
+        {
+            return action();
+        }
+        catch (Exception ex) when (ex is NoteNotFoundException or ArgumentException)
+        {
+            throw new McpException(ex.Message);
+        }
+    }
+}
