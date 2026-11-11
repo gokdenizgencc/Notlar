@@ -1,0 +1,1058 @@
+[
+  {
+    "id": "plugin:claude-plugins-official/42crunch-api-security-testing",
+    "description_tr": "42Crunch ile API güvenliğini otomatikleştirir; OpenAPI şemalarını denetler, OWASP risklerine karşı açıkları tespit eder ve yapay zekayla düzeltme uygular."
+  },
+  {
+    "id": "plugin:claude-plugins-official/adobe-for-creativity",
+    "description_tr": "Adobe'nin yapay zeka destekli araçlarıyla görsel düzenleme, tasarım akışlarını otomatikleştirme ve arka plan kaldırma, vektörleştirme gibi işler için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/agent-sdk-dev",
+    "description_tr": "Claude Agent SDK ile geliştirme yaparken kullanılan bir araç setidir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/agentforce-adlc",
+    "description_tr": "Agentforce ajan geliştirme yaşam döngüsünde .agent dosyalarını yazmak, keşfetmek, iskeletlemek, dağıtmak ve test etmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/ai-plugins",
+    "description_tr": "Endor Labs ile yazılım tedarik zincirindeki güvenlik risklerini taramak, önceliklendirmek ve düzeltmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/aikido",
+    "description_tr": "Aikido Security ile SAST, gizli bilgi sızıntısı ve altyapı-kod güvenlik açığı taraması yapmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/airtable",
+    "description_tr": "Airtable'da veritabanı oluşturma, şema tasarlama, kayıtlarla çalışma ve diğer araçlarla senkronize etme için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/airwallex-agentos",
+    "description_tr": "Airwallex'in finans altyapısını doğal dille yönetmek için kullanılır; fatura oluşturma, tedarikçi katılımı ve nakit durumu takibi gibi işlemleri yapar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/alloydb",
+    "description_tr": "AlloyDB for PostgreSQL veritabanı oluşturmak, bağlanmak ve veriyle etkileşim kurmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/alloydb-omni",
+    "description_tr": "AlloyDB Omni veritabanı oluşturmak, bağlanmak ve veriyle etkileşim kurmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/amazon-location-service",
+    "description_tr": "Amazon Location Service ile harita, yer arama, coğrafi kodlama ve rota özellikleri eklerken kimlik doğrulama ve SDK entegrasyonunda rehberlik eder."
+  },
+  {
+    "id": "plugin:claude-plugins-official/amplitude",
+    "description_tr": "Amplitude'u uzman bir analist gibi kullanmak için; ürün fırsatlarını keşfetme, grafik analiz etme, pano ve deney oluşturma işlerinde kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/apollo",
+    "description_tr": "Apollo.io ile potansiyel müşteri bulma, zenginleştirme, iletişim dizilerini yükleme ve satış analitiği sorgulama için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/apollo-skills",
+    "description_tr": "Apollo GraphQL ekosistemi (Client, Server, Federation, Router, Rover CLI) ile şema tasarımı ve sorgu optimizasyonu için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/appwrite",
+    "description_tr": "Appwrite SDK becerileri, MCP sunucuları ve dağıtım komutlarıyla geliştirme yapmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/asana",
+    "description_tr": "Asana'da görev oluşturma ve yönetme, proje arama, atama güncelleme ve ilerleme takibi için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/astronomer-data-agents",
+    "description_tr": "Apache Airflow ve Astronomer için DAG yazma, boru hattı hatalarını ayıklama, veri soyağacı izleme ve Airflow sürüm göçü için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/atlan",
+    "description_tr": "Atlan veri kataloğunda doğal dille veri varlıklarını arama, keşfetme, yönetme ve denetleme için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/atlassian",
+    "description_tr": "Jira ve Confluence başta olmak üzere Atlassian ürünlerinde sorun arama/oluşturma, dokümantasyona erişim ve sprint yönetimi için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/atomic-agents",
+    "description_tr": "Atomic Agents çerçevesiyle yapay zeka ajanları geliştirirken şema tasarımı, mimari planlama ve kod incelemesi için özel ajanlar sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/auth0",
+    "description_tr": "Auth0 ile herhangi bir uygulamaya kimlik doğrulama eklerken çerçeveyi algılayıp giriş, çıkış, oturum ve korumalı rotalar için SDK entegrasyonu kurar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/aws-agents",
+    "description_tr": "Amazon Bedrock AgentCore ile AWS üzerinde yapay zeka ajanları oluşturmak, araç ve bellek bağlamak, değerlendirmek ve üretime hazırlamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/aws-agents-for-devsecops",
+    "description_tr": "AWS DevOps ve Security ajanlarıyla olay inceleme, kod incelemesi, UAT yürütme ve sızma testi için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/aws-amplify",
+    "description_tr": "AWS Amplify Gen 2 ile kimlik doğrulama, veri modelleri, depolama ve GraphQL API'leri içeren tam yığın uygulamalar geliştirmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/aws-core",
+    "description_tr": "AWS üzerinde uygulama geliştirmek, dağıtmak ve işletmek için altyapı-kod yazma ve temel servisleri kullanma becerileri sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/aws-data-analytics",
+    "description_tr": "S3 Tables, AWS Glue ve Athena ile veri gölü, analitik ve ETL iş akışları kurmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/aws-dev-toolkit",
+    "description_tr": "AWS'de geliştirme, taşıma ve mimari inceleme yapmak için onlarca beceri, ajan ve MCP sunucusu içeren geniş bir araç setidir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/aws-serverless",
+    "description_tr": "AWS Serverless servisleriyle sunucusuz uygulamaları tasarlamak, oluşturmak, dağıtmak, test etmek ve hata ayıklamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/aws-startup-advisor",
+    "description_tr": "Girişimler için hesap kurulumundan güvenlik, maliyet optimizasyonu ve taşımaya kadar kişiselleştirilmiş AWS mimari rehberliği sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/aws-transform",
+    "description_tr": "Eski kod tabanlarını (.NET, COBOL, VMware, SQL Server vb.) AWS'e taşımak, modernize etmek ve sürüm yükseltmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/azure",
+    "description_tr": "Azure MCP sunucusu ve özel becerilerle kaynak listeleme, dağıtım doğrulama, altyapı sorunlarını teşhis etme ve maliyet optimizasyonu için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/azure-cosmos-db-assistant",
+    "description_tr": "Azure Cosmos DB için veri modelleme, sorgu optimizasyonu ve performans ayarlama konusunda uzman yardımcı olarak kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/base44",
+    "description_tr": "Base44 tam yığın uygulamalarını CLI proje yönetimi ve JavaScript/TypeScript SDK'sıyla oluşturup dağıtmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/bigdata-com",
+    "description_tr": "Bigdata.com'un finansal araştırma, analiz ve istihbarat araçlarını kullanmak için resmi eklentidir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/bigquery-data-analytics",
+    "description_tr": "BigQuery veri setlerine bağlanıp sorgulama yapmak ve veri içgörüleri üretmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/boltz",
+    "description_tr": "Boltz ile protein/molekül yapılarını tahmin etmek, tarama yapmak ve bağlayıcı tasarlamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/box",
+    "description_tr": "Box içeriğinde dosya arama, klasör düzenleme, ekip içi işbirliği ve Box AI ile belge özetleme için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/brightdata-plugin",
+    "description_tr": "Bright Data ile web kazıma, Google araması ve 40'tan fazla siteden yapılandırılmış veri çıkarma için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/buildkite",
+    "description_tr": "Buildkite'ta boru hatları, taşıma, ön kontrol ve ajan çalışma zamanı için resmi beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/carta-cap-table",
+    "description_tr": "Carta'da hisse tablolarını, hibeleri, SAFE'leri, 409A değerlemelerini ve şelale senaryolarını sorgulamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/carta-crm",
+    "description_tr": "Carta CRM MCP Sunucusu üzerinden yatırımcı, şirket, kişi ve fırsatları sohbet ederek arama, ekleme ve zenginleştirme için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/carta-investors",
+    "description_tr": "Carta'da yatırımcı verisi, performans karşılaştırmaları, düzenleyici raporlama ve AGM sunumu oluşturma için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/cds-mcp",
+    "description_tr": "SAP Cloud Application Programming Model (CAP) projelerinde yapay zeka destekli geliştirme; CDS modellerinde ve dokümantasyonda arama yapmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/chrome-devtools-mcp",
+    "description_tr": "Canlı bir Chrome tarayıcısını kontrol edip incelemek, performans izi almak, ağ isteklerini analiz etmek ve tarayıcı eylemlerini otomatikleştirmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/circle-skills",
+    "description_tr": "USDC ödemeleri, zincirler arası transferler, cüzdanlar ve akıllı sözleşmelerle stabil kripto para uygulamaları geliştirirken kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/circleback",
+    "description_tr": "Circleback üzerinden toplantı, e-posta ve takvim bağlamını aramak ve bu bilgilere erişmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/clangd-lsp",
+    "description_tr": "C/C++ için kod zekası sağlayan clangd dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/claude-code-setup",
+    "description_tr": "Kod tabanını analiz ederek hook, beceri, MCP sunucusu ve subagent gibi uygun Claude Code otomasyonları önerir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/claude-md-management",
+    "description_tr": "CLAUDE.md dosyalarının kalitesini denetlemek, oturum öğrenimlerini kaydetmek ve proje belleğini güncel tutmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/clickhouse",
+    "description_tr": "ClickHouse Cloud veritabanlarına bağlanıp şemaları incelemek, salt okunur SQL sorguları çalıştırmak ve maliyetleri izlemek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/clickhouse-best-practices",
+    "description_tr": "ClickHouse şema tasarımı, sorgu optimizasyonu ve veri alımı için etki sırasına göre en iyi uygulama kurallarını sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/cloud-sql-mysql",
+    "description_tr": "Cloud SQL for MySQL veritabanına bağlanıp veriyle etkileşim kurmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/cloud-sql-postgresql",
+    "description_tr": "Cloud SQL for PostgreSQL veritabanı oluşturmak, bağlanmak ve veriyle etkileşim kurmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/cloud-sql-sqlserver",
+    "description_tr": "Cloud SQL for SQL Server veritabanına bağlanmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/cloudflare",
+    "description_tr": "Cloudflare geliştirici platformunda Workers, Durable Objects, Agents SDK ve Wrangler CLI ile çalışmak için beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/cloudinary",
+    "description_tr": "Cloudinary üzerinde medya varlıklarını yönetmek, dönüşüm uygulamak ve optimize etmek için doğal dille kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/cockroachdb",
+    "description_tr": "CockroachDB kümelerine bağlanıp şema keşfetme, optimize SQL yazma, sorgu ayıklama ve dağıtık veritabanı yönetimi için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/code-modernization",
+    "description_tr": "COBOL, eski Java/C++ veya monolitik web uygulamaları gibi eski kod tabanlarını adım adım değerlendirip dönüştürerek modernize etmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/code-review",
+    "description_tr": "Pull request'ler için uzman ajanlarla otomatik kod incelemesi yapar; güven puanlamasıyla yanlış pozitifleri eler."
+  },
+  {
+    "id": "plugin:claude-plugins-official/code-simplifier",
+    "description_tr": "Yakın zamanda değiştirilmiş kodu işlevselliği bozmadan sadeleştiren ve netliğini artıran bir ajandır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/coderabbit",
+    "description_tr": "CodeRabbit ile kod yazdıktan veya değiştirdikten sonra, commit öncesinde bağımsız bir ikinci görüş olarak hata, güvenlik açığı ve mantık hatalarını yakalamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/codspeed",
+    "description_tr": "CodSpeed ile kıyaslama sonuçlarını, alev grafiklerini ve performans karşılaştırmalarını inceleyip darboğazları bulmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/commit-commands",
+    "description_tr": "Commit, push ve pull request oluşturma dahil git commit akışları için komutlar sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/confidence",
+    "description_tr": "Confidence özellik bayraklarına, deneylere ve göç araçlarına Claude Code içinden erişmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/context7",
+    "description_tr": "Upstash Context7 MCP sunucusuyla güncel dokümantasyon ve sürüme özel kod örneklerini doğrudan kaynak depolardan bağlama çekmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/convex",
+    "description_tr": "Convex becerileri, kod yazan convex-expert subagent'ı ve MCP erişimiyle arka uç, şema, gerçek zamanlı özellik ve kimlik doğrulama geliştirmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/crowdstrike-falcon-foundry",
+    "description_tr": "CrowdStrike Falcon Foundry platformunda siber güvenlik uygulamaları geliştirirken UI, koleksiyon, fonksiyon ve iş akışı becerileri sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/csharp-lsp",
+    "description_tr": "C# için kod zekası sağlayan bir dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/cwc-makers",
+    "description_tr": "Code-with-Claude Makers Cardputer cihazını tek komutla kurmak; depo klonlama, firmware yükleme ve uygulama paketi kurma için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/dash0",
+    "description_tr": "Claude Code oturumlarındaki araç çağrılarını, token kullanımını ve hataları OpenTelemetry izleri olarak Dash0'a göndermek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/data",
+    "description_tr": "Apache Airflow ve Astronomer için DAG yazma, boru hattı hatalarını ayıklama ve veri soyağacı izleme amacıyla kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/data-agent-kit-starter-pack",
+    "description_tr": "Google Cloud üzerinde veri mühendisleri için doğal dille veri boru hatları kurma, dbt ile dönüştürme ve Spark/BigQuery not defterleri yazma becerileri sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/data-engineering",
+    "description_tr": "Veri ambarı keşfi, boru hattı yazımı ve Airflow entegrasyonu için kullanılan bir veri mühendisliği eklentisidir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/databases-on-aws",
+    "description_tr": "AWS veritabanı portföyünde şema tasarımı, sorgu çalıştırma, göç yönetimi ve doğru veritabanını seçme konusunda uzman rehberlik sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/datadog",
+    "description_tr": "Datadog MCP sunucusu üzerinden günlük, metrik, iz ve panoları doğal dille sorgulamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/datahub-skills",
+    "description_tr": "DataHub'da bağlayıcı planlama, PR incelemesi, katalog arama, meta veri zenginleştirme ve veri kalitesi yönetimi becerileri sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/dataproc",
+    "description_tr": "Dataproc kümelerini ve işlerini yönetmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/datarobot-agent-skills",
+    "description_tr": "DataRobot ile model eğitimi, dağıtımı, tahmin, özellik mühendisliği, izleme ve açıklanabilirlik içeren AI/ML iş akışları için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/dataverse",
+    "description_tr": "Microsoft Dataverse üzerinde uygulama geliştirmek, veri analiz etmek ve yönetmek için kullanılır; Dataverse MCP, PAC CLI ve Python SDK'sını bir araya getirir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/deploy-on-aws",
+    "description_tr": "Uygulamaları AWS'e dağıtırken mimari önerileri, maliyet tahminleri ve altyapı-kod (IaC) dağıtımı sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/desktop-commander",
+    "description_tr": "Terminal komutları, süreç yönetimi ve metin, kod, PDF, DOCX, Excel, görsel gibi dosya türleri üzerinde işlem yapan bir MCP sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/discord",
+    "description_tr": "Discord ile mesajlaşmayı köprüler; eşleştirme, izin listesi ve erişim politikasını /discord:access komutuyla yönetir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/dominodatalab",
+    "description_tr": "Domino Data Lab platformunda çalışma alanları, işler, model dağıtımı, deney takibi ve Spark/Ray/Dask iş yüklerini yönetmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/duckdb-skills",
+    "description_tr": "DuckDB ile veri dosyalarını okumak, veritabanlarını sorgulamak, DuckDB/DuckLake dokümantasyonunda arama yapmak ve eklentileri kurup güncellemek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/duende-skills",
+    "description_tr": "OAuth/OIDC, IdentityServer, token yönetimi, ASP.NET Core kimlik doğrulama ve BFF desenleriyle güvenli kimlik mimarisi geliştirirken kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/exa",
+    "description_tr": "Exa AI ile web araması, derinlemesine araştırma ve içerik çıkarımı yapar; kişi, şirket ve akademik makale araştırmaları için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/explanatory-output-style",
+    "description_tr": "Uygulama kararları ve kod tabanı desenleri hakkında eğitici açıklamalar ekleyen bir çıktı biçemidir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/expo",
+    "description_tr": "Expo ile React Native uygulamaları geliştirmek, derlemek, yayınlamak, güncellemek ve hata ayıklamak için kullanılan resmi araç setidir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/fakechat",
+    "description_tr": "Bildirim akışını test etmek için token veya üçüncü taraf servis gerektirmeyen yerel bir sohbet arayüzü sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/fastly-agent-toolkit",
+    "description_tr": "Fastly platformunda geliştirme yaparken kullanılan araçlar ve beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/feature-dev",
+    "description_tr": "Kod tabanını keşfetme, mimari tasarım ve kalite incelemesi için özel ajanlar içeren kapsamlı bir özellik geliştirme akışıdır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/fiftyone",
+    "description_tr": "Veri setlerini görselleştirmek, modelleri analiz etmek, yinelenenleri bulmak ve bilgisayarlı görü modellerini değerlendirmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/figma",
+    "description_tr": "Figma tasarım dosyalarına erişip bileşen bilgisi ve tasarım tokenlarını almak, tasarımları koda dönüştürmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/firebase",
+    "description_tr": "Firestore veritabanı, kimlik doğrulama, bulut fonksiyonları, barındırma ve depolama dahil Firebase arka ucunu yönetmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/firecrawl",
+    "description_tr": "Firecrawl ile web sitelerini temiz markdown veya yapılandırılmış veriye dönüştürür; tek sayfa kazıma, tüm site tarama ve web araması yapar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/firestore-native",
+    "description_tr": "Firestore veritabanları, koleksiyonları ve belgeleriyle bağlanıp çalışmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/forge-skills",
+    "description_tr": "Atlassian Forge uygulamaları oluşturmak, dağıtmak, Rovo Search/Chat bağlayıcıları geliştirmek ve dağıtım öncesi inceleme yapmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/frontend-design",
+    "description_tr": "Tipik yapay zeka görünümünden kaçınan, özgün ve üretime hazır kalitede ön yüz arayüzleri tasarlarken kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/fullstory",
+    "description_tr": "Fullstory üzerinden davranışsal analiz, oturum tekrarları ve müşteri deneyimi verilerini sorgulamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/github",
+    "description_tr": "GitHub depolarını yönetmek için kullanılır; sorun açma, pull request yönetimi, kod inceleme ve depo aramayı Claude Code içinden yapar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/gitlab",
+    "description_tr": "GitLab depoları, merge request'leri, CI/CD hatları, sorunlar ve wiki'leri yönetmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/gopls-lsp",
+    "description_tr": "Go dili için kod zekası ve yeniden düzenleme (refactoring) sağlayan bir dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/greptile",
+    "description_tr": "Doğal dilde sorgularla kod tabanında ilgili kodu bulmak, bağımlılıkları anlamak ve mimari sorulara yanıt almak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/hookify",
+    "description_tr": "Konuşma kalıplarını analiz ederek ya da açık talimatlarla, istenmeyen davranışları önleyen özel hook'lar oluşturmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/huggingface-skills",
+    "description_tr": "Açık kaynak yapay zeka modelleri, veri setleri ve space'leri oluşturmak, eğitmek, değerlendirmek ve kullanmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/hunter",
+    "description_tr": "Profesyonel e-posta adresleri bulup doğrulamak, alan adına göre kişi aramak ve şirket verisini zenginleştirmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/hyperframes",
+    "description_tr": "HeyGen'in HyperFrames aracıyla HTML yazıp video üretmek, animasyon, altyazı, seslendirme ve web sitesinden videoya dönüşüm yapmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/imessage",
+    "description_tr": "iMessage ile mesajlaşmayı köprüler; chat.db'yi doğrudan okur, AppleScript ile gönderir, eşleştirme ve izinleri /imessage:access ile yönetir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/intercom",
+    "description_tr": "Intercom konuşmalarını aramak, destek kalıplarını analiz etmek, kişi ve şirketleri sorgulamak ve Intercom Messenger'ı kurmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/jdtls-lsp",
+    "description_tr": "Java için kod zekası sağlayan Eclipse JDT.LS dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/jfrog",
+    "description_tr": "JFrog Platformu'nu kullanarak Artifactory depolarını, güvenlik bulgularını, paket güvenliğini ve SDLC iş akışlarını yönetmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/knowledge-catalog",
+    "description_tr": "Veri platformunuzdaki veri ve yapay zeka varlıklarını keşfetmek, yönetmek, izlemek ve denetlemek için Knowledge Catalog'a bağlanır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/kotlin-lsp",
+    "description_tr": "Kotlin için kod zekası sağlayan bir dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/langfuse-observability",
+    "description_tr": "Claude Code oturumlarını Langfuse ile gözlemlemek (observability) için kullanılan eklentidir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/laravel-boost",
+    "description_tr": "Laravel uygulamaları için Artisan komutları, Eloquent sorguları, yönlendirme ve göç (migration) konularında akıllı yardım sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/learning-output-style",
+    "description_tr": "Karar noktalarında kullanıcıdan anlamlı kod katkısı isteyen etkileşimli bir öğrenme modudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/legalzoom",
+    "description_tr": "İş ve kişisel ihtiyaçlar için avukat rehberliği sunar; yapay zeka ile belge incelemesi yaparak riskleri ve önemli maddeleri işaretler."
+  },
+  {
+    "id": "plugin:claude-plugins-official/linear",
+    "description_tr": "Linear ile sorun oluşturma, proje yönetme, durum güncelleme ve çalışma alanlarında arama yaparak yazılım geliştirme akışını kolaylaştırır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/liquid-lsp",
+    "description_tr": "Shopify Liquid şablonları için Shopify CLI tema dil sunucusu üzerinden LSP desteği sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/liquid-skills",
+    "description_tr": "Shopify temaları için Liquid dili temelleri, CSS/JS/HTML kodlama standartları ve WCAG erişilebilirlik desenleri sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/logfire",
+    "description_tr": "Python uygulamalarına FastAPI, httpx, asyncpg, SQLAlchemy gibi kütüphaneler için otomatik enstrümantasyonla Logfire gözlemlenebilirliği ekler."
+  },
+  {
+    "id": "plugin:claude-plugins-official/logrocket",
+    "description_tr": "LogRocket üzerinden oturum tekrarlarını, metrikleri, sorunları ve kullanıcı davranışını doğal dille sorgulamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/looker",
+    "description_tr": "Looker'a bağlanıp LookML ile veriyle etkileşim kurmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/lovable",
+    "description_tr": "Lovable uygulamalarını Claude Code içinden oluşturmak, geliştirmek, dağıtmak ve yönetmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/lua-lsp",
+    "description_tr": "Lua dili için kod zekası sağlayan bir dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/lumen",
+    "description_tr": "Go AST ayrıştırmasıyla kod tabanını indeksleyip Ollama veya LM Studio ile gömme (embedding) çıkararak tamamen yerel semantik kod araması yapar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/lusha",
+    "description_tr": "Lusha'nın B2B veri platformuyla potansiyel müşteri bulma, doğrulanmış telefon numaralarıyla listeler oluşturma için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/mapbox",
+    "description_tr": "Konum farkındalıklı uygulamalar geliştirmek için Mapbox araçları, harita stilleri ve MCP sunucularını sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/math-olympiad",
+    "description_tr": "IMO, Putnam gibi yarışma matematiği problemlerini, ispatları çürütmeye çalışan bağımsız doğrulayıcılarla çözerken kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/mcp-apps",
+    "description_tr": "MCP Apps SDK'sıyla etkileşimli MCP uygulamaları oluşturmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/mcp-server-dev",
+    "description_tr": "Claude ile sorunsuz çalışan MCP sunucuları tasarlamak ve geliştirmek için dağıtım modelleri, araç tasarımı ve kimlik doğrulama rehberliği sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/mcp-tunnels",
+    "description_tr": "Claude'u özel bir MCP sunucusuna Anthropic MCP tüneli üzerinden bağlar; Docker Compose kurulumunu sertifikalardan örnek sunucuya kadar uçtan uca yürütür."
+  },
+  {
+    "id": "plugin:claude-plugins-official/mercadopago",
+    "description_tr": "Mercado Pago entegrasyonu için sihirbaz, webhook kurulumu, test ortamı ve inceleme becerilerini resmi MCP sunucusu üzerinden sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/microsoft-docs",
+    "description_tr": "Azure, .NET, Windows ve daha fazlası için resmi Microsoft dokümantasyonuna, API referanslarına ve kod örneklerine erişim sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/migration-to-aws",
+    "description_tr": "Google Cloud'dan (OpenAI/Gemini iş yükleri dahil) AWS'e geçiş planlar; altyapı kodunu ve faturalandırmayı analiz ederek mimari ve maliyet önerir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/mintlify",
+    "description_tr": "Mintlify ile dokümantasyon siteleri oluşturmak, dosyaları MDX'e dönüştürmek ve dokümantasyon güncellemelerini otomatikleştirmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/miro",
+    "description_tr": "Miro panolarına güvenli erişimle pano bağlamını okumak, diyagram oluşturmak ve koddan çıktı üretmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/monday-crm",
+    "description_tr": "monday CRM'de doğal dille satış hattı kurma, günlük fırsat özeti çıkarma, tahmin panosu oluşturma ve toplantı notlarını güncellemeye dönüştürme için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/mongodb",
+    "description_tr": "MongoDB veritabanlarına bağlanmak, veriyi keşfetmek, koleksiyonları yönetmek ve sorguları optimize etmek için resmi MCP sunucusu ve becerileri sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/neon",
+    "description_tr": "Neon projelerini ve veritabanlarını neon-postgres becerisi ve Neon MCP Sunucusu ile yönetmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/netlify-skills",
+    "description_tr": "Netlify platformunda fonksiyonlar, kenar fonksiyonları, veritabanı, CDN, formlar ve dağıtım konularında beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/netsuite-suitecloud",
+    "description_tr": "Oracle NetSuite'te SuiteCloud Geliştirme Çerçevesi nesneleri ve UIF uygulamaları yazarken ve NetSuite AI Servis Bağlayıcısı'nı çalıştırırken rehberlik eder."
+  },
+  {
+    "id": "plugin:claude-plugins-official/nightvision",
+    "description_tr": "Web uygulamaları ve REST API'lerindeki istismar edilebilir açıkları bulan NightVision DAST platformuyla çalışmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/nimble",
+    "description_tr": "Web verisini aramak, çıkarmak, haritalamak ve taramak için Nimble'ın yapılandırılmış veri ajanlarını kullanır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/notion",
+    "description_tr": "Notion sayfalarında arama yapmak, belge oluşturup güncellemek ve veritabanlarını yönetmek için Claude Code içinden erişim sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/nvidia-skills",
+    "description_tr": "Hızlandırılmış hesaplama iş yükleri için NVIDIA becerileri sunar; cuOpt Python API'si ile araç rotalama optimizasyonuyla başlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/oracle-ai-data-platform-workbench-engineer-agent",
+    "description_tr": "Oracle AI Data Platform Workbench'te doğal dille Spark/Delta göl ambarını işletmek; SQL üretme, veri alma, boru hattı yazma ve küme yönetimi için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/oracle-ai-data-platform-workbench-spark-connectors",
+    "description_tr": "Oracle AI Data Platform Workbench için Oracle veritabanları, Fusion ERP, Kafka, Iceberg ve dış sistemler dahil çok sayıda Spark bağlayıcısı sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/oracledb",
+    "description_tr": "Oracle veritabanlarına bağlanıp sorgulamak ve veriyle etkileşim kurmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/outputai",
+    "description_tr": "Output.ai iş akışları geliştirmek için planlama, hata ayıklama, değerlendirme ve kimlik bilgisi yönetiminde uzman ajanlar ve onlarca beceri sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/pagerduty",
+    "description_tr": "PagerDuty risk puanlaması ve olay korelasyonuyla commit öncesi değişiklikleri geçmiş olaylara göre değerlendirerek dağıtım riskini ortaya çıkarır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/php-lsp",
+    "description_tr": "PHP için kod zekası sağlayan Intelephense dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/pigment",
+    "description_tr": "Pigment'te iş verisini analiz etmek ve doğal dille özel modeller, metrikler ve panolar oluşturmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/pinecone",
+    "description_tr": "Pinecone vektör veritabanında indeks yönetimi, sorgulama ve hızlı prototipleme için komutlar ve MCP sunucusu sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/planetscale",
+    "description_tr": "PlanetScale organizasyonlarına, veritabanlarına, dallara ve şemaya erişip veriyi sorgulamak, yavaş sorguları tespit etmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/playground",
+    "description_tr": "Görsel kontroller, canlı önizleme ve kopyalanabilir çıktı içeren tek dosyalık etkileşimli HTML oyun alanları (playground) oluşturmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/playwright",
+    "description_tr": "Microsoft'un Playwright MCP sunucusuyla web sayfalarıyla etkileşim kurmak, ekran görüntüsü almak, form doldurmak ve uçtan uca tarayıcı testleri otomatikleştirmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/plugin-dev",
+    "description_tr": "Claude Code eklentileri geliştirmek için hook, MCP entegrasyonu, komut ve ajan konularında yedi uzman beceri içeren kapsamlı bir araç setidir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/posthog",
+    "description_tr": "PostHog analitiği, özellik bayrakları, deneyler ve hata takibine Claude Code içinden erişmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/postiz",
+    "description_tr": "X, LinkedIn, Reddit, YouTube, TikTok, Instagram gibi 28'den fazla platformda gönderi planlama ve analitik takibi için kullanılan sosyal medya otomasyon CLI'sidir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/postman",
+    "description_tr": "Postman MCP Sunucusu ile koleksiyon senkronizasyonu, API keşfi, test çalıştırma, mock oluşturma ve güvenlik denetimi gibi tüm API yaşam döngüsünü yönetmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/pr-review-toolkit",
+    "description_tr": "Yorumlar, testler, hata yönetimi, tip tasarımı ve kod kalitesi konularında uzmanlaşmış ajanlarla kapsamlı PR incelemesi yapar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/prisma",
+    "description_tr": "Prisma MCP entegrasyonuyla Postgres veritabanı yönetimi, şema göçleri ve SQL sorguları için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/project-artifact",
+    "description_tr": "Proje durumunu özet, iş akışı sırası ve sonraki adımlarla birlikte güncellenebilir, paylaşılabilir bir claude.ai sayfası olarak yayınlamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/pydantic-ai",
+    "description_tr": "Pydantic AI ile ajanlar, araçlar, yapılandırılmış çıktı ve akış (streaming) için doğru desenler ve yaygın hatalardan kaçınma rehberliği sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/pyright-lsp",
+    "description_tr": "Python için tip kontrolü ve kod zekası sağlayan Pyright dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/qdrant-skills",
+    "description_tr": "Qdrant vektör aramasında ölçekleme, performans optimizasyonu, arama kalitesi ve model göçü konularında çeşitli dillerde beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/qodo-skills",
+    "description_tr": "Kod kalitesi kontrolü, otomatik test, güvenlik taraması ve uyumluluk doğrulaması gibi yazılım geliştirme görevlerini genişleten yeniden kullanılabilir beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/qt-development-skills",
+    "description_tr": "Qt C++/QML kod incelemesi, kodlama ve dokümantasyonu için ajan tabanlı mühendislik becerileri sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/quarkus-agent",
+    "description_tr": "Quarkus uygulamaları oluşturmak, yönetmek ve etkileşim kurmak için proje iskeletleme, geliştirme modu ve dokümantasyon aramayla bir MCP sunucusu sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/railway",
+    "description_tr": "Railway'de uygulama, veritabanı ve altyapı dağıtımı, ortam yapılandırması, ağ kurulumu ve izleme için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/ralph-loop",
+    "description_tr": "Claude'un önceki çalışmasını görerek aynı görevi tamamlanana kadar tekrar tekrar işlediği, etkileşimli ve yinelemeli bir geliştirme döngüsüdür."
+  },
+  {
+    "id": "plugin:claude-plugins-official/rc",
+    "description_tr": "RevenueCat projelerini, ürünleri ve yetkilendirmeleri Claude Code içinden yapılandırmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/redis-development",
+    "description_tr": "Redis geliştirmede veri yapıları, sorgu motoru, vektör araması, önbellekleme ve performans optimizasyonu için en iyi uygulamaları sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/remember",
+    "description_tr": "Konuşmaları katmanlı günlük kayıtlarına özetleyip sıkıştırarak Claude Code'a kalıcı bellek kazandırır; önceki günün işlerini hatırlamasını sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/resend",
+    "description_tr": "Resend ile e-posta gönderme/alma, agent gelen kutusu, CLI ve React Email bileşenleriyle çalışmak için beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/revenuecat",
+    "description_tr": "RevenueCat projelerini, ürünleri ve yetkilendirmeleri Claude Code içinden yapılandırmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/rill",
+    "description_tr": "Rill iş zekası platformunda proje geliştirmek ve sorgulamak için beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/rootly",
+    "description_tr": "Dağıtım güvenliğinden olay müdahalesine, nöbet yönetiminden retrospektife kadar uçtan uca olay yönetimi için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/ruby-lsp",
+    "description_tr": "Ruby için kod zekası ve analiz sağlayan bir dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/runway-api",
+    "description_tr": "Runway API'si ile toplu reklam kampanyaları, ürün videoları ve yaratıcı içerik için ölçekli video, görsel ve ses üretimi yapar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/rust-analyzer-lsp",
+    "description_tr": "Rust için kod zekası ve analiz sağlayan bir dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/sagemaker-ai",
+    "description_tr": "Amazon SageMaker AI kapsamında yapay zeka modelleri oluşturmak, eğitmek ve dağıtmak için derin AWS uzmanlığı sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/sanity",
+    "description_tr": "Sanity içerik platformunda içerik sorgulama/yazma, GROQ sorguları optimize etme ve şema tasarlama için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/sap-cds-mcp",
+    "description_tr": "SAP CAP projelerinde yapay zeka destekli geliştirme; CDS modellerinde ve dokümantasyonda arama yapmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/sap-fiori-mcp-server",
+    "description_tr": "SAP Fiori uygulamalarını yapay zeka desteğiyle oluşturmak ve değiştirmek için bir MCP sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/sap-mdk-server",
+    "description_tr": "SAP Mobile Development Kit uygulamalarını şema sorgulama, kural düzenleme ve proje iskeletleme ile oluşturmak için bir MCP sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/save-to-spotify",
+    "description_tr": "Metinden sese anlatım, zaman çizelgesi ve kapak görseli içeren ses bölümleri oluşturup Spotify'a kaydetmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/security-guidance",
+    "description_tr": "Claude'un ürettiği kodu güvenlik açısından incelemek için kalıp tabanlı uyarılar, LLM destekli diff incelemesi ve enjeksiyon/XSS gibi açıkları yakalayan commit denetimi sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/semgrep",
+    "description_tr": "Semgrep ile güvenlik açıklarını gerçek zamanlı yakalayarak Claude'un baştan güvenli kod yazmasını sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/sentry",
+    "description_tr": "Sentry üzerinden hata raporlarına erişmek, yığın izlerini analiz etmek ve üretimdeki hataları hata ayıklamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/sentry-cli",
+    "description_tr": "Sentry CLI ile komut satırından Sentry'yle etkileşim kurmak için beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/serena",
+    "description_tr": "Dil sunucusu protokolü üzerinden akıllı kod anlama, yeniden düzenleme önerileri ve kod tabanında gezinme sağlayan semantik bir MCP sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/servicenow-sdk",
+    "description_tr": "Fluent SDK ile ServiceNow uygulamalarını Claude AI yardımıyla oluşturmak, düzenlemek ve dağıtmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/session-report",
+    "description_tr": "Yerel ~/.claude/projects kayıtlarından token kullanımı, önbellek verimliliği ve en maliyetli istemleri gösteren incelenebilir bir HTML rapor üretir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/shopify",
+    "description_tr": "Shopify dokümantasyonunda arama yapmak, GraphQL, Liquid ve UI uzantı kodu üretip doğrulamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/shopify-ai-toolkit",
+    "description_tr": "Shopify platformunda geliştirme için dokümantasyon arama, API şema erişimi, GraphQL/Liquid doğrulama ve mağaza yönetimi gibi onsekiz beceri sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/skill-creator",
+    "description_tr": "Sıfırdan yeni beceri oluşturmak, mevcut becerileri geliştirmek ve performansını ölçmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/slack",
+    "description_tr": "Slack çalışma alanında mesaj arama, kanallara erişim ve konuşmaları okuma; kodlarken ekip iletişimini takip etmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/snowflake-cortex-code",
+    "description_tr": "Snowflake isteklerini Claude Code'dan otomatik olarak Cortex Code'a yönlendirip kod incelemesi ve görev devri yapar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/sonarqube",
+    "description_tr": "Her dosya düzenlemesinden sonra SonarQube ile kod kalitesi ve güvenlik analizini, gizli bilgi taramasını ve kalite kapılarını otomatik uygular."
+  },
+  {
+    "id": "plugin:claude-plugins-official/sonatype-guide",
+    "description_tr": "Yazılım tedarik zinciri güvenliği için bağımlılıkları açık taramak, güvenli sürüm önerileri almak ve bileşen kalitesini kontrol etmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/sourcegraph",
+    "description_tr": "Depolar arasında kod arama, referans izleme, yeniden düzenleme etkisini analiz etme ve commit/diff araması ile olay inceleme için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/spanner",
+    "description_tr": "Spanner veritabanı verisiyle doğal dille bağlanıp etkileşim kurmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/spotify-ads-api",
+    "description_tr": "Spotify reklam kampanyalarını doğal dille oluşturmak, reklam setleri ve raporlar çekmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/stripe",
+    "description_tr": "Stripe ile ödeme entegrasyonu geliştirmek için kullanılan eklentidir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/sumup",
+    "description_tr": "SumUp kart okuyucularıyla terminal ve online ödeme akışları için Android/iOS POS uygulamaları geliştirmek üzere kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/supabase",
+    "description_tr": "Supabase MCP entegrasyonuyla veritabanı işlemleri, kimlik doğrulama, depolama ve gerçek zamanlı abonelikleri yönetmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/superpowers",
+    "description_tr": "Claude'a fikir geliştirme, kod incelemeli subagent tabanlı geliştirme, sistematik hata ayıklama ve kırmızı/yeşil TDD öğretir; ayrıca yeni beceri yazıp test etmeyi de kapsar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/swift-lsp",
+    "description_tr": "Swift için kod zekası sağlayan SourceKit-LSP dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/teamcity-cli",
+    "description_tr": "TeamCity CLI ile derlemeleri keşfetmek, günlükleri görüntülemek, iş başlatmak ve kuyrukları yönetmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/telegram",
+    "description_tr": "Telegram ile mesajlaşmayı köprüler; eşleştirme, izin listesi ve erişim politikasını /telegram:access ile yönetir."
+  },
+  {
+    "id": "plugin:claude-plugins-official/terraform",
+    "description_tr": "Terraform MCP Sunucusu ile altyapı-kod (IaC) geliştirmede otomasyon ve etkileşim sağlar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/togetherai-skills",
+    "description_tr": "Together AI platformunda çıkarım, eğitim, gömme, ince ayar ve toplu çıkarım gibi işler için beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/twilio-developer-kit",
+    "description_tr": "SMS, Sesli Arama, WhatsApp, Verify ve SendGrid dahil Twilio ürünlerinde hangi API'nin hangi sırayla kullanılacağına dair prosedürel bilgi sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/typescript-lsp",
+    "description_tr": "TypeScript/JavaScript için gelişmiş kod zekası sağlayan bir dil sunucusudur."
+  },
+  {
+    "id": "plugin:claude-plugins-official/ui5",
+    "description_tr": "SAPUI5/OpenUI5 projeleri oluşturmak, doğrulamak, linter çalıştırmak ve geliştirme rehberliği almak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/ui5-typescript-conversion",
+    "description_tr": "JavaScript tabanlı SAPUI5/OpenUI5 projelerini TypeScript'e dönüştürmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/valtown",
+    "description_tr": "Val Town üzerinde HTTP val'leri, zamanlanmış görevler, SQLite ve e-posta gibi platform becerileriyle geliştirme ve dağıtım yapmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/vanta",
+    "description_tr": "Vanta MCP sunucusu üzerinden güvenlik ve uyumluluk testlerindeki hataları yerel depo bağlamıyla birleştirip daha hızlı düzeltmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/vanta-mcp-plugin",
+    "description_tr": "Vanta MCP sunucusu üzerinden güvenlik ve uyumluluk testlerindeki hataları yerel depo bağlamıyla birleştirip daha hızlı düzeltmek için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/vercel",
+    "description_tr": "Vercel dağıtımlarını yönetmek, derleme durumunu kontrol etmek, günlüklere erişmek ve alan adlarını yapılandırmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/vibe-prospecting",
+    "description_tr": "Canlı B2B şirket ve kişi verisine bağlanıp potansiyel müşteri arama, eşleştirme, zenginleştirme ve dışa aktarma gibi satış öncesi iş akışları için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/windsor-ai",
+    "description_tr": "Windsor.ai üzerinden Google Ads, Meta, HubSpot, Salesforce gibi 325'ten fazla iş verisi kaynağını terminalden sorgulamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/wix",
+    "description_tr": "Wix site ve uygulamalarını pano uzantıları, arka uç API'leri ve site widget'larıyla oluşturmak, yönetmek ve dağıtmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/wordpress.com",
+    "description_tr": "WordPress Studio ile WordPress siteleri oluşturup düzenlemek, ardından değişiklikleri WordPress.com sitesine dağıtmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/workos",
+    "description_tr": "WorkOS ile AuthKit, SSO, Directory Sync, RBAC, Vault ve denetim günlükleri entegrasyonları için beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/youdotcom-agent-skills",
+    "description_tr": "You.com ile web araması, kaynaklı araştırma ve içerik çıkarımı yapmak; çeşitli ajan çerçeveleriyle entegrasyon kurmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/zapier",
+    "description_tr": "8.000'den fazla uygulamayı yapay zeka iş akışına bağlayıp Zapier eylemlerini doğrudan keşfetmek ve çalıştırmak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/zilliz",
+    "description_tr": "Zilliz Cloud'da küme yaşam döngüsü, koleksiyon şeması, vektör araması, indeks ayarlama ve yedekleme için ondört beceri sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/zoom-plugin",
+    "description_tr": "Zoom entegrasyonlarını REST API, SDK, webhook ve bot üzerinden planlamak, oluşturmak ve hata ayıklamak için kullanılır."
+  },
+  {
+    "id": "plugin:claude-plugins-official/zoominfo",
+    "description_tr": "Şirket ve kişi aramak, potansiyel müşteri zenginleştirmek ve yapay zeka destekli kişi önerileri almak için ZoomInfo araçlarını zincirleyen hazır beceriler sunar."
+  },
+  {
+    "id": "plugin:claude-plugins-official/zscaler",
+    "description_tr": "Zscaler bulut güvenlik platformunda ZPA, ZIA, ZDX gibi bileşenlerle politika oluşturma, bağlantı sorunu giderme ve güvenlik denetimi yapmak için kullanılır."
+  },
+  {
+    "id": "superpowers:brainstorming",
+    "description_tr": "Yeni bir özellik, bileşen ya da davranış eklemeden önce kullanılır; kullanıcı niyetini ve gereksinimleri sorular sorarak netleştirir, tasarımı onaylatmadan uygulamaya geçmez."
+  },
+  {
+    "id": "superpowers:dispatching-parallel-agents",
+    "description_tr": "Birbirinden bağımsız iki veya daha fazla görev olduğunda kullanılır; her görevi ayrı bir subagent'a dağıtarak eşzamanlı ve odaklı çalışılmasını sağlar."
+  },
+  {
+    "id": "superpowers:executing-plans",
+    "description_tr": "Yazılı bir uygulama planını ayrı bir oturumda, denetim noktalarıyla uçtan uca hayata geçirirken kullanılır."
+  },
+  {
+    "id": "superpowers:finishing-a-development-branch",
+    "description_tr": "Uygulama tamamlanıp testler geçtiğinde kullanılır; merge, pull request veya temizlik gibi seçenekleri sunarak işi sonlandırmaya yardımcı olur."
+  },
+  {
+    "id": "superpowers:receiving-code-review",
+    "description_tr": "Kod inceleme geri bildirimi alındığında, özellikle belirsiz veya tartışmalı görünen önerilerde, uygulamadan önce teknik olarak doğrulama yapmak için kullanılır."
+  },
+  {
+    "id": "superpowers:requesting-code-review",
+    "description_tr": "Bir görev tamamlandığında, büyük bir özellik uygulandığında ya da birleştirme öncesinde, işin gereksinimleri karşıladığını doğrulamak için bir inceleme ajanı görevlendirir."
+  },
+  {
+    "id": "superpowers:subagent-driven-development",
+    "description_tr": "Bağımsız görevlerden oluşan bir uygulama planını mevcut oturumda yürütürken kullanılır; her görev için taze bir subagent görevlendirip ardından inceleme yaptırır."
+  },
+  {
+    "id": "superpowers:systematic-debugging",
+    "description_tr": "Bir hata, test başarısızlığı ya da beklenmeyen davranışla karşılaşınca kullanılır; düzeltme önermeden önce sorunun kökünü adım adım bulur."
+  },
+  {
+    "id": "superpowers:test-driven-development",
+    "description_tr": "Herhangi bir özellik veya hata düzeltmesi uygulanmadan önce kullanılır; önce testi yazıp başarısız olduğunu görerek, sonra testi geçecek minimum kodu yazmayı sağlar."
+  },
+  {
+    "id": "superpowers:using-git-worktrees",
+    "description_tr": "Mevcut çalışma alanından izole bir ortamda özellik geliştirmeye başlarken, ya da bir uygulama planını yürütmeden önce kullanılır; yerli araçlarla ya da git worktree ile izole bir çalışma alanı kurar."
+  },
+  {
+    "id": "superpowers:using-superpowers",
+    "description_tr": "Her konuşmanın başında kullanılır; ilgili becerileri bulup çağırmanın kurallarını belirler, uygun bir beceri varsa onu kullanmadan yanıt vermeyi engeller."
+  },
+  {
+    "id": "superpowers:verification-before-completion",
+    "description_tr": "Bir işin tamamlandığını, düzeldiğini ya da testleri geçtiğini iddia etmeden, commit ya da PR oluşturmadan önce kullanılır; başarı iddiasından önce doğrulama komutlarını çalıştırıp kanıt ister."
+  },
+  {
+    "id": "superpowers:writing-plans",
+    "description_tr": "Çok adımlı bir görev için spesifikasyon ya da gereksinimler elde edildiğinde, koda dokunmadan önce ayrıntılı bir uygulama planı yazmak için kullanılır."
+  },
+  {
+    "id": "superpowers:writing-skills",
+    "description_tr": "Yeni beceriler oluştururken, mevcut becerileri düzenlerken ya da bir beceriyi yayına almadan önce doğrularken kullanılır."
+  },
+  {
+    "id": "ponytail:ponytail",
+    "description_tr": "Herhangi bir kodlama görevinde en basit, en kısa ve işe yarayan çözümü zorlamak için kullanılır; standart kütüphaneyi ve platform özelliklerini özel koddan ve bağımlılıktan önce tercih eder."
+  },
+  {
+    "id": "ponytail:ponytail-audit",
+    "description_tr": "Tüm bir depoyu aşırı mühendislik açısından taramak için kullanılır; silinebilecek, sadeleştirilebilecek ya da standart kütüphaneyle değiştirilebilecek kodları sıralı bir raporla listeler."
+  },
+  {
+    "id": "ponytail:ponytail-debt",
+    "description_tr": "Kod tabanındaki `ponytail:` yorumlarıyla işaretlenmiş bilinçli kısayolları toplayıp bir borç defterine dönüştürmek için kullanılır; böylece ertelenen işler unutulmaz."
+  },
+  {
+    "id": "ponytail:ponytail-gain",
+    "description_tr": "Ponytail'in ölçülen etkisini (daha az kod, daha az maliyet, daha fazla hız) tek seferlik kompakt bir skor tablosu olarak göstermek için kullanılır."
+  },
+  {
+    "id": "ponytail:ponytail-help",
+    "description_tr": "Ponytail'in tüm modlarını, becerilerini ve komutlarını özetleyen hızlı bir referans kartı göstermek için kullanılır."
+  },
+  {
+    "id": "ponytail:ponytail-review",
+    "description_tr": "Yalnızca aşırı mühendislik açısından kod incelemesi yapar; gereksiz bağımlılık, spekülatif soyutlama ve gereksiz esneklik gibi silinebilecek noktaları bulur."
+  },
+  {
+    "id": "docs",
+    "description_tr": "Paylaşılıp üzerinde yorum yapılabilen düzenlenebilir belgeler oluşturmak için kullanılır; rapor, sözleşme, form gibi her türlü yazıda dosya biçimi belirtilmediğinde varsayılan seçenektir."
+  },
+  {
+    "id": "docx",
+    "description_tr": "Word belgelerini (.docx) ya da şablonlarını (.dotx) oluşturmak, okumak, düzenlemek veya dönüştürmek istendiğinde kullanılır; özellikle kullanıcı açıkça Word dosyası istediğinde devreye girer."
+  },
+  {
+    "id": "google-workspace",
+    "description_tr": "Google Drive'daki bir Google Dokümanı, E-Tablosu veya Slayt dosyasını oluşturmak ya da değiştirmek istendiğinde kullanılır; API'lerin kendine özgü davranışlarına dair rehberlik sağlar."
+  },
+  {
+    "id": "import-memory",
+    "description_tr": "Başka bir yapay zeka asistanından (ChatGPT, Gemini vb.) dışa aktarılan anıları Claude'un belleğine, veri olarak ele alarak ve adım adım aktarmak için kullanılır."
+  },
+  {
+    "id": "morning",
+    "description_tr": "Kullanıcının sabah özetini stilize bir HTML sayfası olarak göstermek ya da hafta içi tekrarlayan bir görev olarak kurmak için, yalnızca açıkça istendiğinde kullanılır."
+  },
+  {
+    "id": "pdf",
+    "description_tr": "PDF dosyalarıyla ilgili her türlü işlem için kullanılır; metin/tablo çıkarma, birleştirme, bölme, form doldurma, şifreleme ve taranmış belgelerde OCR gibi işlemleri kapsar."
+  },
+  {
+    "id": "pptx",
+    "description_tr": "PowerPoint (.pptx/.potx) sunumları oluşturmak, okumak, düzenlemek ya da dönüştürmek istendiğinde kullanılır."
+  },
+  {
+    "id": "skill-creator",
+    "description_tr": "Sıfırdan yeni bir beceri oluşturmak, mevcut bir beceriyi geliştirmek, test etmek ya da performansını ölçmek için kullanılır."
+  },
+  {
+    "id": "xlsx",
+    "description_tr": "Elektronik tablo dosyalarıyla (xlsx, csv, tsv vb.) çalışırken kullanılır; oluşturma, formül/biçimlendirme düzenleme, veri temizleme ve dönüştürme işlerini kapsar."
+  },
+  {
+    "id": "plugin:code-graph-mcp/code-graph-mcp",
+    "description_tr": "Kod tabanını otomatik indeksleyen bir AST bilgi grafiğiyle akıllı kod gezinme sağlar; semantik arama, çağrı grafiği izleme, HTTP rota takibi ve etki analizi sunar."
+  },
+  {
+    "id": "plugin:ponytail/ponytail",
+    "description_tr": "İşe yarayan en basit çözümü zorlar; YAGNI ilkesiyle önce standart kütüphaneyi dener, elliyi aşan kodu tek satıra indirmeye çalışır."
+  }
+]
