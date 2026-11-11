@@ -19,11 +19,14 @@ public partial class App : Application
     // Kullanıcıya özel çekirdek nesne adları: tek implementasyon için AppPaths.BuildPerUserName kullanılır.
     private static readonly string MutexName = AppPaths.BuildPerUserName(@"Local\Notlar.App.Tek");
     private static readonly string ShowEventName = AppPaths.BuildPerUserName(@"Local\Notlar.App.Goster");
+    private static readonly string CloseEventName = AppPaths.BuildPerUserName(@"Local\Notlar.App.Kapat");
 
     private Mutex? _mutex;
     private bool _isFirstInstance;
     private EventWaitHandle? _showEvent;
     private RegisteredWaitHandle? _showWait;
+    private EventWaitHandle? _closeEvent;
+    private RegisteredWaitHandle? _closeWait;
     private ChangeListener? _listener;
     private TrayIcon? _tray;
     private PanelWindow? _panel;
@@ -40,6 +43,7 @@ public partial class App : Application
             _mutex = new Mutex(initiallyOwned: true, MutexName, out var isFirstInstance);
             _isFirstInstance = isFirstInstance;
             _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+            _closeEvent = new EventWaitHandle(false, EventResetMode.AutoReset, CloseEventName);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
         {
@@ -129,6 +133,11 @@ public partial class App : Application
         }
         _showWait = ThreadPool.RegisterWaitForSingleObject(
             _showEvent, (_, _) => Dispatcher.InvokeAsync(_panel.ShowNearTray), null, Timeout.Infinite, executeOnlyOnce: false);
+        if (_closeEvent is not null)
+        {
+            _closeWait = ThreadPool.RegisterWaitForSingleObject(
+                _closeEvent, (_, _) => Dispatcher.InvokeAsync(Shutdown), null, Timeout.Infinite, executeOnlyOnce: false);
+        }
 
         // Yedekleme ve temizlik I/O ağırlıklıdır; tepsi/panel zaten kurulduktan sonra arka planda çalıştır
         // ki UI iş parçacığı başlangıçta bloklanmasın.
@@ -189,6 +198,7 @@ public partial class App : Application
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _showWait?.Unregister(null);
+        _closeWait?.Unregister(null);
         _listener?.Dispose();
         _tray?.Dispose();
         if (_isFirstInstance) _mutex?.ReleaseMutex();

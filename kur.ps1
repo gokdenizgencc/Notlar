@@ -13,8 +13,29 @@ $mcpDir = Join-Path $target 'mcp'
 $mcpExe = Join-Path $mcpDir 'NotlarMcp.exe'
 
 Write-Host '> Çalışan Notlar süreçleri kapatılıyor...'
-Get-Process NotlarApp, NotlarMcp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Wait-Process -Name NotlarApp, NotlarMcp -Timeout 5 -ErrorAction SilentlyContinue
+$gracefullyClosed = $false
+if (Get-Process NotlarApp -ErrorAction SilentlyContinue) {
+    try {
+        $currentUserSid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+        $closeEventName = "Local\Notlar.App.Kapat.$currentUserSid"
+        $closeEvent = [System.Threading.EventWaitHandle]::OpenExisting($closeEventName)
+        $closeEvent.Set() | Out-Null
+        $closeEvent.Dispose()
+        Wait-Process -Name NotlarApp -Timeout 5 -ErrorAction SilentlyContinue
+        if (-not (Get-Process NotlarApp -ErrorAction SilentlyContinue)) { $gracefullyClosed = $true }
+    } catch {
+        # Olay yoksa (ör. eski sürüm çalışıyor) sessizce zorla kapatmaya düşülür.
+    }
+}
+if ($gracefullyClosed) {
+    Write-Host '> Uygulama düzgün kapatıldı.'
+    Get-Process NotlarMcp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Wait-Process -Name NotlarMcp -Timeout 5 -ErrorAction SilentlyContinue
+} else {
+    Get-Process NotlarApp, NotlarMcp -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Wait-Process -Name NotlarApp, NotlarMcp -Timeout 5 -ErrorAction SilentlyContinue
+    Write-Host '> Zorla kapatıldı.'
+}
 
 Write-Host '> Eski kurulum temizleniyor...'
 if (Test-Path $appDir) { Remove-Item $appDir -Recurse -Force }
