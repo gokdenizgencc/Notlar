@@ -23,7 +23,7 @@ public partial class PanelWindow : Window
     private static readonly StringComparer TrComparer = StringComparer.Create(CultureInfo.GetCultureInfo("tr-TR"), ignoreCase: true);
     private const int RecentDays = 30;
 
-    private enum UndoKind { Note, Task, Memory, Skill, Plan }
+    private enum UndoKind { Note, Task, Memory, Skill, Plan, Project }
 
     /// <summary>Panelin görünür modu: normal not günlüğü, görünür hafıza kartları sekmesi, görünür
     /// yetenek kataloğu sekmesi, görünür planlar sekmesi ya da üçlü tıklamayla açılan gizli kişisel liste.</summary>
@@ -37,6 +37,7 @@ public partial class PanelWindow : Window
     private readonly SkillRegistry _skillRegistry;
     private readonly SkillTranslations _skillTranslations;
     private readonly PlanStore _planStore;
+    private readonly ProjectStore _projectStore;
     private readonly SkillUsageCache _skillUsageCache = new();
     private readonly DispatcherTimer _undoTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly DispatcherTimer _errorTimer = new() { Interval = TimeSpan.FromSeconds(4) };
@@ -57,7 +58,9 @@ public partial class PanelWindow : Window
     private long? _selectedPlanId;
     private Plan? _currentPlan;
     private bool _planTitleEditing;
-    private bool _planPathEditing;
+    private bool _planProjectEditing;
+    private bool _plansShowProjects;
+    private string? _planNewFolderOverride;
 
     private IReadOnlyList<SkillInfo>? _skillInstalledCache;
     private IReadOnlyDictionary<string, SkillUsage>? _skillUsageDataCache;
@@ -83,9 +86,11 @@ public partial class PanelWindow : Window
     public ObservableCollection<MarketplaceGroupVm> MarketplaceGroups { get; } = [];
     public ObservableCollection<PlanListItemVm> Plans { get; } = [];
     public ObservableCollection<PlanStepItemVm> PlanDetailSteps { get; } = [];
+    public ObservableCollection<ProjectItemVm> Projects { get; } = [];
+    public ObservableCollection<ProjectComboItem> PlanProjectOptions { get; } = [];
 
     public PanelWindow(NoteStore store, TaskStore taskStore, MemoryStore memoryStore, SkillRegistry skillRegistry,
-        SkillTranslations skillTranslations, PlanStore planStore)
+        SkillTranslations skillTranslations, PlanStore planStore, ProjectStore projectStore)
     {
         _store = store;
         _taskStore = taskStore;
@@ -93,6 +98,7 @@ public partial class PanelWindow : Window
         _skillRegistry = skillRegistry;
         _skillTranslations = skillTranslations;
         _planStore = planStore;
+        _projectStore = projectStore;
         _settings = AppSettings.Load();
         InitializeComponent();
         DataContext = this;
@@ -105,7 +111,8 @@ public partial class PanelWindow : Window
 
     private bool AnyEditing => DayNotes.Any(n => n.IsEditing) || Tasks.Any(t => t.IsEditing)
         || MemoryGroups.Any(g => g.Items.Any(m => m.IsEditing))
-        || PlanDetailSteps.Any(s => s.IsEditing) || _planTitleEditing || _planPathEditing;
+        || PlanDetailSteps.Any(s => s.IsEditing) || _planTitleEditing || _planProjectEditing
+        || Projects.Any(p => p.IsEditing);
 
     private void OnSettingsChanged()
     {
@@ -324,8 +331,10 @@ public partial class PanelWindow : Window
                 item.IsEditing = false;
         foreach (var step in PlanDetailSteps)
             step.IsEditing = false;
+        foreach (var project in Projects)
+            project.IsEditing = false;
         if (_planTitleEditing) CancelPlanTitleEdit();
-        if (_planPathEditing) CancelPlanPathEdit();
+        if (_planProjectEditing) CancelPlanProjectEdit();
     }
 
     /// <summary>Panel gizliyken gerçek yeniden yükleme işini atlar (DB okuma + UI güncelleme).
@@ -983,6 +992,7 @@ public partial class PanelWindow : Window
                 case UndoKind.Memory: Try(() => { _memoryStore.Restore(id); Reload(); }); break;
                 case UndoKind.Skill: Try(() => { _skillRegistry.Restore(id); RefreshSkillRegistryCache(); }); break;
                 case UndoKind.Plan: Try(() => { _planStore.Restore(id); Reload(); }); break;
+                case UndoKind.Project: Try(() => { _projectStore.Restore(id); Reload(); }); break;
                 default: Try(() => { _store.Restore(id); Reload(); }); break;
             }
         }
@@ -1471,18 +1481,37 @@ public partial class PanelWindow : Window
         });
     }
 
-    /// <summary>Planlar listesini (ya da seçili bir plan varsa detay görünümünü) yeniden yükler.</summary>
+    /// <summary>Planlar listesini (ya da seçili bir plan varsa detay görünümünü, ya da "Projeler" alt
+    /// görünümü seçiliyse proje listesini) yeniden yükler.</summary>
     private void ReloadPlans()
     {
+        SetTabStyle(PlansShowPlansButton, !_plansShowProjects);
+        SetTabStyle(PlansShowProjectsButton, _plansShowProjects);
+
         if (_selectedPlanId is { } id)
         {
+            PlansListPanel.Visibility = Visibility.Collapsed;
+            PlansProjectsPanel.Visibility = Visibility.Collapsed;
             RenderPlanDetail(id);
             return;
         }
 
         PlanDetailPanel.Visibility = Visibility.Collapsed;
-        PlansListPanel.Visibility = Visibility.Visible;
         _currentPlan = null;
+
+        var projects = _projectStore.List();
+        RebuildPlanProjectOptions(projects);
+
+        if (_plansShowProjects)
+        {
+            PlansListPanel.Visibility = Visibility.Collapsed;
+            PlansProjectsPanel.Visibility = Visibility.Visible;
+            RenderProjects(projects);
+            return;
+        }
+
+        PlansListPanel.Visibility = Visibility.Visible;
+        PlansProjectsPanel.Visibility = Visibility.Collapsed;
 
         var plans = _planStore.ListPlans();
         Plans.Clear();
@@ -1490,10 +1519,146 @@ public partial class PanelWindow : Window
         {
             var (_, steps) = _planStore.GetPlan(plan.Id);
             var done = steps.Count(s => s.Status is StepStatus.Bitti or StepStatus.Atlandi);
-            Plans.Add(new PlanListItemVm(plan.Id, plan.Title, plan.ProjectPath, ShortenPath(plan.ProjectPath),
+            var (full, shortLabel) = DescribePlanLocation(plan, projects);
+            Plans.Add(new PlanListItemVm(plan.Id, plan.Title, full, shortLabel,
                 PlanStatusLabel(plan.Status), PlanStatusBrush(plan.Status), $"{done}/{steps.Count} adım"));
         }
         PlansEmptyText.Visibility = Plans.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Bir planın konumunu (tam metin, kısa/görünen metin) açıklar: bağlı projesi varsa adı,
+    /// yoksa kendi kayıtlı klasörü, o da yoksa "(klasör yok)".</summary>
+    private static (string Full, string Short) DescribePlanLocation(Plan plan, IReadOnlyList<Project> projects)
+    {
+        if (plan.ProjectId is { } projectId)
+        {
+            var project = projects.FirstOrDefault(p => p.Id == projectId);
+            if (project is not null)
+                return ($"{project.Name} ({project.Path})", $"📁 {project.Name}");
+        }
+        if (plan.ProjectPath is { } path)
+            return (path, ShortenPath(path));
+        return ("(klasör yok)", "(klasör yok)");
+    }
+
+    private void RebuildPlanProjectOptions(IReadOnlyList<Project> projects)
+    {
+        PlanProjectOptions.Clear();
+        PlanProjectOptions.Add(new ProjectComboItem(null, "(Proje yok)"));
+        foreach (var project in projects)
+            PlanProjectOptions.Add(new ProjectComboItem(project.Id, project.Name));
+    }
+
+    private void RenderProjects(IReadOnlyList<Project> projects)
+    {
+        Projects.Clear();
+        foreach (var project in projects)
+            Projects.Add(new ProjectItemVm(project));
+        ProjectsEmptyText.Visibility = Projects.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void PlansShowPlans_Click(object sender, RoutedEventArgs e)
+    {
+        CancelAllEdits();
+        _plansShowProjects = false;
+        Reload();
+    }
+
+    private void PlansShowProjects_Click(object sender, RoutedEventArgs e)
+    {
+        CancelAllEdits();
+        _plansShowProjects = true;
+        Reload();
+    }
+
+    private void ProjectAddExpander_Expanded(object sender, RoutedEventArgs e) =>
+        Dispatcher.InvokeAsync(() => ProjectNameBox.Focus(), DispatcherPriority.Input);
+
+    private void ProjectAddClose_Click(object sender, RoutedEventArgs e) => ProjectAddExpander.IsExpanded = false;
+
+    private void ProjectPathBrowseNew_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new Forms.FolderBrowserDialog();
+        var current = ProjectPathBox.Text.Trim();
+        if (current.Length > 0 && Directory.Exists(current)) dialog.SelectedPath = current;
+        if (dialog.ShowDialog(DialogOwner) == Forms.DialogResult.OK)
+            ProjectPathBox.Text = dialog.SelectedPath;
+    }
+
+    private void ProjectAdd_Click(object sender, RoutedEventArgs e)
+    {
+        var name = ProjectNameBox.Text.Trim();
+        var path = ProjectPathBox.Text.Trim();
+        if (name.Length == 0) { ShowError("Proje adı boş olamaz."); return; }
+        if (path.Length == 0) { ShowError("Proje klasörü boş olamaz."); return; }
+        Try(() =>
+        {
+            _projectStore.Add(name, path);
+            ProjectNameBox.Clear();
+            ProjectPathBox.Clear();
+            ProjectAddExpander.IsExpanded = false;
+            Reload();
+        });
+    }
+
+    private void ProjectEditButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: ProjectItemVm item }) return;
+        item.EditName = item.Name;
+        item.EditPath = item.Path;
+        item.IsEditing = true;
+    }
+
+    private void ProjectEditBrowse_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: ProjectItemVm item }) return;
+        using var dialog = new Forms.FolderBrowserDialog();
+        if (Directory.Exists(item.EditPath)) dialog.SelectedPath = item.EditPath;
+        if (dialog.ShowDialog(DialogOwner) == Forms.DialogResult.OK)
+            item.EditPath = dialog.SelectedPath;
+    }
+
+    private void ProjectEditSave_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: ProjectItemVm item }) return;
+        SaveProjectEdit(item);
+    }
+
+    private void SaveProjectEdit(ProjectItemVm item)
+    {
+        var name = item.EditName.Trim();
+        var path = item.EditPath.Trim();
+        if (name.Length == 0) { ShowError("Proje adı boş olamaz."); return; }
+        if (path.Length == 0) { ShowError("Proje klasörü boş olamaz."); return; }
+        item.IsEditing = false;
+        if (name != item.Name || path != item.Path)
+            Try(() => _projectStore.Update(item.Id, name, path));
+        Reload();
+    }
+
+    private void ProjectEditCancel_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ProjectItemVm item })
+        {
+            item.IsEditing = false;
+            if (_reloadPending) Reload();
+        }
+    }
+
+    private void ProjectDeleteButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: ProjectItemVm item }) return;
+        Try(() =>
+        {
+            _projectStore.Delete(item.Id);
+            _undoId = item.Id;
+            _undoKind = UndoKind.Project;
+            UndoText.Text = "Proje silindi.";
+            UndoBar.Visibility = Visibility.Visible;
+            _undoTimer.Stop();
+            _undoTimer.Start();
+            Reload();
+        });
     }
 
     /// <summary>Bir plan kartına tıklayınca detay görünümüne geçer, "📁 Başka klasör"/adım düzenleme
@@ -1516,23 +1681,27 @@ public partial class PanelWindow : Window
 
         _currentPlan = plan;
         PlansListPanel.Visibility = Visibility.Collapsed;
+        PlansProjectsPanel.Visibility = Visibility.Collapsed;
         PlanDetailPanel.Visibility = Visibility.Visible;
 
         if (!_planTitleEditing)
             PlanDetailTitleText.Text = plan.Title;
-        if (!_planPathEditing)
+
+        if (!_planProjectEditing)
         {
-            PlanDetailPathText.Text = plan.ProjectPath;
-            PlanDetailPathText.ToolTip = plan.ProjectPath;
+            var projects = _projectStore.List();
+            var (full, _) = DescribePlanLocation(plan, projects);
+            PlanDetailPathText.Text = full;
+            PlanDetailPathText.ToolTip = full;
         }
 
         PlanDetailTitleText.Visibility = _planTitleEditing ? Visibility.Collapsed : Visibility.Visible;
         PlanTitleEditButton.Visibility = _planTitleEditing ? Visibility.Collapsed : Visibility.Visible;
         PlanTitleEditRow.Visibility = _planTitleEditing ? Visibility.Visible : Visibility.Collapsed;
 
-        PlanDetailPathText.Visibility = _planPathEditing ? Visibility.Collapsed : Visibility.Visible;
-        PlanPathEditButton.Visibility = _planPathEditing ? Visibility.Collapsed : Visibility.Visible;
-        PlanPathEditRow.Visibility = _planPathEditing ? Visibility.Visible : Visibility.Collapsed;
+        PlanDetailPathText.Visibility = _planProjectEditing ? Visibility.Collapsed : Visibility.Visible;
+        PlanPathEditButton.Visibility = _planProjectEditing ? Visibility.Collapsed : Visibility.Visible;
+        PlanPathEditRow.Visibility = _planProjectEditing ? Visibility.Visible : Visibility.Collapsed;
 
         PlanDetailSteps.Clear();
         foreach (var step in steps)
@@ -1584,10 +1753,30 @@ public partial class PanelWindow : Window
         Reload();
     }
 
-    private void PlanAddExpander_Expanded(object sender, RoutedEventArgs e) =>
+    private void PlanAddExpander_Expanded(object sender, RoutedEventArgs e)
+    {
+        PlanProjectBox.SelectedIndex = PlanProjectOptions.Count > 0 ? 0 : -1;
+        SetPlanNewFolderOverride(null);
+        PlanStepsEditorControl.Clear();
         Dispatcher.InvokeAsync(() => PlanTitleBox.Focus(), DispatcherPriority.Input);
+    }
 
     private void PlanAddClose_Click(object sender, RoutedEventArgs e) => PlanAddExpander.IsExpanded = false;
+
+    private void SetPlanNewFolderOverride(string? folder)
+    {
+        _planNewFolderOverride = folder;
+        PlanNewFolderText.Text = folder ?? "";
+        PlanNewFolderClearButton.Visibility = folder is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void PlanProjectBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if ((PlanProjectBox.SelectedItem as ProjectComboItem)?.Id is not null)
+            SetPlanNewFolderOverride(null);
+    }
+
+    private void PlanNewFolderClear_Click(object sender, RoutedEventArgs e) => SetPlanNewFolderOverride(null);
 
     /// <summary>Panel Topmost olduğundan, WinForms klasör seçici için panelin kendi pencere tutamacını
     /// sahip (owner) olarak verir; aksi halde dialog panelin arkasında kalabilir.</summary>
@@ -1601,25 +1790,28 @@ public partial class PanelWindow : Window
     private void PlanPathBrowseNew_Click(object sender, RoutedEventArgs e)
     {
         using var dialog = new Forms.FolderBrowserDialog();
-        var current = PlanPathBox.Text.Trim();
-        if (current.Length > 0 && Directory.Exists(current)) dialog.SelectedPath = current;
-        if (dialog.ShowDialog(DialogOwner) == Forms.DialogResult.OK)
-            PlanPathBox.Text = dialog.SelectedPath;
+        if (_planNewFolderOverride is { } current && Directory.Exists(current)) dialog.SelectedPath = current;
+        if (dialog.ShowDialog(DialogOwner) != Forms.DialogResult.OK) return;
+        SetPlanNewFolderOverride(dialog.SelectedPath);
+        PlanProjectBox.SelectedIndex = 0; // "(Proje yok)": tek seferlik klasör ile proje seçimi birbirini dışlar.
     }
 
     private void PlanCreate_Click(object sender, RoutedEventArgs e)
     {
         var title = PlanTitleBox.Text.Trim();
-        var path = PlanPathBox.Text.Trim();
-        var steps = PlanStepsBox.Text.Replace("\r\n", "\n").Split('\n')
-            .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
-        if (title.Length == 0 || path.Length == 0 || steps.Count == 0) return;
+        var steps = PlanStepsEditorControl.Steps;
+        if (title.Length == 0) { ShowError("Plan başlığı boş olamaz."); return; }
+        if (steps.Count == 0) { ShowError("En az bir adım eklemelisiniz."); return; }
+
+        var projectId = (PlanProjectBox.SelectedItem as ProjectComboItem)?.Id;
+        var folder = projectId is null ? _planNewFolderOverride : null;
+
         Try(() =>
         {
-            _planStore.CreatePlan(title, path, steps);
+            _planStore.CreatePlan(title, folder, steps, projectId);
             PlanTitleBox.Clear();
-            PlanPathBox.Clear();
-            PlanStepsBox.Clear();
+            PlanStepsEditorControl.Clear();
+            SetPlanNewFolderOverride(null);
             PlanAddExpander.IsExpanded = false;
             Reload();
         });
@@ -1683,11 +1875,13 @@ public partial class PanelWindow : Window
             return;
         }
 
-        var question = $"Claude Code bu klasörde açılıp planı uygulamaya başlayacak: {plan.ProjectPath}. Devam edilsin mi?";
+        var effectiveFolder = PlanFolder.Resolve(plan, _projectStore);
+        var folderLabel = effectiveFolder ?? "Kullanıcı klasörü (proje bağlı değil)";
+        var question = $"Claude Code bu klasörde açılıp planı uygulamaya başlayacak: {folderLabel}. Devam edilsin mi?";
         if (MessageBox.Show(question, "Notlar", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
 
-        Try(() => PlanLauncher.Launch(plan));
+        Try(() => PlanLauncher.Launch(plan, effectiveFolder));
     }
 
     private void PlanTitleEditButton_Click(object sender, RoutedEventArgs e)
@@ -1742,62 +1936,70 @@ public partial class PanelWindow : Window
     private void PlanPathEditButton_Click(object sender, RoutedEventArgs e)
     {
         if (_currentPlan is not { } plan) return;
-        _planPathEditing = true;
-        PlanDetailPathBox.Text = plan.ProjectPath;
+        _planProjectEditing = true;
+        var selected = PlanProjectOptions.FirstOrDefault(o => o.Id == plan.ProjectId) ?? PlanProjectOptions.FirstOrDefault();
+        PlanDetailProjectBox.ItemsSource = PlanProjectOptions;
+        PlanDetailProjectBox.SelectedItem = selected;
+        PlanDetailPathBox.Text = plan.ProjectId is null ? plan.ProjectPath ?? "" : "";
         PlanDetailPathText.Visibility = Visibility.Collapsed;
         PlanPathEditButton.Visibility = Visibility.Collapsed;
         PlanPathEditRow.Visibility = Visibility.Visible;
         Dispatcher.InvokeAsync(() => { PlanDetailPathBox.Focus(); PlanDetailPathBox.SelectAll(); }, DispatcherPriority.Input);
     }
 
-    private void CancelPlanPathEdit()
+    private void CancelPlanProjectEdit()
     {
-        _planPathEditing = false;
+        _planProjectEditing = false;
         PlanDetailPathText.Visibility = Visibility.Visible;
         PlanPathEditButton.Visibility = Visibility.Visible;
         PlanPathEditRow.Visibility = Visibility.Collapsed;
         if (_reloadPending) Reload();
     }
 
-    private void PlanPathEditCancel_Click(object sender, RoutedEventArgs e) => CancelPlanPathEdit();
+    private void PlanPathEditCancel_Click(object sender, RoutedEventArgs e) => CancelPlanProjectEdit();
 
-    private void PlanPathEditBox_KeyDown(object sender, KeyEventArgs e)
+    private void PlanPathEditBrowse_Click(object sender, RoutedEventArgs e)
     {
-        if (e.Key == Key.Enter)
-        {
-            e.Handled = true;
-            SavePlanPathEdit();
-        }
-        else if (e.Key == Key.Escape)
-        {
-            e.Handled = true;
-            CancelPlanPathEdit();
-        }
+        using var dialog = new Forms.FolderBrowserDialog();
+        var current = PlanDetailPathBox.Text.Trim();
+        if (current.Length > 0 && Directory.Exists(current)) dialog.SelectedPath = current;
+        if (dialog.ShowDialog(DialogOwner) != Forms.DialogResult.OK) return;
+        PlanDetailPathBox.Text = dialog.SelectedPath;
+        PlanDetailProjectBox.SelectedItem = PlanProjectOptions.FirstOrDefault(o => o.Id is null);
     }
 
-    private void SavePlanPathEdit()
+    private void PlanPathEditSave_Click(object sender, RoutedEventArgs e) => SavePlanProjectEdit();
+
+    /// <summary>Plan konum düzenlemesini kaydeder: ComboBox'ta bir proje seçiliyse plana bağlanır
+    /// (eski tek seferlik klasör korunur ama PlanFolder.Resolve proje yolunu öncelikli kullanır); "(Proje
+    /// yok)" seçiliyken klasör kutusu doluysa plan projeden koparılıp o klasöre bağlanır; ikisi de boşsa
+    /// plan hiçbir klasöre bağlı kalmaz.</summary>
+    private void SavePlanProjectEdit()
     {
-        if (_currentPlan is not { } plan) { CancelPlanPathEdit(); return; }
-        var text = PlanDetailPathBox.Text.Trim();
-        _planPathEditing = false;
+        if (_currentPlan is not { } plan) { CancelPlanProjectEdit(); return; }
+        var selectedProjectId = (PlanDetailProjectBox.SelectedItem as ProjectComboItem)?.Id;
+        var folderText = PlanDetailPathBox.Text.Trim();
+
+        _planProjectEditing = false;
         PlanDetailPathText.Visibility = Visibility.Visible;
         PlanPathEditButton.Visibility = Visibility.Visible;
         PlanPathEditRow.Visibility = Visibility.Collapsed;
-        if (text.Length > 0 && text != plan.ProjectPath)
-            Try(() => _planStore.UpdatePlan(plan.Id, projectPath: text));
-        Reload();
-    }
 
-    private void PlanPathBrowse_Click(object sender, RoutedEventArgs e)
-    {
-        if (_currentPlan is not { } plan) return;
-        using var dialog = new Forms.FolderBrowserDialog();
-        if (Directory.Exists(plan.ProjectPath)) dialog.SelectedPath = plan.ProjectPath;
-        if (dialog.ShowDialog(DialogOwner) != Forms.DialogResult.OK) return;
         Try(() =>
         {
-            _planStore.UpdatePlan(plan.Id, projectPath: dialog.SelectedPath);
-            _planPathEditing = false;
+            if (selectedProjectId is { } projectId)
+            {
+                _planStore.UpdatePlan(plan.Id, projectId: projectId);
+            }
+            else if (folderText.Length > 0)
+            {
+                if (plan.ProjectId is not null) _planStore.UpdatePlan(plan.Id, clearProject: true);
+                _planStore.UpdatePlan(plan.Id, projectPath: folderText);
+            }
+            else
+            {
+                _planStore.UpdatePlan(plan.Id, clearProject: true);
+            }
             Reload();
         });
     }

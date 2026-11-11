@@ -347,7 +347,7 @@
                             </Border>
                         </StackPanel>
                         <TextBlock Text="{Binding ProjectShort}" Foreground="{DynamicResource Muted}" FontSize="11"
-                                   Margin="0,2,0,0" ToolTip="{Binding ProjectPath}"/>
+                                   Margin="0,2,0,0" ToolTip="{Binding ProjectFull}"/>
                         <TextBlock Text="{Binding ProgressLabel}" Foreground="{DynamicResource Muted}" FontSize="11"
                                    Margin="0,2,0,0"/>
                     </StackPanel>
@@ -361,6 +361,52 @@
             <DataTemplate.Triggers>
                 <Trigger SourceName="PlanRow" Property="IsMouseOver" Value="True">
                     <Setter TargetName="PlanRow" Property="Background" Value="{DynamicResource Surface}"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ProjectRowTemplate" DataType="{x:Type local:ProjectItemVm}">
+            <Border x:Name="ProjectRow" Background="Transparent" Padding="8,6" CornerRadius="4">
+                <StackPanel>
+                    <Grid Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Path}" Foreground="{DynamicResource Muted}" FontSize="11"
+                                       Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                            <Button Content="✏️" ToolTip="Düzenle" Style="{StaticResource FlatButton}" Click="ProjectEditButton_Click"/>
+                            <Button Content="🗑" ToolTip="Sil" Style="{StaticResource FlatButton}" Click="ProjectDeleteButton_Click"/>
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}">
+                        <Grid Margin="0,0,0,4">
+                            <TextBox Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                     CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}" Padding="4"/>
+                        </Grid>
+                        <DockPanel Margin="0,0,0,6" LastChildFill="True">
+                            <Button DockPanel.Dock="Right" Content="📁" ToolTip="Klasör seç" Style="{StaticResource FlatButton}"
+                                    Click="ProjectEditBrowse_Click"/>
+                            <TextBox Text="{Binding EditPath, UpdateSourceTrigger=PropertyChanged}"
+                                     Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                     CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}" Padding="4"/>
+                        </DockPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="✕" ToolTip="Vazgeç" Style="{StaticResource FlatButton}" Click="ProjectEditCancel_Click"/>
+                            <Button Content="Kaydet" Style="{StaticResource FlatButton}" Background="{DynamicResource Accent}"
+                                    Foreground="{DynamicResource OnAccent}" Padding="12,4" Margin="6,0,0,0" Click="ProjectEditSave_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="ProjectRow" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="ProjectRow" Property="Background" Value="{DynamicResource Surface}"/>
                 </Trigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -886,6 +932,15 @@
                 </StackPanel>
 
                 <StackPanel x:Name="PlansPanel" Visibility="Collapsed">
+                    <DockPanel LastChildFill="False" Margin="0,0,0,6">
+                        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                            <Button x:Name="PlansShowPlansButton" Content="📋 Planlar" Click="PlansShowPlans_Click"
+                                    Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,0"/>
+                            <Button x:Name="PlansShowProjectsButton" Content="📁 Projeler" Click="PlansShowProjects_Click"
+                                    Style="{StaticResource FlatButton}" Padding="8,2"/>
+                        </StackPanel>
+                    </DockPanel>
+
                     <StackPanel x:Name="PlansListPanel">
                         <TextBlock x:Name="PlansEmptyText" Text="Henüz plan yok." Foreground="{DynamicResource Muted}"
                                    HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
@@ -915,18 +970,47 @@
                                             </TextBlock>
                                         </Grid>
                                     </DockPanel>
+                                    <ComboBox x:Name="PlanProjectBox" ItemsSource="{Binding PlanProjectOptions}"
+                                              Margin="0,0,0,4" ToolTip="Proje seç (isteğe bağlı)"
+                                              SelectionChanged="PlanProjectBox_SelectionChanged"/>
                                     <DockPanel Margin="0,0,0,4" LastChildFill="True">
-                                        <Button DockPanel.Dock="Right" Content="📁" ToolTip="Klasör seç" Click="PlanPathBrowseNew_Click"
+                                        <Button DockPanel.Dock="Left" Content="📁 veya klasör seç…" Click="PlanPathBrowseNew_Click"
+                                                Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" Padding="0,2"/>
+                                        <Button x:Name="PlanNewFolderClearButton" DockPanel.Dock="Right" Content="✕" ToolTip="Klasörü kaldır"
+                                                Click="PlanNewFolderClear_Click" Style="{StaticResource FlatButton}" Visibility="Collapsed"/>
+                                        <TextBlock x:Name="PlanNewFolderText" Foreground="{DynamicResource Muted}" FontSize="11"
+                                                   Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                    <local:PlanStepsEditor x:Name="PlanStepsEditorControl" Margin="0,2,0,6"/>
+                                    <Button Content="Oluştur" Click="PlanCreate_Click" HorizontalAlignment="Right"
+                                            Style="{StaticResource FlatButton}" Background="{DynamicResource Accent}"
+                                            Foreground="{DynamicResource OnAccent}" Padding="12,4"/>
+                                </StackPanel>
+                            </Border>
+                        </Expander>
+                    </StackPanel>
+
+                    <StackPanel x:Name="PlansProjectsPanel" Visibility="Collapsed">
+                        <TextBlock x:Name="ProjectsEmptyText" Text="Henüz proje yok." Foreground="{DynamicResource Muted}"
+                                   HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
+                        <ItemsControl ItemsSource="{Binding Projects}" ItemTemplate="{StaticResource ProjectRowTemplate}"/>
+                        <Expander x:Name="ProjectAddExpander" Header="+ Yeni proje" Foreground="{DynamicResource Muted}"
+                                  IsExpanded="False" Expanded="ProjectAddExpander_Expanded" Margin="0,8,0,0">
+                            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                                    BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,0">
+                                <StackPanel>
+                                    <DockPanel Margin="0,0,0,4" LastChildFill="True">
+                                        <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="ProjectAddClose_Click"
                                                 Style="{StaticResource FlatButton}"/>
                                         <Grid>
-                                            <TextBox x:Name="PlanPathBox" Background="Transparent" BorderThickness="0" Padding="2"
+                                            <TextBox x:Name="ProjectNameBox" Background="Transparent" BorderThickness="0" Padding="2"
                                                      Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"/>
-                                            <TextBlock Text="Proje klasörü" Foreground="{DynamicResource Muted}" Margin="4,2" IsHitTestVisible="False">
+                                            <TextBlock Text="Ad" Foreground="{DynamicResource Muted}" Margin="4,2" IsHitTestVisible="False">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Setter Property="Visibility" Value="Collapsed"/>
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Text, ElementName=PlanPathBox}" Value="">
+                                                            <DataTrigger Binding="{Binding Text, ElementName=ProjectNameBox}" Value="">
                                                                 <Setter Property="Visibility" Value="Visible"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
@@ -935,25 +1019,27 @@
                                             </TextBlock>
                                         </Grid>
                                     </DockPanel>
-                                    <Grid Margin="0,0,0,6">
-                                        <TextBox x:Name="PlanStepsBox" Background="Transparent" BorderThickness="0" Padding="2"
-                                                 Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
-                                                 TextWrapping="Wrap" AcceptsReturn="True" MinLines="3" MaxLines="8"/>
-                                        <TextBlock Text="Adımlar (her satıra bir adım)" Foreground="{DynamicResource Muted}" Margin="4,2"
-                                                   IsHitTestVisible="False" VerticalAlignment="Top">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Text, ElementName=PlanStepsBox}" Value="">
-                                                            <Setter Property="Visibility" Value="Visible"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </Grid>
-                                    <Button Content="Oluştur" Click="PlanCreate_Click" HorizontalAlignment="Right"
+                                    <DockPanel Margin="0,0,0,6" LastChildFill="True">
+                                        <Button DockPanel.Dock="Right" Content="📁" ToolTip="Klasör seç" Click="ProjectPathBrowseNew_Click"
+                                                Style="{StaticResource FlatButton}"/>
+                                        <Grid>
+                                            <TextBox x:Name="ProjectPathBox" Background="Transparent" BorderThickness="0" Padding="2"
+                                                     Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"/>
+                                            <TextBlock Text="Klasör" Foreground="{DynamicResource Muted}" Margin="4,2" IsHitTestVisible="False">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Text, ElementName=ProjectPathBox}" Value="">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </DockPanel>
+                                    <Button Content="Ekle" Click="ProjectAdd_Click" HorizontalAlignment="Right"
                                             Style="{StaticResource FlatButton}" Background="{DynamicResource Accent}"
                                             Foreground="{DynamicResource OnAccent}" Padding="12,4"/>
                                 </StackPanel>
@@ -984,21 +1070,26 @@
                         </DockPanel>
 
                         <DockPanel Margin="2,0,2,8" LastChildFill="True">
-                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                                <Button Content="📁" ToolTip="Klasör seç" Click="PlanPathBrowse_Click" Style="{StaticResource FlatButton}"/>
-                                <Button x:Name="PlanPathEditButton" Content="✏️" ToolTip="Düzenle" Click="PlanPathEditButton_Click"
-                                        Style="{StaticResource FlatButton}"/>
-                            </StackPanel>
+                            <Button x:Name="PlanPathEditButton" DockPanel.Dock="Right" Content="✏️" ToolTip="Düzenle"
+                                    Click="PlanPathEditButton_Click" Style="{StaticResource FlatButton}"/>
                             <TextBlock x:Name="PlanDetailPathText" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
                                        VerticalAlignment="Center"/>
                         </DockPanel>
-                        <DockPanel x:Name="PlanPathEditRow" Margin="2,0,2,8" Visibility="Collapsed" LastChildFill="True">
-                            <Button DockPanel.Dock="Right" Content="✕" ToolTip="Vazgeç" Click="PlanPathEditCancel_Click"
-                                    Style="{StaticResource FlatButton}"/>
-                            <TextBox x:Name="PlanDetailPathBox" Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
-                                     CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}" Padding="2"
-                                     KeyDown="PlanPathEditBox_KeyDown"/>
-                        </DockPanel>
+                        <StackPanel x:Name="PlanPathEditRow" Margin="2,0,2,8" Visibility="Collapsed">
+                            <ComboBox x:Name="PlanDetailProjectBox" ItemsSource="{Binding PlanProjectOptions}" Margin="0,0,0,4"/>
+                            <DockPanel LastChildFill="True">
+                                <Button DockPanel.Dock="Right" Content="📁" ToolTip="Klasör seç" Click="PlanPathEditBrowse_Click"
+                                        Style="{StaticResource FlatButton}"/>
+                                <TextBox x:Name="PlanDetailPathBox" Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                         CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}" Padding="2"/>
+                            </DockPanel>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
+                                <Button Content="✕" ToolTip="Vazgeç" Click="PlanPathEditCancel_Click" Style="{StaticResource FlatButton}"/>
+                                <Button Content="Kaydet" Click="PlanPathEditSave_Click" Style="{StaticResource FlatButton}"
+                                        Background="{DynamicResource Accent}" Foreground="{DynamicResource OnAccent}"
+                                        Padding="12,4" Margin="6,0,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
 
                         <ItemsControl ItemsSource="{Binding PlanDetailSteps}" ItemTemplate="{StaticResource PlanStepRowTemplate}"/>
 

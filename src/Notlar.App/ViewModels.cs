@@ -152,9 +152,61 @@ public sealed class MarketplacePluginVm(string marketplace, string name, string 
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-/// <summary>Planlar sekmesinde liste görünümündeki bir plan kartının görünüm modeli.</summary>
+/// <summary>Planlar sekmesinde liste görünümündeki bir plan kartının görünüm modeli. ProjectFull tam
+/// metin (proje adı ya da klasör yolu ya da "(klasör yok)") ToolTip'te, ProjectShort kısaltılmış/adıyla
+/// satırda gösterilir.</summary>
 public sealed record PlanListItemVm(
-    long Id, string Title, string ProjectPath, string ProjectShort, string StatusLabel, Brush StatusBrush, string ProgressLabel);
+    long Id, string Title, string ProjectFull, string ProjectShort, string StatusLabel, Brush StatusBrush, string ProgressLabel);
+
+/// <summary>Projeler sekmesinde bir proje kartının görünüm modeli (ad/klasör satır içi düzenleme desteğiyle).</summary>
+public sealed class ProjectItemVm(Project project) : INotifyPropertyChanged
+{
+    private bool _isEditing;
+    private string _editName = "";
+    private string _editPath = "";
+
+    public Project Project { get; } = project;
+    public long Id => Project.Id;
+    public string Name => Project.Name;
+    public string Path => Project.Path;
+
+    public bool IsEditing
+    {
+        get => _isEditing;
+        set
+        {
+            if (_isEditing == value) return;
+            _isEditing = value;
+            OnChanged();
+            OnChanged(nameof(IsViewing));
+        }
+    }
+
+    public bool IsViewing => !_isEditing;
+
+    public string EditName
+    {
+        get => _editName;
+        set { _editName = value; OnChanged(); }
+    }
+
+    public string EditPath
+    {
+        get => _editPath;
+        set { _editPath = value; OnChanged(); }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+/// <summary>Plan oluşturma/düzenleme ComboBox'ında bir proje seçeneği ("(Proje yok)" için Id null'dur).</summary>
+public sealed record ProjectComboItem(long? Id, string Name)
+{
+    public override string ToString() => Name;
+}
 
 /// <summary>Plan detay görünümünde bir adımın görünüm modeli (satır içi düzenleme desteğiyle).</summary>
 public sealed class PlanStepItemVm(PlanStep step) : INotifyPropertyChanged
