@@ -25,13 +25,8 @@ public partial class PanelWindow : Window
     private string? _tagFilter;
     private long? _undoId;
     private bool _reloadPending;
-    private bool _isDirty;
     private bool _showAll;
     private DateTime _lastHiddenAt = DateTime.MinValue;
-
-    /// <summary>Panel gizliyken gelen bir Reload() isteğinin verisinin henüz yansıtılmadığını belirtir;
-    /// ShowNearTray zaten koşulsuz yeniden yüklediği için ek bir tetikleyici gerekmez.</summary>
-    public bool IsDirty => _isDirty;
 
     public ObservableCollection<DayGroupItem> Groups { get; } = [];
     public ObservableCollection<TagChip> Tags { get; } = [];
@@ -59,8 +54,8 @@ public partial class PanelWindow : Window
         var area = SystemParameters.WorkArea;
         Left = area.Right - Width - 8;
         Top = area.Bottom - Height - 8;
-        ReloadCore();
         Show();
+        ReloadCore();
         Activate();
         InputBox.Focus();
     }
@@ -80,15 +75,11 @@ public partial class PanelWindow : Window
             note.IsEditing = false;
     }
 
-    /// <summary>Panel gizliyken gerçek yeniden yükleme işini atlar (DB okuma + UI güncelleme);
-    /// bunun yerine kirli işaretler. ShowNearTray açılışta zaten koşulsuz yeniden yükler.</summary>
+    /// <summary>Panel gizliyken gerçek yeniden yükleme işini atlar (DB okuma + UI güncelleme).
+    /// ShowNearTray açılışta zaten koşulsuz yeniden yükler.</summary>
     public void Reload()
     {
-        if (!IsVisible)
-        {
-            _isDirty = true;
-            return;
-        }
+        if (!IsVisible) return;
         ReloadCore();
     }
 
@@ -99,7 +90,6 @@ public partial class PanelWindow : Window
             _reloadPending = true;
             return;
         }
-        _isDirty = false;
         _reloadPending = false;
         Try(() =>
         {
@@ -121,7 +111,7 @@ public partial class PanelWindow : Window
             foreach (var group in DayGrouper.Group(visible))
                 Groups.Add(new DayGroupItem(DayGrouper.Header(group.Date, today), group.Notes.Select(n => new NoteItem(n)).ToList()));
 
-            var hasOlderDone = _store.HasDoneBefore(since);
+            var hasOlderDone = !_showAll && _store.HasDoneBefore(since);
             OlderToggle.Visibility = _showAll || hasOlderDone ? Visibility.Visible : Visibility.Collapsed;
             OlderToggle.Content = _showAll ? "Sadece son 30 günü göster" : "Daha eski notları göster";
 

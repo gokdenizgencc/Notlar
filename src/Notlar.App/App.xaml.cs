@@ -38,7 +38,8 @@ public partial class App : Application
         catch (Exception ex) when (ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
         {
             AppLog.Write(ex);
-            if (_isFirstInstance) _mutex?.ReleaseMutex();
+            // Mutex serbest bırakılmaz: OnExit zaten _isFirstInstance ise bir kez bırakır;
+            // burada da bırakılırsa çıkışta ApplicationException (mükerrer bırakma) oluşur.
             MessageBox.Show(
                 "Notlar zaten farklı yetkiyle çalışıyor; bu nedenle başlatılamıyor.\n\nDiğer örneği kapatıp tekrar deneyin.",
                 "Notlar", MessageBoxButton.OK, MessageBoxImage.Error);

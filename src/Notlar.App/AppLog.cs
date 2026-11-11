@@ -17,7 +17,14 @@ public static class AppLog
             lock (Gate)
             {
                 Directory.CreateDirectory(AppPaths.DataDir);
-                RotateIfTooLarge();
+                try
+                {
+                    RotateIfTooLarge();
+                }
+                catch
+                {
+                    // Döndürme başarısız olsa bile (ör. dosya başka bir süreçte açık) günlük eklemesi devam etsin.
+                }
                 File.AppendAllText(AppPaths.LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}{Environment.NewLine}{Environment.NewLine}");
             }
         }
