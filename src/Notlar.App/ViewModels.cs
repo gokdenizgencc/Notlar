@@ -56,7 +56,7 @@ public sealed class NoteItem(Note note, Brush authorColor, Brush authorTint) : I
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-/// <summary>Gizli görevler görünümü için bir görev satırının görünüm modeli.</summary>
+/// <summary>Gizli kişisel görünümü için bir kayıt satırının görünüm modeli.</summary>
 public sealed class TaskItemVm(TaskItem task, Brush authorColor, Brush authorTint) : INotifyPropertyChanged
 {
     private bool _isEditing;

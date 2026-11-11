@@ -132,7 +132,7 @@ public partial class PanelWindow : Window
         _reloadPending = false;
         Try(() =>
         {
-            HeaderText.Text = _tasksMode ? "✅ Görevler" : "📝 Notlar";
+            HeaderText.Text = _tasksMode ? "🔒 Kişisel" : "📝 Notlar";
             NotesInputBorder.Visibility = _tasksMode ? Visibility.Collapsed : Visibility.Visible;
             TaskInputBorder.Visibility = _tasksMode ? Visibility.Visible : Visibility.Collapsed;
             TasksPanel.Visibility = _tasksMode ? Visibility.Visible : Visibility.Collapsed;
@@ -548,7 +548,7 @@ public partial class PanelWindow : Window
             _taskStore.Delete(item.Id);
             _undoId = item.Id;
             _undoKind = UndoKind.Task;
-            UndoText.Text = "Görev silindi.";
+            UndoText.Text = "Kişisel kayıt silindi.";
             UndoBar.Visibility = Visibility.Visible;
             _undoTimer.Stop();
             _undoTimer.Start();

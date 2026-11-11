@@ -10,25 +10,25 @@ namespace Notlar.Mcp;
 [McpServerToolType]
 public sealed class TaskTools(TaskStore store, McpAuthor? author = null)
 {
-    [McpServerTool(Name = "gorev_ekle")]
-    [Description("Kullanıcının gizli görev listesine yeni bir görev başlığı ekler. Kullanıcı 'görev ekle', 'task ekle', 'yapılacaklara ekle' dediğinde kullan.")]
-    public string GorevEkle(
-        [Description("Görev başlığı.")] string baslik,
-        [Description("Görevi ekleyen asistan, örn. 'Claude' veya 'ChatGPT'. Boşsa bu MCP sunucusunun varsayılan yazarı kullanılır.")] string? yazar = null) => Run(() =>
+    [McpServerTool(Name = "kisisel_ekle")]
+    [Description("Kullanıcının gizli, ÖZEL kişisel listesine yeni bir kayıt ekler (kişisel plan, iş, özel yapılacak). Notlar uygulamasının gizli bölümünde gösterilir. Yalnızca kullanıcı açıkça kişisel/özel bir şeyden bahsettiğinde kullan ('kişisel listeme ekle', 'kişisel planlarım', 'özel işlerim'). İş notlarını buraya ASLA koyma.")]
+    public string KisiselEkle(
+        [Description("Kişisel kaydın başlığı.")] string baslik,
+        [Description("Kaydı ekleyen asistan, örn. 'Claude' veya 'ChatGPT'. Boşsa bu MCP sunucusunun varsayılan yazarı kullanılır.")] string? yazar = null) => Run(() =>
     {
         var effectiveAuthor = string.IsNullOrWhiteSpace(yazar) ? (author?.Name ?? NoteAuthor.Claude) : yazar.Trim();
         var task = store.Add(baslik, effectiveAuthor);
-        return $"Görev eklendi: {Line(task)}";
+        return $"Kişisel kayıt eklendi: {Line(task)}";
     });
 
-    [McpServerTool(Name = "gorevleri_listele")]
-    [Description("Görev listesini gösterir; açık görevler önce, tamamlananlar sonra listelenir.")]
-    public string GorevleriListele(
-        [Description("true ise yalnızca tamamlanmamış görevler.")] bool sadece_acik = false) => Run(() =>
+    [McpServerTool(Name = "kisisel_listele")]
+    [Description("Kullanıcının gizli kişisel listesini gösterir; açık kayıtlar önce, tamamlananlar sonra listelenir. Bu veriler özeldir; kullanıcı açıkça istemeden okuma.")]
+    public string KisiselListele(
+        [Description("true ise yalnızca tamamlanmamış kayıtlar.")] bool sadece_acik = false) => Run(() =>
     {
         var tasks = store.List(sadece_acik);
         if (tasks.Count == 0)
-            return "Görev yok.";
+            return "Kişisel kayıt yok.";
 
         var sb = new StringBuilder();
         foreach (var task in tasks)
@@ -36,29 +36,29 @@ public sealed class TaskTools(TaskStore store, McpAuthor? author = null)
         return sb.ToString().TrimEnd();
     });
 
-    [McpServerTool(Name = "gorev_tamamla")]
-    [Description("Görevi tamamlandı olarak işaretler veya tekrar açar.")]
-    public string GorevTamamla(
-        [Description("Görevin id'si.")] long id,
+    [McpServerTool(Name = "kisisel_tamamla")]
+    [Description("Kişisel kaydı tamamlandı olarak işaretler veya tekrar açar.")]
+    public string KisiselTamamla(
+        [Description("Kaydın id'si.")] long id,
         [Description("true: tamamlandı, false: tekrar aç.")] bool tamamlandi = true) => Run(() =>
     {
         var task = store.SetDone(id, tamamlandi);
-        return $"{(tamamlandi ? "Görev tamamlandı" : "Görev tekrar açıldı")}: {Line(task)}";
+        return $"{(tamamlandi ? "Kişisel kayıt tamamlandı" : "Kişisel kayıt tekrar açıldı")}: {Line(task)}";
     });
 
-    [McpServerTool(Name = "gorev_guncelle")]
-    [Description("Var olan bir görevin başlığını değiştirir.")]
-    public string GorevGuncelle(
-        [Description("Görevin id'si.")] long id,
-        [Description("Yeni görev başlığı.")] string baslik) =>
-        Run(() => $"Görev güncellendi: {Line(store.Rename(id, baslik))}");
+    [McpServerTool(Name = "kisisel_guncelle")]
+    [Description("Var olan bir kişisel kaydın başlığını değiştirir.")]
+    public string KisiselGuncelle(
+        [Description("Kaydın id'si.")] long id,
+        [Description("Yeni başlık.")] string baslik) =>
+        Run(() => $"Kişisel kayıt güncellendi: {Line(store.Rename(id, baslik))}");
 
-    [McpServerTool(Name = "gorev_sil")]
-    [Description("Görevi siler.")]
-    public string GorevSil([Description("Görevin id'si.")] long id) => Run(() =>
+    [McpServerTool(Name = "kisisel_sil")]
+    [Description("Kişisel kaydı siler.")]
+    public string KisiselSil([Description("Kaydın id'si.")] long id) => Run(() =>
     {
         store.Delete(id);
-        return $"Görev silindi (id: {id}).";
+        return $"Kişisel kayıt silindi (id: {id}).";
     });
 
     private static string Line(TaskItem task) =>

@@ -187,7 +187,7 @@
                 <TextBox x:Name="TaskInputBox" Background="Transparent" BorderThickness="0" Padding="8,7"
                          Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
                          KeyDown="TaskInputBox_KeyDown"/>
-                <TextBlock Text="Görev başlığı yaz..." Foreground="{DynamicResource Muted}"
+                <TextBlock Text="Kişisel plan ya da iş yaz..." Foreground="{DynamicResource Muted}"
                            Margin="11,7" IsHitTestVisible="False">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
@@ -310,7 +310,7 @@
                 </StackPanel>
 
                 <StackPanel x:Name="TasksPanel" Visibility="Collapsed">
-                    <TextBlock x:Name="TasksEmptyText" Text="Henüz görev yok." Foreground="{DynamicResource Muted}"
+                    <TextBlock x:Name="TasksEmptyText" Text="Henüz kişisel kayıt yok." Foreground="{DynamicResource Muted}"
                                HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
                     <ItemsControl ItemsSource="{Binding Tasks}" ItemTemplate="{StaticResource TaskRowTemplate}"/>
                 </StackPanel>

@@ -58,7 +58,7 @@ public class TaskStoreTests
     {
         using var f = new TaskFixture();
         var ex = Assert.Throws<ArgumentException>(() => f.Store.Add(title, "Claude"));
-        Assert.Equal("Görev başlığı boş olamaz.", ex.Message);
+        Assert.Equal("Başlık boş olamaz.", ex.Message);
         Assert.Equal(0, f.Signal.Count);
     }
 
@@ -109,7 +109,7 @@ public class TaskStoreTests
 
         Assert.Throws<ArgumentException>(() => f.Store.Rename(task.Id, " "));
         var ex = Assert.Throws<TaskNotFoundException>(() => f.Store.Rename(999, "y"));
-        Assert.Equal("Görev bulunamadı: 999", ex.Message);
+        Assert.Equal("Kişisel kayıt bulunamadı: 999", ex.Message);
     }
 
     [Fact]

@@ -127,7 +127,7 @@ public sealed class TaskStore
     {
         var clean = title?.Trim();
         if (string.IsNullOrEmpty(clean))
-            throw new ArgumentException("Görev başlığı boş olamaz.");
+            throw new ArgumentException("Başlık boş olamaz.");
         return clean;
     }
 

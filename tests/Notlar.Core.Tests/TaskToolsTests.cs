@@ -15,42 +15,42 @@ public sealed class TaskToolsTests : IDisposable
     public void Dispose() => _f.Dispose();
 
     [Fact]
-    public void GorevEkle_adds_task_with_default_author()
+    public void KisiselEkle_adds_task_with_default_author()
     {
-        var result = _tools.GorevEkle("Rapor hazırla");
+        var result = _tools.KisiselEkle("Rapor hazırla");
 
-        Assert.Equal("Görev eklendi: [ ] Rapor hazırla  (id: 1, yazar: Claude)", result);
+        Assert.Equal("Kişisel kayıt eklendi: [ ] Rapor hazırla  (id: 1, yazar: Claude)", result);
         Assert.Single(_f.Store.List());
     }
 
     [Fact]
-    public void GorevEkle_accepts_custom_author()
+    public void KisiselEkle_accepts_custom_author()
     {
-        var result = _tools.GorevEkle("Rapor hazırla", "ChatGPT");
-        Assert.Equal("Görev eklendi: [ ] Rapor hazırla  (id: 1, yazar: ChatGPT)", result);
+        var result = _tools.KisiselEkle("Rapor hazırla", "ChatGPT");
+        Assert.Equal("Kişisel kayıt eklendi: [ ] Rapor hazırla  (id: 1, yazar: ChatGPT)", result);
     }
 
     [Fact]
-    public void GorevEkle_empty_throws_McpException()
+    public void KisiselEkle_empty_throws_McpException()
     {
-        var ex = Assert.Throws<McpException>(() => _tools.GorevEkle("  "));
-        Assert.Equal("Görev başlığı boş olamaz.", ex.Message);
+        var ex = Assert.Throws<McpException>(() => _tools.KisiselEkle("  "));
+        Assert.Equal("Başlık boş olamaz.", ex.Message);
     }
 
     [Fact]
-    public void GorevleriListele_reports_empty()
+    public void KisiselListele_reports_empty()
     {
-        Assert.Equal("Görev yok.", _tools.GorevleriListele());
+        Assert.Equal("Kişisel kayıt yok.", _tools.KisiselListele());
     }
 
     [Fact]
-    public void GorevleriListele_lists_open_before_done()
+    public void KisiselListele_lists_open_before_done()
     {
-        _tools.GorevEkle("a");
-        _tools.GorevEkle("b");
-        _tools.GorevTamamla(1);
+        _tools.KisiselEkle("a");
+        _tools.KisiselEkle("b");
+        _tools.KisiselTamamla(1);
 
-        var result = _tools.GorevleriListele();
+        var result = _tools.KisiselListele();
 
         Assert.Equal(
             "[ ] b  (id: 2, yazar: Claude)\n" +
@@ -59,47 +59,47 @@ public sealed class TaskToolsTests : IDisposable
     }
 
     [Fact]
-    public void GorevleriListele_sadece_acik_excludes_done()
+    public void KisiselListele_sadece_acik_excludes_done()
     {
-        _tools.GorevEkle("a");
-        _tools.GorevEkle("b");
-        _tools.GorevTamamla(1);
+        _tools.KisiselEkle("a");
+        _tools.KisiselEkle("b");
+        _tools.KisiselTamamla(1);
 
-        var result = _tools.GorevleriListele(sadece_acik: true);
+        var result = _tools.KisiselListele(sadece_acik: true);
 
         Assert.Equal("[ ] b  (id: 2, yazar: Claude)", result);
     }
 
     [Fact]
-    public void GorevTamamla_marks_and_unmarks()
+    public void KisiselTamamla_marks_and_unmarks()
     {
-        _tools.GorevEkle("x");
-        Assert.Equal("Görev tamamlandı: [x] x  (id: 1, yazar: Claude)", _tools.GorevTamamla(1));
-        Assert.Equal("Görev tekrar açıldı: [ ] x  (id: 1, yazar: Claude)", _tools.GorevTamamla(1, tamamlandi: false));
+        _tools.KisiselEkle("x");
+        Assert.Equal("Kişisel kayıt tamamlandı: [x] x  (id: 1, yazar: Claude)", _tools.KisiselTamamla(1));
+        Assert.Equal("Kişisel kayıt tekrar açıldı: [ ] x  (id: 1, yazar: Claude)", _tools.KisiselTamamla(1, tamamlandi: false));
     }
 
     [Fact]
-    public void GorevGuncelle_changes_title()
+    public void KisiselGuncelle_changes_title()
     {
-        _tools.GorevEkle("eski");
-        Assert.Equal("Görev güncellendi: [ ] yeni  (id: 1, yazar: Claude)", _tools.GorevGuncelle(1, "yeni"));
+        _tools.KisiselEkle("eski");
+        Assert.Equal("Kişisel kayıt güncellendi: [ ] yeni  (id: 1, yazar: Claude)", _tools.KisiselGuncelle(1, "yeni"));
     }
 
     [Fact]
-    public void GorevSil_removes_and_unknown_id_throws()
+    public void KisiselSil_removes_and_unknown_id_throws()
     {
-        _tools.GorevEkle("x");
-        Assert.Equal("Görev silindi (id: 1).", _tools.GorevSil(1));
+        _tools.KisiselEkle("x");
+        Assert.Equal("Kişisel kayıt silindi (id: 1).", _tools.KisiselSil(1));
         Assert.Empty(_f.Store.List());
 
-        var ex = Assert.Throws<McpException>(() => _tools.GorevSil(1));
-        Assert.Equal("Görev bulunamadı: 1", ex.Message);
+        var ex = Assert.Throws<McpException>(() => _tools.KisiselSil(1));
+        Assert.Equal("Kişisel kayıt bulunamadı: 1", ex.Message);
     }
 
     [Fact]
     public void Run_wraps_SqliteException_as_McpException_with_Turkish_message()
     {
-        _tools.GorevEkle("ilk görev");
+        _tools.KisiselEkle("ilk kayıt");
 
         SqliteConnection.ClearAllPools();
         foreach (var suffix in new[] { "", "-wal", "-shm" })
@@ -109,7 +109,7 @@ public sealed class TaskToolsTests : IDisposable
         }
         File.WriteAllBytes(_f.DbPath, [1, 2, 3, 4, 5, 6, 7, 8]);
 
-        var ex = Assert.Throws<McpException>(() => _tools.GorevleriListele());
+        var ex = Assert.Throws<McpException>(() => _tools.KisiselListele());
         Assert.StartsWith("Veritabanına erişilemedi", ex.Message);
     }
 }
