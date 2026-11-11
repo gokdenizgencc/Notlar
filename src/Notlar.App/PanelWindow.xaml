@@ -88,7 +88,8 @@
         </ItemsControl>
 
         <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" Padding="6,0,6,8">
-            <Grid>
+            <StackPanel>
+                <Grid>
                 <TextBlock x:Name="EmptyText" Text="Henüz not yok." Foreground="{DynamicResource Muted}"
                            HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
                 <ItemsControl ItemsSource="{Binding Groups}">
@@ -167,7 +168,11 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-            </Grid>
+                </Grid>
+                <Button x:Name="OlderToggle" Content="Daha eski notları göster" Click="OlderToggle_Click"
+                        Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"
+                        HorizontalAlignment="Center" Margin="0,8,0,0" Visibility="Collapsed"/>
+            </StackPanel>
         </ScrollViewer>
 
         <Border x:Name="UndoBar" Grid.Row="4" Background="{DynamicResource Surface}"

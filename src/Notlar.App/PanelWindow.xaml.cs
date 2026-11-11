@@ -17,6 +17,7 @@ namespace Notlar.App;
 public partial class PanelWindow : Window
 {
     private static readonly StringComparer TrComparer = StringComparer.Create(CultureInfo.GetCultureInfo("tr-TR"), ignoreCase: true);
+    private const int RecentDays = 30;
 
     private readonly NoteStore _store;
     private readonly DispatcherTimer _undoTimer = new() { Interval = TimeSpan.FromSeconds(5) };
@@ -25,6 +26,7 @@ public partial class PanelWindow : Window
     private long? _undoId;
     private bool _reloadPending;
     private bool _isDirty;
+    private bool _showAll;
     private DateTime _lastHiddenAt = DateTime.MinValue;
 
     /// <summary>Panel gizliyken gelen bir Reload() isteğinin verisinin henüz yansıtılmadığını belirtir;
@@ -68,6 +70,7 @@ public partial class PanelWindow : Window
         CancelAllEdits();
         Hide();
         _lastHiddenAt = DateTime.Now;
+        _showAll = false;
     }
 
     /// <summary>Açık düzenlemeleri kaydetmeden kapatır, böylece ardından çağrılan Reload() ertelenmez.</summary>
@@ -100,7 +103,9 @@ public partial class PanelWindow : Window
         _reloadPending = false;
         Try(() =>
         {
-            var all = _store.List(new NoteFilter());
+            var today = DateOnly.FromDateTime(DateTime.Now);
+            var since = today.AddDays(-(RecentDays - 1));
+            var all = _showAll ? _store.List(new NoteFilter()) : _store.ListRecentAndOpen(since);
             var tags = all.SelectMany(n => n.Tags).Distinct().Order(TrComparer).ToList();
             if (_tagFilter is not null && !tags.Contains(_tagFilter))
                 _tagFilter = null;
@@ -112,11 +117,18 @@ public partial class PanelWindow : Window
             TagRow.Visibility = tags.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
             var visible = _tagFilter is null ? all : all.Where(n => n.Tags.Contains(_tagFilter)).ToList();
-            var today = DateOnly.FromDateTime(DateTime.Now);
             Groups.Clear();
             foreach (var group in DayGrouper.Group(visible))
                 Groups.Add(new DayGroupItem(DayGrouper.Header(group.Date, today), group.Notes.Select(n => new NoteItem(n)).ToList()));
+
+            var hasOlderDone = _store.HasDoneBefore(since);
+            OlderToggle.Visibility = _showAll || hasOlderDone ? Visibility.Visible : Visibility.Collapsed;
+            OlderToggle.Content = _showAll ? "Sadece son 30 günü göster" : "Daha eski notları göster";
+
             EmptyText.Visibility = Groups.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            EmptyText.Text = Groups.Count == 0 && !_showAll && hasOlderDone
+                ? "Son 30 günde not yok."
+                : "Henüz not yok.";
         });
     }
 
@@ -169,6 +181,13 @@ public partial class PanelWindow : Window
     }
 
     private void Row_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => ((UIElement)sender).Focus();
+
+    private void OlderToggle_Click(object sender, RoutedEventArgs e)
+    {
+        CancelAllEdits();
+        _showAll = !_showAll;
+        Reload();
+    }
 
     private void Done_Click(object sender, RoutedEventArgs e)
     {
