@@ -106,6 +106,31 @@ public sealed class NoteTools(NoteStore store, TimeProvider time)
         throw new ArgumentException($"Geçersiz yazar '{value}', 'ben' veya 'claude' bekleniyor.");
     }
 
+    [McpServerTool(Name = "notlarda_ara")]
+    [Description("Notların metninde kelime arar (Türkçe büyük/küçük harf duyarsız). Kullanıcı 'şunla ilgili notlarımı bul', 'X geçen notlar' dediğinde kullan.")]
+    public string NotlardaAra(
+        [Description("Aranacak kelimeler; tümünü içeren notlar bulunur.")] string sorgu,
+        [Description("Sadece bu yazarın notları: 'ben' veya 'claude'. Boşsa hepsi.")] string? yazar = null,
+        [Description("Sonuç sayısı sınırı.")] int limit = 20) => Run(() =>
+    {
+        var clampedLimit = Math.Clamp(limit, 1, 100);
+        var notes = store.Search(sorgu, ParseAuthor(yazar), clampedLimit);
+        if (notes.Count == 0)
+            return "Eşleşen not yok.";
+
+        var today = DateOnly.FromDateTime(time.GetLocalNow().DateTime);
+        var sb = new StringBuilder();
+        sb.Append(notes.Count).Append(" not bulundu.\n\n");
+        foreach (var group in DayGrouper.Group(notes))
+        {
+            sb.Append("## ").Append(DayGrouper.Header(group.Date, today)).Append('\n');
+            foreach (var note in group.Notes)
+                sb.Append(NoteFormatter.Line(note)).Append('\n');
+            sb.Append('\n');
+        }
+        return sb.ToString().TrimEnd();
+    });
+
     private static string Run(Func<string> action)
     {
         try

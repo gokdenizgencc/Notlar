@@ -283,4 +283,32 @@ public sealed class NoteStore
         r.IsDBNull(3) ? null : Parse(r.GetString(3)),
         r.GetInt64(4) != 0,
         NoteAuthorExtensions.TryParse(r.GetString(5), out var author) ? author : NoteAuthor.Ben);
+
+    private static readonly CultureInfo TrSearch = CultureInfo.GetCultureInfo("tr-TR");
+
+    /// <summary>Canlı notlar arasında, metni (boşlukla ayrılmış) tüm terimleri içeren notları, Türkçe
+    /// büyük/küçük harf duyarsız şekilde arar. En yeni not önce; <paramref name="limit"/> ile sınırlanır.</summary>
+    public IReadOnlyList<Note> Search(string query, NoteAuthor? author = null, int limit = 50)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("Arama metni boş olamaz.");
+
+        var terms = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        var sql = new StringBuilder($"SELECT {Columns} FROM notes WHERE deleted_at IS NULL");
+        if (author is { } a)
+        {
+            sql.Append(" AND author = $author");
+            cmd.Parameters.AddWithValue("$author", a.ToDbValue());
+        }
+        sql.Append(" ORDER BY created_at DESC");
+        cmd.CommandText = sql.ToString();
+
+        return ReadAll(cmd)
+            .Where(n => terms.All(t => TrSearch.CompareInfo.IndexOf(n.Text, t, CompareOptions.IgnoreCase) >= 0))
+            .Take(limit)
+            .ToList();
+    }
 }
