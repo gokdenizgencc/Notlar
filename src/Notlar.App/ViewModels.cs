@@ -152,6 +152,69 @@ public sealed class MarketplacePluginVm(string marketplace, string name, string 
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
+/// <summary>Planlar sekmesinde liste görünümündeki bir plan kartının görünüm modeli.</summary>
+public sealed record PlanListItemVm(
+    long Id, string Title, string ProjectPath, string ProjectShort, string StatusLabel, Brush StatusBrush, string ProgressLabel);
+
+/// <summary>Plan detay görünümünde bir adımın görünüm modeli (satır içi düzenleme desteğiyle).</summary>
+public sealed class PlanStepItemVm(PlanStep step) : INotifyPropertyChanged
+{
+    private bool _isEditing;
+    private string _editText = "";
+
+    public PlanStep Step { get; } = step;
+    public long Id => Step.Id;
+    public int Order => Step.Order;
+    public string Text => Step.Text;
+    public string? Result => Step.Result;
+    public bool HasResult => !string.IsNullOrWhiteSpace(Step.Result);
+
+    public string StatusIcon => Step.Status switch
+    {
+        StepStatus.Bekliyor => "⏳",
+        StepStatus.Yapiliyor => "🔄",
+        StepStatus.Bitti => "✅",
+        StepStatus.Hata => "❌",
+        StepStatus.Atlandi => "⏭",
+        _ => "⏳",
+    };
+
+    public string StatusLabel => Step.Status switch
+    {
+        StepStatus.Bekliyor => "bekliyor",
+        StepStatus.Yapiliyor => "yapılıyor",
+        StepStatus.Bitti => "bitti",
+        StepStatus.Hata => "hata",
+        StepStatus.Atlandi => "atlandı",
+        _ => "",
+    };
+
+    public bool IsEditing
+    {
+        get => _isEditing;
+        set
+        {
+            if (_isEditing == value) return;
+            _isEditing = value;
+            OnChanged();
+            OnChanged(nameof(IsViewing));
+        }
+    }
+
+    public bool IsViewing => !_isEditing;
+
+    public string EditText
+    {
+        get => _editText;
+        set { _editText = value; OnChanged(); }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
 /// <summary>Gizli kişisel görünümü için bir kayıt satırının görünüm modeli.</summary>
 public sealed class TaskItemVm(TaskItem task, Brush authorColor, Brush authorTint) : INotifyPropertyChanged
 {

@@ -4,7 +4,8 @@
         Title="Görünüm Ayarları" Width="460" Height="560" MinWidth="400" MinHeight="420"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip"
         Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
-        FontFamily="Segoe UI" FontSize="13">
+        FontFamily="Segoe UI" FontSize="13"
+        PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <Style x:Key="FlatButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>

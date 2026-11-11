@@ -72,6 +72,7 @@ public partial class App : Application
         MemoryStore memoryStore;
         SkillRegistry skillRegistry;
         SkillTranslations skillTranslations;
+        PlanStore planStore;
         try
         {
             var signal = ChangeSignals.CreateOrNull(AppPaths.ChangeEventName, AppLog.Write);
@@ -80,6 +81,7 @@ public partial class App : Application
             memoryStore = new MemoryStore(AppPaths.DbPath, TimeProvider.System, signal);
             skillRegistry = new SkillRegistry(AppPaths.DbPath, TimeProvider.System, signal);
             skillTranslations = new SkillTranslations(AppPaths.DbPath, TimeProvider.System, signal);
+            planStore = new PlanStore(AppPaths.DbPath, TimeProvider.System, signal);
         }
         catch (Exception ex)
         {
@@ -94,7 +96,7 @@ public partial class App : Application
         TryLog(() => store.Backup(AppPaths.BackupDir, keep: 7));
         TryLog(AutoStart.EnsureRegistration);
 
-        _panel = new PanelWindow(store, taskStore, memoryStore, skillRegistry, skillTranslations);
+        _panel = new PanelWindow(store, taskStore, memoryStore, skillRegistry, skillTranslations, planStore);
         _tray = new TrayIcon(
             onToggle: _panel.Toggle,
             onOpen: _panel.ShowNearTray,

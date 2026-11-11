@@ -326,6 +326,82 @@
                 </Trigger>
             </DataTemplate.Triggers>
         </DataTemplate>
+
+        <DataTemplate x:Key="PlanRowTemplate" DataType="{x:Type local:PlanListItemVm}">
+            <Border x:Name="PlanRow" Background="Transparent" Padding="8,6" CornerRadius="4" Cursor="Hand"
+                    MouseLeftButtonDown="PlanRow_MouseLeftButtonDown">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            <Border Background="{Binding StatusBrush}" CornerRadius="8" Padding="6,0" Margin="6,0,0,0"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{Binding StatusLabel}" FontSize="11" Foreground="White"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="{Binding ProjectShort}" Foreground="{DynamicResource Muted}" FontSize="11"
+                                   Margin="0,2,0,0" ToolTip="{Binding ProjectPath}"/>
+                        <TextBlock Text="{Binding ProgressLabel}" Foreground="{DynamicResource Muted}" FontSize="11"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                        <Button Content="▶" ToolTip="Çalıştır" Style="{StaticResource FlatButton}" Click="PlanRunRow_Click"/>
+                        <Button Content="↺" ToolTip="Sıfırla" Style="{StaticResource FlatButton}" Click="PlanResetRow_Click"/>
+                        <Button Content="🗑" ToolTip="Sil" Style="{StaticResource FlatButton}" Click="PlanDeleteRow_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="PlanRow" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="PlanRow" Property="Background" Value="{DynamicResource Surface}"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <DataTemplate x:Key="PlanStepRowTemplate" DataType="{x:Type local:PlanStepItemVm}">
+            <Border x:Name="PlanStepRow" Background="Transparent" Padding="8,6" CornerRadius="4">
+                <StackPanel>
+                    <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding StatusIcon}" ToolTip="{Binding StatusLabel}"
+                                       Margin="0,0,6,0" VerticalAlignment="Top"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap"/>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                <Button Content="↑" ToolTip="Yukarı taşı" Style="{StaticResource FlatButton}" Click="PlanStepUp_Click"/>
+                                <Button Content="↓" ToolTip="Aşağı taşı" Style="{StaticResource FlatButton}" Click="PlanStepDown_Click"/>
+                                <Button Content="✏️" ToolTip="Düzenle" Style="{StaticResource FlatButton}" Click="PlanStepEdit_Click"/>
+                                <Button Content="🗑" ToolTip="Sil" Style="{StaticResource FlatButton}" Click="PlanStepDelete_Click"/>
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Text="{Binding Result}" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                   FontSize="11" Margin="22,2,0,0" Visibility="{Binding HasResult, Converter={StaticResource BoolToVis}}"/>
+                    </StackPanel>
+                    <DockPanel Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" LastChildFill="True">
+                        <Button DockPanel.Dock="Right" Content="✕" ToolTip="Vazgeç" VerticalAlignment="Top"
+                                Style="{StaticResource FlatButton}" Click="PlanStepEditCancel_Click"/>
+                        <TextBox Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
+                                 Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                 CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}"
+                                 TextWrapping="Wrap" AcceptsReturn="True" MinLines="1" MaxLines="4" Padding="2"
+                                 KeyDown="PlanStepEditBox_KeyDown" IsVisibleChanged="EditBox_IsVisibleChanged"/>
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <Trigger SourceName="PlanStepRow" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="PlanStepRow" Property="Background" Value="{DynamicResource Surface}"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -358,6 +434,8 @@
             <Button x:Name="MemoryTabButton" Content="🧠 Hafıza" Click="MemoryTab_Click"
                     Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,0"/>
             <Button x:Name="SkillsTabButton" Content="🧩 Yetenekler" Click="SkillsTab_Click"
+                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,0"/>
+            <Button x:Name="PlansTabButton" Content="📋 Planlar" Click="PlansTab_Click"
                     Style="{StaticResource FlatButton}" Padding="10,4"/>
         </StackPanel>
 
@@ -440,52 +518,59 @@
                     </Button>
                 </Grid>
             </Border>
-            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
-                    BorderThickness="1" CornerRadius="6" Padding="8,6">
-                <StackPanel>
-                    <Grid Margin="0,0,0,4">
-                        <TextBox x:Name="MemoryTitleBox" Background="Transparent" BorderThickness="0" Padding="2"
-                                 Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"/>
-                        <TextBlock Text="Başlık" Foreground="{DynamicResource Muted}" Margin="4,2" IsHitTestVisible="False">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Text, ElementName=MemoryTitleBox}" Value="">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </Grid>
-                    <Grid Margin="0,0,0,6">
-                        <TextBox x:Name="MemoryContentBox" Background="Transparent" BorderThickness="0" Padding="2"
-                                 Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
-                                 TextWrapping="Wrap" AcceptsReturn="True" MinLines="2" MaxLines="4"/>
-                        <TextBlock Text="İçerik" Foreground="{DynamicResource Muted}" Margin="4,2"
-                                   IsHitTestVisible="False" VerticalAlignment="Top">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Text, ElementName=MemoryContentBox}" Value="">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </Grid>
-                    <DockPanel LastChildFill="False">
-                        <ComboBox x:Name="MemoryCategoryBox" DockPanel.Dock="Left" Width="120" IsEditable="True"
-                                  Text="genel" ItemsSource="{Binding MemoryCategories}" Margin="0,0,8,0"/>
-                        <Button DockPanel.Dock="Right" Content="Ekle" Click="MemoryAdd_Click"
-                                Style="{StaticResource FlatButton}" Background="{DynamicResource Accent}"
-                                Foreground="{DynamicResource OnAccent}" Padding="12,4"/>
-                    </DockPanel>
-                </StackPanel>
-            </Border>
+            <Expander x:Name="MemoryAddExpander" Header="+ Yeni kart" Foreground="{DynamicResource Muted}"
+                      IsExpanded="False" Expanded="MemoryAddExpander_Expanded">
+                <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                        BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,0">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,4" LastChildFill="True">
+                            <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="MemoryAddClose_Click"
+                                    Style="{StaticResource FlatButton}"/>
+                            <Grid>
+                                <TextBox x:Name="MemoryTitleBox" Background="Transparent" BorderThickness="0" Padding="2"
+                                         Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"/>
+                                <TextBlock Text="Başlık" Foreground="{DynamicResource Muted}" Margin="4,2" IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=MemoryTitleBox}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                        </DockPanel>
+                        <Grid Margin="0,0,0,6">
+                            <TextBox x:Name="MemoryContentBox" Background="Transparent" BorderThickness="0" Padding="2"
+                                     Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
+                                     TextWrapping="Wrap" AcceptsReturn="True" MinLines="2" MaxLines="4"/>
+                            <TextBlock Text="İçerik" Foreground="{DynamicResource Muted}" Margin="4,2"
+                                       IsHitTestVisible="False" VerticalAlignment="Top">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=MemoryContentBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                        <DockPanel LastChildFill="False">
+                            <ComboBox x:Name="MemoryCategoryBox" DockPanel.Dock="Left" Width="120" IsEditable="True"
+                                      Text="genel" ItemsSource="{Binding MemoryCategories}" Margin="0,0,8,0"/>
+                            <Button DockPanel.Dock="Right" Content="Ekle" Click="MemoryAdd_Click"
+                                    Style="{StaticResource FlatButton}" Background="{DynamicResource Accent}"
+                                    Foreground="{DynamicResource OnAccent}" Padding="12,4"/>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+            </Expander>
         </StackPanel>
 
         <StackPanel x:Name="SkillsHeaderPanel" Grid.Row="2" Margin="12,0,12,8" Visibility="Collapsed">
@@ -531,8 +616,11 @@
                             Style="{StaticResource FlatButton}" Padding="8,2"/>
                 </StackPanel>
             </DockPanel>
-            <TextBlock x:Name="SkillStatusText" Foreground="{DynamicResource Accent}" TextWrapping="Wrap"
-                       Margin="0,0,0,4" Visibility="Collapsed"/>
+            <DockPanel x:Name="SkillStatusRow" Margin="0,0,0,4" Visibility="Collapsed" LastChildFill="True">
+                <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="SkillStatusClose_Click"
+                        Style="{StaticResource FlatButton}"/>
+                <TextBlock x:Name="SkillStatusText" Foreground="{DynamicResource Accent}" TextWrapping="Wrap"/>
+            </DockPanel>
             <DockPanel x:Name="SkillSortRow" LastChildFill="False" Margin="0,0,0,4">
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <Button x:Name="SkillSortUsageButton" Content="Kullanıma göre" Click="SkillSortUsage_Click"
@@ -543,7 +631,8 @@
                 <Button DockPanel.Dock="Right" Content="↻ Yenile" ToolTip="Yeniden tara" Click="SkillRefresh_Click"
                         Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" Padding="8,2"/>
             </DockPanel>
-            <Expander x:Name="SkillAddExpander" Header="+ Elle ekle" Foreground="{DynamicResource Muted}" IsExpanded="False">
+            <Expander x:Name="SkillAddExpander" Header="+ Elle ekle" Foreground="{DynamicResource Muted}" IsExpanded="False"
+                      Expanded="SkillAddExpander_Expanded">
                 <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
                         BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,0">
                     <StackPanel>
@@ -597,29 +686,33 @@
             </Expander>
         </StackPanel>
 
-        <ItemsControl x:Name="AuthorFilterRow" Grid.Row="3" ItemsSource="{Binding AuthorFilters}" Margin="12,0,12,4">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type local:AuthorChip}">
-                    <Button Content="{Binding Label}" Click="AuthorChip_Click" Margin="0,0,6,4" Padding="10,2">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
-                                <Setter Property="Background" Value="{DynamicResource Surface}"/>
-                                <Setter Property="Foreground" Value="{Binding Color}"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource Accent}"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <DockPanel Grid.Row="3" Margin="12,0,12,4" LastChildFill="True">
+            <Button x:Name="FilterClearButton" DockPanel.Dock="Right" Content="✕" ToolTip="Filtreyi temizle"
+                    Click="FilterClear_Click" Style="{StaticResource FlatButton}" Visibility="Collapsed"/>
+            <ItemsControl x:Name="AuthorFilterRow" ItemsSource="{Binding AuthorFilters}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type local:AuthorChip}">
+                        <Button Content="{Binding Label}" Click="AuthorChip_Click" Margin="0,0,6,4" Padding="10,2">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                                    <Setter Property="Background" Value="{DynamicResource Surface}"/>
+                                    <Setter Property="Foreground" Value="{Binding Color}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Accent}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </DockPanel>
 
         <ItemsControl x:Name="TagRow" Grid.Row="4" ItemsSource="{Binding Tags}" Margin="12,0,12,6" Visibility="Collapsed">
             <ItemsControl.ItemsPanel>
@@ -772,6 +865,144 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel x:Name="PlansPanel" Visibility="Collapsed">
+                    <StackPanel x:Name="PlansListPanel">
+                        <TextBlock x:Name="PlansEmptyText" Text="Henüz plan yok." Foreground="{DynamicResource Muted}"
+                                   HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
+                        <ItemsControl ItemsSource="{Binding Plans}" ItemTemplate="{StaticResource PlanRowTemplate}"/>
+                        <Expander x:Name="PlanAddExpander" Header="+ Yeni plan" Foreground="{DynamicResource Muted}"
+                                  IsExpanded="False" Expanded="PlanAddExpander_Expanded" Margin="0,8,0,0">
+                            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                                    BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,0">
+                                <StackPanel>
+                                    <DockPanel Margin="0,0,0,4" LastChildFill="True">
+                                        <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="PlanAddClose_Click"
+                                                Style="{StaticResource FlatButton}"/>
+                                        <Grid>
+                                            <TextBox x:Name="PlanTitleBox" Background="Transparent" BorderThickness="0" Padding="2"
+                                                     Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"/>
+                                            <TextBlock Text="Başlık" Foreground="{DynamicResource Muted}" Margin="4,2" IsHitTestVisible="False">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Text, ElementName=PlanTitleBox}" Value="">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </DockPanel>
+                                    <DockPanel Margin="0,0,0,4" LastChildFill="True">
+                                        <Button DockPanel.Dock="Right" Content="📁" ToolTip="Klasör seç" Click="PlanPathBrowseNew_Click"
+                                                Style="{StaticResource FlatButton}"/>
+                                        <Grid>
+                                            <TextBox x:Name="PlanPathBox" Background="Transparent" BorderThickness="0" Padding="2"
+                                                     Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"/>
+                                            <TextBlock Text="Proje klasörü" Foreground="{DynamicResource Muted}" Margin="4,2" IsHitTestVisible="False">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Text, ElementName=PlanPathBox}" Value="">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </DockPanel>
+                                    <Grid Margin="0,0,0,6">
+                                        <TextBox x:Name="PlanStepsBox" Background="Transparent" BorderThickness="0" Padding="2"
+                                                 Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
+                                                 TextWrapping="Wrap" AcceptsReturn="True" MinLines="3" MaxLines="8"/>
+                                        <TextBlock Text="Adımlar (her satıra bir adım)" Foreground="{DynamicResource Muted}" Margin="4,2"
+                                                   IsHitTestVisible="False" VerticalAlignment="Top">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Text, ElementName=PlanStepsBox}" Value="">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                    <Button Content="Oluştur" Click="PlanCreate_Click" HorizontalAlignment="Right"
+                                            Style="{StaticResource FlatButton}" Background="{DynamicResource Accent}"
+                                            Foreground="{DynamicResource OnAccent}" Padding="12,4"/>
+                                </StackPanel>
+                            </Border>
+                        </Expander>
+                    </StackPanel>
+
+                    <StackPanel x:Name="PlanDetailPanel" Visibility="Collapsed">
+                        <DockPanel Margin="2,0,2,8">
+                            <Button DockPanel.Dock="Left" Content="‹ Geri" Click="PlanBackButton_Click"
+                                    Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
+                            <Button DockPanel.Dock="Right" Content="▶ Çalıştır" Click="PlanRunButton_Click"
+                                    Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" FontWeight="SemiBold"/>
+                        </DockPanel>
+
+                        <DockPanel Margin="2,0,2,4" LastChildFill="True">
+                            <Button x:Name="PlanTitleEditButton" DockPanel.Dock="Right" Content="✏️" ToolTip="Düzenle"
+                                    Click="PlanTitleEditButton_Click" Style="{StaticResource FlatButton}"/>
+                            <TextBlock x:Name="PlanDetailTitleText" FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <DockPanel x:Name="PlanTitleEditRow" Margin="2,0,2,4" Visibility="Collapsed" LastChildFill="True">
+                            <Button DockPanel.Dock="Right" Content="✕" ToolTip="Vazgeç" Click="PlanTitleEditCancel_Click"
+                                    Style="{StaticResource FlatButton}"/>
+                            <TextBox x:Name="PlanDetailTitleBox" Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                     CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}" Padding="2"
+                                     KeyDown="PlanTitleEditBox_KeyDown"/>
+                        </DockPanel>
+
+                        <DockPanel Margin="2,0,2,8" LastChildFill="True">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Content="📁" ToolTip="Klasör seç" Click="PlanPathBrowse_Click" Style="{StaticResource FlatButton}"/>
+                                <Button x:Name="PlanPathEditButton" Content="✏️" ToolTip="Düzenle" Click="PlanPathEditButton_Click"
+                                        Style="{StaticResource FlatButton}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="PlanDetailPathText" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                       VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <DockPanel x:Name="PlanPathEditRow" Margin="2,0,2,8" Visibility="Collapsed" LastChildFill="True">
+                            <Button DockPanel.Dock="Right" Content="✕" ToolTip="Vazgeç" Click="PlanPathEditCancel_Click"
+                                    Style="{StaticResource FlatButton}"/>
+                            <TextBox x:Name="PlanDetailPathBox" Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                     CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Accent}" Padding="2"
+                                     KeyDown="PlanPathEditBox_KeyDown"/>
+                        </DockPanel>
+
+                        <ItemsControl ItemsSource="{Binding PlanDetailSteps}" ItemTemplate="{StaticResource PlanStepRowTemplate}"/>
+
+                        <Expander x:Name="PlanAddStepExpander" Header="+ Adım ekle" Foreground="{DynamicResource Muted}"
+                                  IsExpanded="False" Expanded="PlanAddStepExpander_Expanded" Margin="0,8,0,0">
+                            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                                    BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,0">
+                                <StackPanel>
+                                    <DockPanel Margin="0,0,0,4" LastChildFill="True">
+                                        <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="PlanAddStepClose_Click"
+                                                Style="{StaticResource FlatButton}"/>
+                                        <TextBox x:Name="PlanNewStepBox" Background="Transparent" BorderThickness="0" Padding="2"
+                                                 Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
+                                                 TextWrapping="Wrap" AcceptsReturn="True" MinLines="2" MaxLines="4"/>
+                                    </DockPanel>
+                                    <Button Content="Ekle" Click="PlanAddStep_Click" HorizontalAlignment="Right"
+                                            Style="{StaticResource FlatButton}" Background="{DynamicResource Accent}"
+                                            Foreground="{DynamicResource OnAccent}" Padding="12,4"/>
+                                </StackPanel>
+                            </Border>
+                        </Expander>
                     </StackPanel>
                 </StackPanel>
             </Grid>

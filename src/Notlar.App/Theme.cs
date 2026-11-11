@@ -24,6 +24,7 @@ public static class Theme
         Set(resources, "Border", light ? "#E0E0E0" : "#3A3A3A");
         Set(resources, "TagBg", light ? "#E6F0FA" : "#1F3A52");
         Set(resources, "Danger", light ? "#C42B1C" : "#9E2A2A");
+        Set(resources, "Success", light ? "#107C10" : "#5FB55A");
     }
 
     private static void Set(ResourceDictionary resources, string key, string hex)

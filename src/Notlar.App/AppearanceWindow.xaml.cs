@@ -174,6 +174,14 @@ public partial class AppearanceWindow : Window
         Close();
     }
 
+    /// <summary>Esc, Vazgeç ile aynı şekilde kaydetmeden kapatır.</summary>
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape) return;
+        e.Handled = true;
+        CancelButton_Click(sender, e);
+    }
+
     private void ApplyButton_Click(object sender, RoutedEventArgs e)
     {
         foreach (var kv in _hexBoxes)

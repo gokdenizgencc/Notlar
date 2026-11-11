@@ -14,6 +14,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Data.Sqlite;
 using Notlar.Core;
+using Forms = System.Windows.Forms;
 
 namespace Notlar.App;
 
@@ -22,11 +23,11 @@ public partial class PanelWindow : Window
     private static readonly StringComparer TrComparer = StringComparer.Create(CultureInfo.GetCultureInfo("tr-TR"), ignoreCase: true);
     private const int RecentDays = 30;
 
-    private enum UndoKind { Note, Task, Memory, Skill }
+    private enum UndoKind { Note, Task, Memory, Skill, Plan }
 
     /// <summary>Panelin görünür modu: normal not günlüğü, görünür hafıza kartları sekmesi, görünür
-    /// yetenek kataloğu sekmesi ya da üçlü tıklamayla açılan gizli kişisel liste.</summary>
-    private enum Mode { Notes, Memory, Skills, Personal }
+    /// yetenek kataloğu sekmesi, görünür planlar sekmesi ya da üçlü tıklamayla açılan gizli kişisel liste.</summary>
+    private enum Mode { Notes, Memory, Skills, Plans, Personal }
 
     private static readonly CultureInfo TrTr = CultureInfo.GetCultureInfo("tr-TR");
 
@@ -35,6 +36,7 @@ public partial class PanelWindow : Window
     private readonly MemoryStore _memoryStore;
     private readonly SkillRegistry _skillRegistry;
     private readonly SkillTranslations _skillTranslations;
+    private readonly PlanStore _planStore;
     private readonly SkillUsageCache _skillUsageCache = new();
     private readonly DispatcherTimer _undoTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly DispatcherTimer _errorTimer = new() { Interval = TimeSpan.FromSeconds(4) };
@@ -50,6 +52,11 @@ public partial class PanelWindow : Window
     private DateOnly? _selectedDay;
     private DateTime _lastHiddenAt = DateTime.MinValue;
     private readonly List<DayWindow> _dayWindows = [];
+
+    private long? _selectedPlanId;
+    private Plan? _currentPlan;
+    private bool _planTitleEditing;
+    private bool _planPathEditing;
 
     private IReadOnlyList<SkillInfo>? _skillInstalledCache;
     private IReadOnlyDictionary<string, SkillUsage>? _skillUsageDataCache;
@@ -73,26 +80,31 @@ public partial class PanelWindow : Window
     public ObservableCollection<SkillGroupVm> SkillGroups { get; } = [];
     public ObservableCollection<string> SkillAiOptions { get; } = [];
     public ObservableCollection<MarketplaceGroupVm> MarketplaceGroups { get; } = [];
+    public ObservableCollection<PlanListItemVm> Plans { get; } = [];
+    public ObservableCollection<PlanStepItemVm> PlanDetailSteps { get; } = [];
 
-    public PanelWindow(NoteStore store, TaskStore taskStore, MemoryStore memoryStore, SkillRegistry skillRegistry, SkillTranslations skillTranslations)
+    public PanelWindow(NoteStore store, TaskStore taskStore, MemoryStore memoryStore, SkillRegistry skillRegistry,
+        SkillTranslations skillTranslations, PlanStore planStore)
     {
         _store = store;
         _taskStore = taskStore;
         _memoryStore = memoryStore;
         _skillRegistry = skillRegistry;
         _skillTranslations = skillTranslations;
+        _planStore = planStore;
         _settings = AppSettings.Load();
         InitializeComponent();
         DataContext = this;
         _undoTimer.Tick += (_, _) => HideUndo();
         _errorTimer.Tick += (_, _) => { _errorTimer.Stop(); ErrorBar.Visibility = Visibility.Collapsed; };
-        _skillStatusTimer.Tick += (_, _) => { _skillStatusTimer.Stop(); SkillStatusText.Visibility = Visibility.Collapsed; };
+        _skillStatusTimer.Tick += (_, _) => { _skillStatusTimer.Stop(); SkillStatusRow.Visibility = Visibility.Collapsed; };
         AppSettings.Changed += OnSettingsChanged;
         UpdatePinButtonVisual();
     }
 
     private bool AnyEditing => DayNotes.Any(n => n.IsEditing) || Tasks.Any(t => t.IsEditing)
-        || MemoryGroups.Any(g => g.Items.Any(m => m.IsEditing));
+        || MemoryGroups.Any(g => g.Items.Any(m => m.IsEditing))
+        || PlanDetailSteps.Any(s => s.IsEditing) || _planTitleEditing || _planPathEditing;
 
     private void OnSettingsChanged()
     {
@@ -132,6 +144,7 @@ public partial class PanelWindow : Window
             case Mode.Personal: TaskInputBox.Focus(); break;
             case Mode.Memory: MemorySearchBox.Focus(); break;
             case Mode.Skills: SkillSearchBox.Focus(); break;
+            case Mode.Plans: break;
             default: InputBox.Focus(); break;
         }
     }
@@ -171,6 +184,8 @@ public partial class PanelWindow : Window
         _showAll = false;
         _selectedDay = null;
         _authorFilter = null;
+        _tagFilter = null;
+        _selectedPlanId = null;
         _mode = Mode.Notes;
     }
 
@@ -184,6 +199,10 @@ public partial class PanelWindow : Window
         foreach (var group in MemoryGroups)
             foreach (var item in group.Items)
                 item.IsEditing = false;
+        foreach (var step in PlanDetailSteps)
+            step.IsEditing = false;
+        if (_planTitleEditing) CancelPlanTitleEdit();
+        if (_planPathEditing) CancelPlanPathEdit();
     }
 
     /// <summary>Panel gizliyken gerçek yeniden yükleme işini atlar (DB okuma + UI güncelleme).
@@ -217,12 +236,14 @@ public partial class PanelWindow : Window
                 Mode.Personal => "🔒 Kişisel",
                 Mode.Memory => "🧠 Hafıza",
                 Mode.Skills => "🧩 Yetenekler",
+                Mode.Plans => "📋 Planlar",
                 _ => "📝 Notlar",
             };
             TabsRow.Visibility = _mode == Mode.Personal ? Visibility.Collapsed : Visibility.Visible;
             SetTabStyle(NotesTabButton, _mode == Mode.Notes);
             SetTabStyle(MemoryTabButton, _mode == Mode.Memory);
             SetTabStyle(SkillsTabButton, _mode == Mode.Skills);
+            SetTabStyle(PlansTabButton, _mode == Mode.Plans);
 
             NotesInputBorder.Visibility = _mode == Mode.Notes ? Visibility.Visible : Visibility.Collapsed;
             TaskInputBorder.Visibility = _mode == Mode.Personal ? Visibility.Visible : Visibility.Collapsed;
@@ -231,14 +252,17 @@ public partial class PanelWindow : Window
             TasksPanel.Visibility = _mode == Mode.Personal ? Visibility.Visible : Visibility.Collapsed;
             MemoryPanel.Visibility = _mode == Mode.Memory ? Visibility.Visible : Visibility.Collapsed;
             SkillsPanel.Visibility = _mode == Mode.Skills ? Visibility.Visible : Visibility.Collapsed;
+            PlansPanel.Visibility = _mode == Mode.Plans ? Visibility.Visible : Visibility.Collapsed;
 
             ReloadTasks();
             ReloadMemory();
             if (_mode == Mode.Skills) EnsureSkillsLoaded(forceRescan: false);
+            if (_mode == Mode.Plans) ReloadPlans();
 
             if (_mode != Mode.Notes)
             {
                 AuthorFilterRow.Visibility = Visibility.Collapsed;
+                FilterClearButton.Visibility = Visibility.Collapsed;
                 TagRow.Visibility = Visibility.Collapsed;
                 DayListPanel.Visibility = Visibility.Collapsed;
                 DayViewPanel.Visibility = Visibility.Collapsed;
@@ -301,6 +325,8 @@ public partial class PanelWindow : Window
             DayListPanel.Visibility = _selectedDay is null ? Visibility.Visible : Visibility.Collapsed;
             DayViewPanel.Visibility = _selectedDay is null ? Visibility.Collapsed : Visibility.Visible;
             AuthorFilterRow.Visibility = Visibility.Visible;
+            FilterClearButton.Visibility = _authorFilter is not null || _tagFilter is not null
+                ? Visibility.Visible : Visibility.Collapsed;
 
             InputPlaceholder.Text = _selectedDay is { } selectedOther && selectedOther != today
                 ? $"{DayGrouper.FormatShort(selectedOther)}'{DativeSuffix(selectedOther)} not yaz... (#etiket)"
@@ -422,12 +448,29 @@ public partial class PanelWindow : Window
         Reload();
     }
 
+    private void PlansTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (_mode == Mode.Personal) return;
+        CancelAllEdits();
+        _mode = Mode.Plans;
+        Reload();
+    }
+
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (AnyEditing) return; // Düzenleme kutusu Enter/Esc'i kendisi işler.
         if (e.Key == Key.Escape)
         {
-            if (_selectedDay is not null)
+            if (SkillAddExpander.IsExpanded) { SkillAddExpander.IsExpanded = false; e.Handled = true; return; }
+            if (MemoryAddExpander.IsExpanded) { MemoryAddExpander.IsExpanded = false; e.Handled = true; return; }
+            if (PlanAddExpander.IsExpanded) { PlanAddExpander.IsExpanded = false; e.Handled = true; return; }
+            if (PlanAddStepExpander.IsExpanded) { PlanAddStepExpander.IsExpanded = false; e.Handled = true; return; }
+            if (_selectedPlanId is not null)
+            {
+                _selectedPlanId = null;
+                Reload();
+            }
+            else if (_selectedDay is not null)
             {
                 _selectedDay = null;
                 Reload();
@@ -451,6 +494,11 @@ public partial class PanelWindow : Window
         else if (e.Key == Key.Delete && Keyboard.FocusedElement is FrameworkElement { DataContext: MemoryItemVm memoryItem })
         {
             DeleteMemory(memoryItem);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete && Keyboard.FocusedElement is FrameworkElement { DataContext: PlanStepItemVm stepItem })
+        {
+            Try(() => { _planStore.DeleteStep(stepItem.Id); Reload(); });
             e.Handled = true;
         }
     }
@@ -576,6 +624,14 @@ public partial class PanelWindow : Window
             _authorFilter = chip.Author;
             Reload();
         }
+    }
+
+    private void FilterClear_Click(object sender, RoutedEventArgs e)
+    {
+        CancelAllEdits();
+        _authorFilter = null;
+        _tagFilter = null;
+        Reload();
     }
 
     private void ExpandButton_Click(object sender, RoutedEventArgs e)
@@ -765,6 +821,7 @@ public partial class PanelWindow : Window
                 case UndoKind.Task: Try(() => { _taskStore.Restore(id); Reload(); }); break;
                 case UndoKind.Memory: Try(() => { _memoryStore.Restore(id); Reload(); }); break;
                 case UndoKind.Skill: Try(() => { _skillRegistry.Restore(id); RefreshSkillRegistryCache(); }); break;
+                case UndoKind.Plan: Try(() => { _planStore.Restore(id); Reload(); }); break;
                 default: Try(() => { _store.Restore(id); Reload(); }); break;
             }
         }
@@ -778,6 +835,11 @@ public partial class PanelWindow : Window
 
     private void MemorySearchClear_Click(object sender, RoutedEventArgs e) => MemorySearchBox.Clear();
 
+    private void MemoryAddExpander_Expanded(object sender, RoutedEventArgs e) =>
+        Dispatcher.InvokeAsync(() => MemoryTitleBox.Focus(), DispatcherPriority.Input);
+
+    private void MemoryAddClose_Click(object sender, RoutedEventArgs e) => MemoryAddExpander.IsExpanded = false;
+
     private void MemoryAdd_Click(object sender, RoutedEventArgs e)
     {
         var title = MemoryTitleBox.Text.Trim();
@@ -790,6 +852,7 @@ public partial class PanelWindow : Window
             MemoryTitleBox.Clear();
             MemoryContentBox.Clear();
             MemoryCategoryBox.Text = "genel";
+            MemoryAddExpander.IsExpanded = false;
             Reload();
         });
     }
@@ -1095,6 +1158,15 @@ public partial class PanelWindow : Window
 
     private void SkillAddClose_Click(object sender, RoutedEventArgs e) => SkillAddExpander.IsExpanded = false;
 
+    private void SkillAddExpander_Expanded(object sender, RoutedEventArgs e) =>
+        Dispatcher.InvokeAsync(() => SkillAiBox.Focus(), DispatcherPriority.Input);
+
+    private void SkillStatusClose_Click(object sender, RoutedEventArgs e)
+    {
+        _skillStatusTimer.Stop();
+        SkillStatusRow.Visibility = Visibility.Collapsed;
+    }
+
     private void SetSkillViewToggleStyle()
     {
         SetTabStyle(SkillShowInstalledButton, !_skillShowDiscover);
@@ -1186,7 +1258,7 @@ public partial class PanelWindow : Window
     private void ShowSkillStatus(string text)
     {
         SkillStatusText.Text = text;
-        SkillStatusText.Visibility = Visibility.Visible;
+        SkillStatusRow.Visibility = Visibility.Visible;
         _skillStatusTimer.Stop();
         _skillStatusTimer.Start();
     }
@@ -1238,6 +1310,411 @@ public partial class PanelWindow : Window
         });
     }
 
+    /// <summary>Planlar listesini (ya da seçili bir plan varsa detay görünümünü) yeniden yükler.</summary>
+    private void ReloadPlans()
+    {
+        if (_selectedPlanId is { } id)
+        {
+            RenderPlanDetail(id);
+            return;
+        }
+
+        PlanDetailPanel.Visibility = Visibility.Collapsed;
+        PlansListPanel.Visibility = Visibility.Visible;
+        _currentPlan = null;
+
+        var plans = _planStore.ListPlans();
+        Plans.Clear();
+        foreach (var plan in plans)
+        {
+            var (_, steps) = _planStore.GetPlan(plan.Id);
+            var done = steps.Count(s => s.Status is StepStatus.Bitti or StepStatus.Atlandi);
+            Plans.Add(new PlanListItemVm(plan.Id, plan.Title, plan.ProjectPath, ShortenPath(plan.ProjectPath),
+                PlanStatusLabel(plan.Status), PlanStatusBrush(plan.Status), $"{done}/{steps.Count} adım"));
+        }
+        PlansEmptyText.Visibility = Plans.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Bir plan kartına tıklayınca detay görünümüne geçer, "📁 Başka klasör"/adım düzenleme
+    /// gibi satır içi düzenleme durumları koruyarak yeniden çizer (ör. başlık düzenlenirken arka planda
+    /// değişiklik sinyali gelirse).</summary>
+    private void RenderPlanDetail(long id)
+    {
+        Plan plan;
+        IReadOnlyList<PlanStep> steps;
+        try
+        {
+            (plan, steps) = _planStore.GetPlan(id);
+        }
+        catch (PlanNotFoundException)
+        {
+            _selectedPlanId = null;
+            ReloadPlans();
+            return;
+        }
+
+        _currentPlan = plan;
+        PlansListPanel.Visibility = Visibility.Collapsed;
+        PlanDetailPanel.Visibility = Visibility.Visible;
+
+        if (!_planTitleEditing)
+            PlanDetailTitleText.Text = plan.Title;
+        if (!_planPathEditing)
+        {
+            PlanDetailPathText.Text = plan.ProjectPath;
+            PlanDetailPathText.ToolTip = plan.ProjectPath;
+        }
+
+        PlanDetailTitleText.Visibility = _planTitleEditing ? Visibility.Collapsed : Visibility.Visible;
+        PlanTitleEditButton.Visibility = _planTitleEditing ? Visibility.Collapsed : Visibility.Visible;
+        PlanTitleEditRow.Visibility = _planTitleEditing ? Visibility.Visible : Visibility.Collapsed;
+
+        PlanDetailPathText.Visibility = _planPathEditing ? Visibility.Collapsed : Visibility.Visible;
+        PlanPathEditButton.Visibility = _planPathEditing ? Visibility.Collapsed : Visibility.Visible;
+        PlanPathEditRow.Visibility = _planPathEditing ? Visibility.Visible : Visibility.Collapsed;
+
+        PlanDetailSteps.Clear();
+        foreach (var step in steps)
+            PlanDetailSteps.Add(new PlanStepItemVm(step));
+    }
+
+    private static string PlanStatusLabel(PlanStatus status) => status switch
+    {
+        PlanStatus.Taslak => "Taslak",
+        PlanStatus.Calisiyor => "Çalışıyor",
+        PlanStatus.Bitti => "Bitti",
+        PlanStatus.Hata => "Hata",
+        _ => "",
+    };
+
+    private Brush PlanStatusBrush(PlanStatus status) => status switch
+    {
+        PlanStatus.Taslak => (Brush)FindResource("Muted"),
+        PlanStatus.Calisiyor => (Brush)FindResource("Accent"),
+        PlanStatus.Bitti => (Brush)FindResource("Success"),
+        PlanStatus.Hata => (Brush)FindResource("Danger"),
+        _ => (Brush)FindResource("Muted"),
+    };
+
+    /// <summary>Uzun proje yollarını "…\üstKlasör\klasör" biçiminde kısaltır; tam yol ToolTip'te gösterilir.</summary>
+    private static string ShortenPath(string path)
+    {
+        const int maxLength = 42;
+        if (path.Length <= maxLength) return path;
+        var trimmed = path.TrimEnd('\\', '/');
+        var name = Path.GetFileName(trimmed);
+        var parent = Path.GetDirectoryName(trimmed);
+        var parentName = string.IsNullOrEmpty(parent) ? null : Path.GetFileName(parent);
+        return parentName is null ? "…" + name : $"…\\{parentName}\\{name}";
+    }
+
+    private void PlanRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PlanListItemVm vm }) return;
+        CancelAllEdits();
+        _selectedPlanId = vm.Id;
+        Reload();
+    }
+
+    private void PlanBackButton_Click(object sender, RoutedEventArgs e)
+    {
+        CancelAllEdits();
+        _selectedPlanId = null;
+        Reload();
+    }
+
+    private void PlanAddExpander_Expanded(object sender, RoutedEventArgs e) =>
+        Dispatcher.InvokeAsync(() => PlanTitleBox.Focus(), DispatcherPriority.Input);
+
+    private void PlanAddClose_Click(object sender, RoutedEventArgs e) => PlanAddExpander.IsExpanded = false;
+
+    /// <summary>Panel Topmost olduğundan, WinForms klasör seçici için panelin kendi pencere tutamacını
+    /// sahip (owner) olarak verir; aksi halde dialog panelin arkasında kalabilir.</summary>
+    private sealed class Win32Window(IntPtr handle) : Forms.IWin32Window
+    {
+        public IntPtr Handle { get; } = handle;
+    }
+
+    private Forms.IWin32Window DialogOwner => new Win32Window(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+
+    private void PlanPathBrowseNew_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new Forms.FolderBrowserDialog();
+        var current = PlanPathBox.Text.Trim();
+        if (current.Length > 0 && Directory.Exists(current)) dialog.SelectedPath = current;
+        if (dialog.ShowDialog(DialogOwner) == Forms.DialogResult.OK)
+            PlanPathBox.Text = dialog.SelectedPath;
+    }
+
+    private void PlanCreate_Click(object sender, RoutedEventArgs e)
+    {
+        var title = PlanTitleBox.Text.Trim();
+        var path = PlanPathBox.Text.Trim();
+        var steps = PlanStepsBox.Text.Replace("\r\n", "\n").Split('\n')
+            .Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+        if (title.Length == 0 || path.Length == 0 || steps.Count == 0) return;
+        Try(() =>
+        {
+            _planStore.CreatePlan(title, path, steps);
+            PlanTitleBox.Clear();
+            PlanPathBox.Clear();
+            PlanStepsBox.Clear();
+            PlanAddExpander.IsExpanded = false;
+            Reload();
+        });
+    }
+
+    private void PlanRunRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PlanListItemVm vm }) RunPlan(vm.Id);
+    }
+
+    private void PlanResetRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PlanListItemVm vm })
+            Try(() => { _planStore.ResetPlan(vm.Id); Reload(); });
+    }
+
+    private void PlanDeleteRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PlanListItemVm vm }) DeletePlan(vm.Id);
+    }
+
+    private void DeletePlan(long id)
+    {
+        Try(() =>
+        {
+            _planStore.Delete(id);
+            _undoId = id;
+            _undoKind = UndoKind.Plan;
+            UndoText.Text = "Plan silindi.";
+            UndoBar.Visibility = Visibility.Visible;
+            _undoTimer.Stop();
+            _undoTimer.Start();
+            if (_selectedPlanId == id) _selectedPlanId = null;
+            Reload();
+        });
+    }
+
+    private void PlanRunButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPlan is { } plan) RunPlan(plan.Id);
+    }
+
+    /// <summary>▶ Çalıştır: önce 'claude' komutunun PATH'te olup olmadığını kontrol eder, sonra kullanıcıdan
+    /// açık onay alır; onaysız hiçbir şey başlatılmaz.</summary>
+    private void RunPlan(long id)
+    {
+        if (!PlanLauncher.IsClaudeOnPath())
+        {
+            ShowError("'claude' komutu PATH üzerinde bulunamadı. Claude Code'un kurulu ve PATH'e eklenmiş olduğundan emin olun.");
+            return;
+        }
+
+        Plan plan;
+        try
+        {
+            (plan, _) = _planStore.GetPlan(id);
+        }
+        catch (PlanNotFoundException)
+        {
+            Reload();
+            return;
+        }
+
+        var question = $"Claude Code bu klasörde açılıp planı uygulamaya başlayacak: {plan.ProjectPath}. Devam edilsin mi?";
+        if (MessageBox.Show(question, "Notlar", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+
+        Try(() => PlanLauncher.Launch(plan));
+    }
+
+    private void PlanTitleEditButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPlan is not { } plan) return;
+        _planTitleEditing = true;
+        PlanDetailTitleBox.Text = plan.Title;
+        PlanDetailTitleText.Visibility = Visibility.Collapsed;
+        PlanTitleEditButton.Visibility = Visibility.Collapsed;
+        PlanTitleEditRow.Visibility = Visibility.Visible;
+        Dispatcher.InvokeAsync(() => { PlanDetailTitleBox.Focus(); PlanDetailTitleBox.SelectAll(); }, DispatcherPriority.Input);
+    }
+
+    private void CancelPlanTitleEdit()
+    {
+        _planTitleEditing = false;
+        PlanDetailTitleText.Visibility = Visibility.Visible;
+        PlanTitleEditButton.Visibility = Visibility.Visible;
+        PlanTitleEditRow.Visibility = Visibility.Collapsed;
+        if (_reloadPending) Reload();
+    }
+
+    private void PlanTitleEditCancel_Click(object sender, RoutedEventArgs e) => CancelPlanTitleEdit();
+
+    private void PlanTitleEditBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            SavePlanTitleEdit();
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CancelPlanTitleEdit();
+        }
+    }
+
+    private void SavePlanTitleEdit()
+    {
+        if (_currentPlan is not { } plan) { CancelPlanTitleEdit(); return; }
+        var text = PlanDetailTitleBox.Text.Trim();
+        _planTitleEditing = false;
+        PlanDetailTitleText.Visibility = Visibility.Visible;
+        PlanTitleEditButton.Visibility = Visibility.Visible;
+        PlanTitleEditRow.Visibility = Visibility.Collapsed;
+        if (text.Length > 0 && text != plan.Title)
+            Try(() => _planStore.UpdatePlan(plan.Id, title: text));
+        Reload();
+    }
+
+    private void PlanPathEditButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPlan is not { } plan) return;
+        _planPathEditing = true;
+        PlanDetailPathBox.Text = plan.ProjectPath;
+        PlanDetailPathText.Visibility = Visibility.Collapsed;
+        PlanPathEditButton.Visibility = Visibility.Collapsed;
+        PlanPathEditRow.Visibility = Visibility.Visible;
+        Dispatcher.InvokeAsync(() => { PlanDetailPathBox.Focus(); PlanDetailPathBox.SelectAll(); }, DispatcherPriority.Input);
+    }
+
+    private void CancelPlanPathEdit()
+    {
+        _planPathEditing = false;
+        PlanDetailPathText.Visibility = Visibility.Visible;
+        PlanPathEditButton.Visibility = Visibility.Visible;
+        PlanPathEditRow.Visibility = Visibility.Collapsed;
+        if (_reloadPending) Reload();
+    }
+
+    private void PlanPathEditCancel_Click(object sender, RoutedEventArgs e) => CancelPlanPathEdit();
+
+    private void PlanPathEditBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            SavePlanPathEdit();
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CancelPlanPathEdit();
+        }
+    }
+
+    private void SavePlanPathEdit()
+    {
+        if (_currentPlan is not { } plan) { CancelPlanPathEdit(); return; }
+        var text = PlanDetailPathBox.Text.Trim();
+        _planPathEditing = false;
+        PlanDetailPathText.Visibility = Visibility.Visible;
+        PlanPathEditButton.Visibility = Visibility.Visible;
+        PlanPathEditRow.Visibility = Visibility.Collapsed;
+        if (text.Length > 0 && text != plan.ProjectPath)
+            Try(() => _planStore.UpdatePlan(plan.Id, projectPath: text));
+        Reload();
+    }
+
+    private void PlanPathBrowse_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPlan is not { } plan) return;
+        using var dialog = new Forms.FolderBrowserDialog();
+        if (Directory.Exists(plan.ProjectPath)) dialog.SelectedPath = plan.ProjectPath;
+        if (dialog.ShowDialog(DialogOwner) != Forms.DialogResult.OK) return;
+        Try(() =>
+        {
+            _planStore.UpdatePlan(plan.Id, projectPath: dialog.SelectedPath);
+            _planPathEditing = false;
+            Reload();
+        });
+    }
+
+    private void PlanStepUp_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PlanStepItemVm item })
+            Try(() => { _planStore.MoveStep(item.Id, item.Order - 1); Reload(); });
+    }
+
+    private void PlanStepDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PlanStepItemVm item })
+            Try(() => { _planStore.MoveStep(item.Id, item.Order + 1); Reload(); });
+    }
+
+    private void PlanStepEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PlanStepItemVm item }) return;
+        item.EditText = item.Text;
+        item.IsEditing = true;
+    }
+
+    private void PlanStepEditBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: PlanStepItemVm item }) return;
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            var text = item.EditText.Trim();
+            item.IsEditing = false;
+            if (text.Length > 0 && text != item.Text)
+                Try(() => _planStore.UpdateStep(item.Id, text));
+            Reload();
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CancelPlanStepEdit(item);
+        }
+    }
+
+    private void CancelPlanStepEdit(PlanStepItemVm item)
+    {
+        item.IsEditing = false;
+        if (_reloadPending) Reload();
+    }
+
+    private void PlanStepEditCancel_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PlanStepItemVm item }) CancelPlanStepEdit(item);
+    }
+
+    private void PlanStepDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PlanStepItemVm item })
+            Try(() => { _planStore.DeleteStep(item.Id); Reload(); });
+    }
+
+    private void PlanAddStepExpander_Expanded(object sender, RoutedEventArgs e) =>
+        Dispatcher.InvokeAsync(() => PlanNewStepBox.Focus(), DispatcherPriority.Input);
+
+    private void PlanAddStepClose_Click(object sender, RoutedEventArgs e) => PlanAddStepExpander.IsExpanded = false;
+
+    private void PlanAddStep_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPlan is not { } plan) return;
+        var text = PlanNewStepBox.Text.Trim();
+        if (text.Length == 0) return;
+        Try(() =>
+        {
+            _planStore.AddStep(plan.Id, text);
+            PlanNewStepBox.Clear();
+            PlanAddStepExpander.IsExpanded = false;
+            Reload();
+        });
+    }
+
     private void Try(Action action)
     {
         try
@@ -1249,7 +1726,8 @@ public partial class PanelWindow : Window
             AppLog.Write(ex);
             var message = ex switch
             {
-                NoteNotFoundException or TaskNotFoundException or ArgumentException => ex.Message,
+                NoteNotFoundException or TaskNotFoundException or PlanNotFoundException
+                    or PlanStepNotFoundException or ArgumentException => ex.Message,
                 SqliteException => $"Veritabanı hatası. Yedekler: {AppPaths.BackupDir}",
                 _ => $"Bir hata oluştu, ayrıntı: {AppPaths.LogPath}",
             };
