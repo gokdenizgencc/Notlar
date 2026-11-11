@@ -20,25 +20,35 @@ public sealed class NamedEventChangeSignal(string name) : IChangeSignal, IDispos
     public void Dispose() => _handle.Dispose();
 }
 
-/// <summary>Sinyali arka plan thread'inde bekler; her sinyalde onChange çağrılır (UI thread'e dispatch çağıranın işi).</summary>
+/// <summary>Sinyali arka plan thread'inde bekler; her sinyalde onChange çağrılır (UI thread'e dispatch çağıranın işi).
+/// onChange içinde oluşan hatalar işlemi sonlandırmaz; onError'a iletilir (verilmişse) ve dinleme sürer.</summary>
 public sealed class ChangeListener : IDisposable
 {
     private readonly EventWaitHandle _handle;
     private readonly CancellationTokenSource _cts = new();
     private readonly Thread _thread;
 
-    public ChangeListener(string name, Action onChange)
+    public ChangeListener(string name, Action onChange, Action<Exception>? onError = null)
     {
         _handle = new EventWaitHandle(false, EventResetMode.AutoReset, name);
-        _thread = new Thread(() => Loop(onChange)) { IsBackground = true, Name = "Notlar.ChangeListener" };
+        _thread = new Thread(() => Loop(onChange, onError)) { IsBackground = true, Name = "Notlar.ChangeListener" };
         _thread.Start();
     }
 
-    private void Loop(Action onChange)
+    private void Loop(Action onChange, Action<Exception>? onError)
     {
         WaitHandle[] handles = [_handle, _cts.Token.WaitHandle];
         while (WaitHandle.WaitAny(handles) == 0)
-            onChange();
+        {
+            try
+            {
+                onChange();
+            }
+            catch (Exception ex)
+            {
+                onError?.Invoke(ex);
+            }
+        }
     }
 
     public void Dispose()

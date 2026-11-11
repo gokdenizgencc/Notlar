@@ -120,6 +120,8 @@ public sealed class NoteStore
     {
         using var conn = Open();
         using var cmd = conn.CreateCommand();
+        // Cutoff string olarak karşılaştırılıyor; bu yalnızca tüm zaman damgaları aynı yerel ofsetle
+        // (Türkiye, sabit +03:00, DST yok) yazıldığı için doğru sonuç verir.
         cmd.CommandText = "DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < $cutoff";
         cmd.Parameters.AddWithValue("$cutoff", Format(_time.GetLocalNow() - olderThan));
         return cmd.ExecuteNonQuery();
