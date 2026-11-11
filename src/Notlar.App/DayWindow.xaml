@@ -6,19 +6,56 @@
         Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
         FontFamily="Segoe UI"
         PreviewKeyDown="Window_PreviewKeyDown"
-        PreviewMouseWheel="Window_PreviewMouseWheel">
+        PreviewMouseWheel="Window_PreviewMouseWheel"
+        Closed="Window_Closed">
+    <Window.Resources>
+        <Style x:Key="FlatButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="6">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="20,16,20,8" VerticalAlignment="Bottom">
-            <TextBlock x:Name="HeaderText" FontSize="20" FontWeight="SemiBold"/>
-            <TextBlock x:Name="CountText" Foreground="{DynamicResource Muted}" Margin="12,0,0,0" VerticalAlignment="Bottom"/>
-        </StackPanel>
+        <Border Grid.Row="0" Background="{DynamicResource Surface}"
+                BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1"
+                Padding="20,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-        <ScrollViewer x:Name="Body" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20,4,20,20" FontSize="16">
+                <StackPanel Grid.Column="0">
+                    <TextBlock x:Name="HeaderText" FontSize="26" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="SubHeaderText" Foreground="{DynamicResource Muted}" Margin="0,4,0,0"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel x:Name="SummaryPillsPanel" Orientation="Horizontal" VerticalAlignment="Center"/>
+                    <Button x:Name="AppearanceButton" Content="⚙ Görünüm" Style="{StaticResource FlatButton}"
+                            Margin="16,0,0,0" Click="AppearanceButton_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <ScrollViewer x:Name="Body" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20,8,20,20" FontSize="16">
             <Grid>
                 <TextBlock x:Name="EmptyText" Text="Bu günde not yok." Foreground="{DynamicResource Muted}"
                            HorizontalAlignment="Center" Margin="0,60,0,0" Visibility="Collapsed"/>

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,12 +13,11 @@ namespace Notlar.App;
 /// <summary>Günün notlarını büyük, yeniden boyutlandırılabilir bir pencerede gösterir (yalnızca görüntüleme + tamamlandı işareti).</summary>
 public partial class DayWindow : Window
 {
-    private const double MinFontSize = 10;
-    private const double MaxFontSize = 40;
-    private const double DefaultFontSize = 16;
+    private static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
 
     private readonly NoteStore _store;
-    private double _fontSize = DefaultFontSize;
+    private AppSettings _settings;
+    private double _fontSize;
 
     public DateOnly Day { get; }
 
@@ -24,9 +25,28 @@ public partial class DayWindow : Window
     {
         _store = store;
         Day = day;
+        _settings = AppSettings.Load();
+        _fontSize = _settings.DayFontSize;
         InitializeComponent();
         Title = "Notlar — " + DayGrouper.FormatDate(day);
         Loaded += (_, _) => Reload();
+        AppSettings.Changed += OnSettingsChanged;
+    }
+
+    private void Window_Closed(object? sender, EventArgs e)
+    {
+        AppSettings.Changed -= OnSettingsChanged;
+    }
+
+    private void OnSettingsChanged()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            _settings = AppSettings.Load();
+            _fontSize = _settings.DayFontSize;
+            Body.FontSize = _fontSize;
+            Reload();
+        });
     }
 
     /// <summary>Store'dan güncel notları okuyup görünümü tazeler. Pencere kapalıysa/yüklenmemişse güvenli şekilde hiçbir şey yapmaz.</summary>
@@ -40,15 +60,18 @@ public partial class DayWindow : Window
             var groups = DayGrouper.Group(notes);
             var dayNotes = groups.FirstOrDefault(g => g.Date == Day)?.Notes ?? Array.Empty<Note>();
 
-            var today = DateOnly.FromDateTime(DateTime.Now);
-            HeaderText.Text = DayGrouper.Header(Day, today);
-            CountText.Text = dayNotes.Count == 1 ? "1 not" : $"{dayNotes.Count} not";
+            BuildHeader(dayNotes);
 
             EmptyText.Visibility = dayNotes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
+            Body.FontSize = _fontSize;
+
             NotesList.Children.Clear();
-            foreach (var note in dayNotes)
-                NotesList.Children.Add(BuildRow(note));
+            var ordered = dayNotes.ToList();
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                NotesList.Children.Add(BuildRow(ordered[i], isFirst: i == 0));
+            }
         }
         catch (Exception ex)
         {
@@ -57,9 +80,76 @@ public partial class DayWindow : Window
         }
     }
 
-    private UIElement BuildRow(Note note)
+    private void BuildHeader(IReadOnlyList<Note> dayNotes)
     {
-        var grid = new Grid { Margin = new Thickness(0, 6, 0, 6) };
+        var today = DateOnly.FromDateTime(DateTime.Now);
+        HeaderText.Text = Day.ToString("d MMMM yyyy", Tr);
+
+        var weekday = Day.ToString("dddd", Tr);
+        string? relative = Day == today ? "Bugün" : Day == today.AddDays(-1) ? "Dün" : Day == today.AddDays(1) ? "Yarın" : null;
+        SubHeaderText.Text = relative is null ? weekday : $"{weekday} · {relative}";
+
+        SummaryPillsPanel.Children.Clear();
+
+        var totalText = dayNotes.Count == 1 ? "1 not" : $"{dayNotes.Count} not";
+        SummaryPillsPanel.Children.Add(BuildPill(totalText, (Brush)FindResource("Fg"), (Brush)FindResource("Bg")));
+
+        var doneCount = dayNotes.Count(n => n.Done);
+        if (doneCount > 0)
+            SummaryPillsPanel.Children.Add(BuildPill($"{doneCount} tamamlandı", (Brush)FindResource("Muted"), (Brush)FindResource("Bg")));
+
+        var byAuthor = dayNotes
+            .GroupBy(n => n.Author.DisplayName(), StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count());
+        foreach (var group in byAuthor)
+        {
+            var authorName = group.Key;
+            var color = AuthorColors.For(authorName, _settings) ?? (Brush)FindResource("Fg");
+            var bg = Tint(color);
+            SummaryPillsPanel.Children.Add(BuildPill($"{group.Count()} {authorName}", color, bg));
+        }
+    }
+
+    private static Brush Tint(Brush brush)
+    {
+        if (brush is SolidColorBrush solid)
+        {
+            var c = solid.Color;
+            var tinted = new SolidColorBrush(Color.FromArgb(38, c.R, c.G, c.B));
+            tinted.Freeze();
+            return tinted;
+        }
+        return brush;
+    }
+
+    private UIElement BuildPill(string text, Brush foreground, Brush background)
+    {
+        var border = new Border
+        {
+            Background = background,
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(10, 3, 10, 3),
+            Margin = new Thickness(6, 0, 0, 0),
+        };
+        border.Child = new TextBlock
+        {
+            Text = text,
+            FontSize = 12,
+            Foreground = foreground,
+        };
+        return border;
+    }
+
+    private UIElement BuildRow(Note note, bool isFirst)
+    {
+        var container = new Border
+        {
+            Padding = new Thickness(0, 14, 0, 14),
+            BorderBrush = (Brush)FindResource("Border"),
+            BorderThickness = isFirst ? new Thickness(0) : new Thickness(0, 1, 0, 0),
+        };
+
+        var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -67,33 +157,36 @@ public partial class DayWindow : Window
         var checkBox = new System.Windows.Controls.CheckBox
         {
             IsChecked = note.Done,
-            Margin = new Thickness(0, 4, 10, 0),
+            Margin = new Thickness(0, 4, 12, 0),
             VerticalAlignment = VerticalAlignment.Top,
         };
         checkBox.Click += (_, _) => ToggleDone(note);
         Grid.SetColumn(checkBox, 0);
         grid.Children.Add(checkBox);
 
-        var timePanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 12, 0), VerticalAlignment = VerticalAlignment.Top };
+        var authorName = note.Author.DisplayName();
+        var authorColor = AuthorColors.For(authorName, _settings) ?? (Brush)FindResource("Fg");
+
+        var timePanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 14, 0), VerticalAlignment = VerticalAlignment.Top };
         timePanel.Children.Add(new TextBlock
         {
             Text = note.CreatedAt.ToString("HH:mm"),
             Foreground = (Brush)FindResource("Muted"),
         });
-        var isClaude = note.Author == NoteAuthor.Claude;
         var authorBadge = new Border
         {
             CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(5, 0, 5, 0),
-            Margin = new Thickness(4, 0, 0, 0),
+            Padding = new Thickness(6, 1, 6, 1),
+            Margin = new Thickness(6, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            Background = isClaude ? (Brush)FindResource("TagBg") : Brushes.Transparent,
+            Background = Tint(authorColor),
         };
         authorBadge.Child = new TextBlock
         {
-            Text = note.Author.DisplayName(),
+            Text = authorName,
             FontSize = 10,
-            Foreground = isClaude ? (Brush)FindResource("Accent") : (Brush)FindResource("Muted"),
+            FontWeight = FontWeights.SemiBold,
+            Foreground = authorColor,
         };
         timePanel.Children.Add(authorBadge);
         Grid.SetColumn(timePanel, 1);
@@ -108,7 +201,7 @@ public partial class DayWindow : Window
             IsReadOnly = true,
             BorderThickness = new Thickness(0),
             Background = Brushes.Transparent,
-            Foreground = (Brush)FindResource("Fg"),
+            Foreground = authorColor,
             TextWrapping = TextWrapping.Wrap,
             IsReadOnlyCaretVisible = true,
             Padding = new Thickness(0),
@@ -124,7 +217,7 @@ public partial class DayWindow : Window
 
         if (note.Tags.Count > 0)
         {
-            var tagsPanel = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
+            var tagsPanel = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
             foreach (var tag in note.Tags)
             {
                 var border = new Border
@@ -146,7 +239,8 @@ public partial class DayWindow : Window
         }
 
         grid.Children.Add(body);
-        return grid;
+        container.Child = grid;
+        return container;
     }
 
     private void ToggleDone(Note note)
@@ -161,6 +255,18 @@ public partial class DayWindow : Window
             MessageBox.Show(this, $"İşlem başarısız: {ex.Message}", "Notlar", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         Reload();
+    }
+
+    private void AppearanceButton_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new AppearanceWindow(_settings) { Owner = this };
+        var result = window.ShowDialog();
+        if (result == true)
+        {
+            _settings = AppSettings.Load();
+            _fontSize = _settings.DayFontSize;
+            Reload();
+        }
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -185,7 +291,7 @@ public partial class DayWindow : Window
             }
             else if (e.Key == Key.D0 || e.Key == Key.NumPad0)
             {
-                SetFontSize(DefaultFontSize);
+                SetFontSize(AppSettings.DefaultDayFontSize);
                 e.Handled = true;
             }
         }
@@ -200,7 +306,20 @@ public partial class DayWindow : Window
 
     private void SetFontSize(double size)
     {
-        _fontSize = Math.Clamp(size, MinFontSize, MaxFontSize);
+        var clamped = Math.Clamp(size, AppSettings.MinDayFontSize, AppSettings.MaxDayFontSize);
+        if (Math.Abs(clamped - _fontSize) < 0.01) return;
+
+        _fontSize = clamped;
         Body.FontSize = _fontSize;
+
+        try
+        {
+            _settings.DayFontSize = _fontSize;
+            _settings.Save();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+        }
     }
 }
