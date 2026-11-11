@@ -120,8 +120,12 @@ public sealed record SkillItemVm(
 public sealed record MarketplaceGroupVm(string Marketplace, IReadOnlyList<MarketplacePluginVm> Items);
 
 /// <summary>"Keşfet" sekmesinde tek bir marketplace plugin'inin görünüm modeli: kurulu/kurulu değil,
-/// kurulum sırasında "Kuruluyor…" durumu.</summary>
-public sealed class MarketplacePluginVm(string marketplace, string name, string description, IReadOnlyList<string> skills) : INotifyPropertyChanged
+/// kurulum sırasında "Kuruluyor…" durumu, popülerlik/güncellenme/bağlam yükü meta verisi ve (düz liste
+/// görünümünde) marketplace rozeti.</summary>
+public sealed class MarketplacePluginVm(
+    string marketplace, string name, string description, IReadOnlyList<string> skills,
+    string? metaLine, string? contextWeight, Brush? contextBrush, bool isTopPopular, bool showMarketplaceChip)
+    : INotifyPropertyChanged
 {
     private bool _installed;
     private bool _busy;
@@ -131,6 +135,30 @@ public sealed class MarketplacePluginVm(string marketplace, string name, string 
     public string Description { get; } = description;
     public IReadOnlyList<string> Skills { get; } = skills;
     public string PluginId => $"{Name}@{Marketplace}";
+
+    /// <summary>"1,6 bin kurulum · güncellendi: 3 Temmuz 2026" gibi, eksik parçalar atlanarak
+    /// birleştirilmiş meta satırı; hiçbiri yoksa null.</summary>
+    public string? MetaLine { get; } = string.IsNullOrEmpty(metaLine) ? null : metaLine;
+    public bool HasMeta => MetaLine is not null;
+
+    /// <summary>"hafif"/"orta"/"ağır"; veri yoksa null.</summary>
+    public string? ContextWeight { get; } = contextWeight;
+    public bool HasContext => ContextWeight is not null;
+    public string ContextLabel => $"bağlam: {ContextWeight}";
+    public Brush ContextBrush { get; } = contextBrush ?? Brushes.Transparent;
+
+    /// <summary>Meta satırı ve bağlam rozeti aynı anda varsa aralarına "·" ayırıcı konur.</summary>
+    public bool ShowContextSeparator => HasMeta && HasContext;
+
+    /// <summary>Meta satırı (kurulum/güncellenme) ya da bağlam rozetinden en az biri varsa satır gösterilir.</summary>
+    public bool HasMetaRow => HasMeta || HasContext;
+
+    /// <summary>Kurulum sayısına göre ilk 10 içindeyse "🔥" ile vurgulanır.</summary>
+    public bool IsTopPopular { get; } = isTopPopular;
+
+    /// <summary>Düz liste görünümünde (Popüler/Yeni güncellenen) satırda küçük bir marketplace rozeti
+    /// gösterilir; Ada göre gruplanmış görünümde marketplace zaten grup başlığında olduğundan gizlenir.</summary>
+    public bool ShowMarketplaceChip { get; } = showMarketplaceChip;
 
     public bool Installed
     {

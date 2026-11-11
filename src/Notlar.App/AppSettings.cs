@@ -40,6 +40,9 @@ public sealed class AppSettings
     [JsonInclude]
     public Dictionary<string, string> AuthorColors { get; set; } = CreateDefaultAuthorColors();
 
+    /// <summary>"Keşfet" sekmesindeki eklenti listesinin sıralama kriteri. Varsayılan: popülerliğe göre.</summary>
+    public PluginSort DiscoverSort { get; set; } = PluginSort.Popular;
+
     public static event Action? Changed;
 
     private static string SettingsPath => Path.Combine(AppPaths.DataDir, "ayarlar.json");

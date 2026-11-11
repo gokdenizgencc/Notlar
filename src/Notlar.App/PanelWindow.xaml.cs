@@ -72,6 +72,7 @@ public partial class PanelWindow : Window
     private string _skillSearch = "";
     private bool _skillSortByUsage = true;
     private bool _skillShowDiscover;
+    private PluginSort _discoverSort = PluginSort.Popular;
     private readonly DispatcherTimer _skillStatusTimer = new() { Interval = TimeSpan.FromSeconds(6) };
 
     public ObservableCollection<DayListItem> Days { get; } = [];
@@ -100,6 +101,7 @@ public partial class PanelWindow : Window
         _planStore = planStore;
         _projectStore = projectStore;
         _settings = AppSettings.Load();
+        _discoverSort = _settings.DiscoverSort;
         InitializeComponent();
         DataContext = this;
         _undoTimer.Tick += (_, _) => HideUndo();
@@ -1246,33 +1248,98 @@ public partial class PanelWindow : Window
     }
 
     /// <summary>"Keşfet" görünümünü (Kurulu/Keşfet geçişiyle açılan marketplace plugin listesi) kurulu
-    /// durum ve Türkçe açıklamalarla birlikte oluşturur.</summary>
+    /// durum, Türkçe açıklamalar, seçili sıralama kriteri ve popülerlik/güncellenme/bağlam yükü
+    /// meta verisiyle birlikte oluşturur. Ada göre sıralamada marketplace'e göre gruplanır; Popüler ve
+    /// Yeni güncellenen sıralamalarında düz bir liste olarak gösterilir (her satırda marketplace rozeti
+    /// ile birlikte).</summary>
     private void RenderDiscover()
     {
         var plugins = _marketplaceCache ?? [];
         var translations = _skillTranslationsCache ?? new Dictionary<string, SkillTranslation>();
 
         DiscoverHintText.Visibility = plugins.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        SetDiscoverSortStyle();
+
+        var topPopularIds = plugins
+            .Where(p => p.UniqueInstalls.HasValue)
+            .OrderByDescending(p => p.UniqueInstalls!.Value)
+            .Take(10)
+            .Select(p => $"{p.Name}@{p.Marketplace}")
+            .ToHashSet(StringComparer.Ordinal);
 
         var query = _skillSearch.Trim();
         var filtered = query.Length == 0
             ? plugins
             : plugins.Where(p => TrContains(p.Name, query) || TrContains(p.Description, query) || TrContains(p.Marketplace, query)).ToList();
 
+        var sorted = MarketplaceScanner.Sort(filtered, _discoverSort);
+
         MarketplaceGroups.Clear();
-        foreach (var group in filtered.GroupBy(p => p.Marketplace).OrderBy(g => g.Key, TrComparer))
+        if (_discoverSort == PluginSort.Name)
         {
-            var items = group.OrderBy(p => p.Installed ? 0 : 1).ThenBy(p => p.Name, TrComparer)
-                .Select(p =>
-                {
-                    translations.TryGetValue($"plugin:{p.Marketplace}/{p.Name}", out var tr);
-                    var description = string.IsNullOrWhiteSpace(tr?.DescriptionTr) ? p.Description : tr!.DescriptionTr;
-                    var vm = new MarketplacePluginVm(p.Marketplace, p.Name, description, p.Skills) { Installed = p.Installed };
-                    return vm;
-                }).ToList();
-            MarketplaceGroups.Add(new MarketplaceGroupVm(group.Key, items));
+            foreach (var group in sorted.GroupBy(p => p.Marketplace).OrderBy(g => g.Key, TrComparer))
+            {
+                var items = group.OrderBy(p => p.Installed ? 0 : 1).ThenBy(p => p.Name, TrComparer)
+                    .Select(p => ToMarketplacePluginVm(p, translations, topPopularIds, showMarketplaceChip: false))
+                    .ToList();
+                MarketplaceGroups.Add(new MarketplaceGroupVm(group.Key, items));
+            }
+        }
+        else if (sorted.Count > 0)
+        {
+            var items = sorted.Select(p => ToMarketplacePluginVm(p, translations, topPopularIds, showMarketplaceChip: true)).ToList();
+            MarketplaceGroups.Add(new MarketplaceGroupVm("", items));
         }
         DiscoverEmptyText.Visibility = plugins.Count > 0 && MarketplaceGroups.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private MarketplacePluginVm ToMarketplacePluginVm(
+        MarketplacePlugin p, IReadOnlyDictionary<string, SkillTranslation> translations,
+        IReadOnlySet<string> topPopularIds, bool showMarketplaceChip)
+    {
+        translations.TryGetValue($"plugin:{p.Marketplace}/{p.Name}", out var tr);
+        var description = string.IsNullOrWhiteSpace(tr?.DescriptionTr) ? p.Description : tr!.DescriptionTr;
+
+        var metaParts = new List<string>();
+        if (p.UniqueInstalls is { } installs) metaParts.Add(MarketplaceScanner.FormatInstalls(installs));
+        if (p.LastUpdated is { } updated) metaParts.Add($"güncellendi: {updated.ToString("d MMMM yyyy", TrTr)}");
+        var metaLine = metaParts.Count == 0 ? null : string.Join(" · ", metaParts);
+
+        var contextBrush = p.ContextWeight switch
+        {
+            "hafif" => (Brush)FindResource("Success"),
+            "orta" => (Brush)FindResource("Warning"),
+            "ağır" => (Brush)FindResource("Danger"),
+            _ => null,
+        };
+
+        var isTopPopular = topPopularIds.Contains($"{p.Name}@{p.Marketplace}");
+
+        return new MarketplacePluginVm(p.Marketplace, p.Name, description, p.Skills,
+            metaLine, p.ContextWeight, contextBrush, isTopPopular, showMarketplaceChip)
+        { Installed = p.Installed };
+    }
+
+    private void SetDiscoverSortStyle()
+    {
+        SetTabStyle(DiscoverSortPopularButton, _discoverSort == PluginSort.Popular);
+        SetTabStyle(DiscoverSortRecentButton, _discoverSort == PluginSort.RecentlyUpdated);
+        SetTabStyle(DiscoverSortNameButton, _discoverSort == PluginSort.Name);
+    }
+
+    private void DiscoverSortPopular_Click(object sender, RoutedEventArgs e) => SetDiscoverSort(PluginSort.Popular);
+
+    private void DiscoverSortRecent_Click(object sender, RoutedEventArgs e) => SetDiscoverSort(PluginSort.RecentlyUpdated);
+
+    private void DiscoverSortName_Click(object sender, RoutedEventArgs e) => SetDiscoverSort(PluginSort.Name);
+
+    private void SetDiscoverSort(PluginSort sort)
+    {
+        if (_discoverSort == sort) return;
+        _discoverSort = sort;
+        _settings.DiscoverSort = sort;
+        _settings.Save();
+        RenderDiscover();
     }
 
     /// <summary>tr-TR, büyük/küçük harfe duyarsız "içerir" araması.</summary>

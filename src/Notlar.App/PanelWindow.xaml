@@ -284,14 +284,51 @@
         <DataTemplate x:Key="MarketplaceRowTemplate" DataType="{x:Type local:MarketplacePluginVm}">
             <Border x:Name="MarketRow" Background="Transparent" Padding="8,6" CornerRadius="4">
                 <StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                        <Border Background="{DynamicResource TagBg}" CornerRadius="8" Padding="6,0" Margin="6,0,0,0"
-                                VerticalAlignment="Center" Visibility="{Binding Installed, Converter={StaticResource BoolToVis}}">
-                            <TextBlock Text="kurulu" FontSize="11" Foreground="{DynamicResource Accent}"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🔥" Margin="0,0,4,0" VerticalAlignment="Center"
+                                       Visibility="{Binding IsTopPopular, Converter={StaticResource BoolToVis}}"/>
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            <Border Background="{DynamicResource TagBg}" CornerRadius="8" Padding="6,0" Margin="6,0,0,0"
+                                    VerticalAlignment="Center" Visibility="{Binding Installed, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="kurulu" FontSize="11" Foreground="{DynamicResource Accent}"/>
+                            </Border>
+                            <Border Background="{DynamicResource TagBg}" CornerRadius="8" Padding="6,0" Margin="6,0,0,0"
+                                    VerticalAlignment="Center" Visibility="{Binding ShowMarketplaceChip, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding Marketplace}" FontSize="11" Foreground="{DynamicResource Muted}"/>
+                            </Border>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="{Binding ActionLabel}" Click="MarketplaceAction_Click"
+                                VerticalAlignment="Top" Padding="12,4" Margin="6,0,0,0">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                                    <Setter Property="Background" Value="{DynamicResource Accent}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Installed}" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource Danger}"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+                    <WrapPanel Margin="0,2,0,0" Visibility="{Binding HasMetaRow, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding MetaLine}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                   Visibility="{Binding HasMeta, Converter={StaticResource BoolToVis}}"/>
+                        <TextBlock Text=" · " FontSize="11" Foreground="{DynamicResource Muted}"
+                                   Visibility="{Binding ShowContextSeparator, Converter={StaticResource BoolToVis}}"/>
+                        <Border Background="{Binding ContextBrush}" CornerRadius="8" Padding="6,0" Margin="0,1,0,1"
+                                VerticalAlignment="Center" Visibility="{Binding HasContext, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding ContextLabel}" FontSize="11" Foreground="White"/>
                         </Border>
-                    </StackPanel>
-                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,2,0,4"
+                    </WrapPanel>
+                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,4,0,4"
                                Foreground="{DynamicResource Muted}"/>
                     <ItemsControl ItemsSource="{Binding Skills}" Margin="0,0,0,4">
                         <ItemsControl.ItemsPanel>
@@ -306,21 +343,6 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <Button Content="{Binding ActionLabel}" Click="MarketplaceAction_Click"
-                            HorizontalAlignment="Right" Padding="12,4">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
-                                <Setter Property="Background" Value="{DynamicResource Accent}"/>
-                                <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Installed}" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource Danger}"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
                 </StackPanel>
             </Border>
             <DataTemplate.Triggers>
@@ -911,6 +933,16 @@
                     </StackPanel>
 
                     <StackPanel x:Name="DiscoverPanel" Visibility="Collapsed">
+                        <DockPanel LastChildFill="False" Margin="0,0,0,4">
+                            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                                <Button x:Name="DiscoverSortPopularButton" Content="Popüler" Click="DiscoverSortPopular_Click"
+                                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,0"/>
+                                <Button x:Name="DiscoverSortRecentButton" Content="Yeni güncellenen" Click="DiscoverSortRecent_Click"
+                                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,0"/>
+                                <Button x:Name="DiscoverSortNameButton" Content="Ada göre" Click="DiscoverSortName_Click"
+                                        Style="{StaticResource FlatButton}" Padding="8,2"/>
+                            </StackPanel>
+                        </DockPanel>
                         <TextBlock x:Name="DiscoverHintText"
                                    Text="Henüz bir marketplace eklenmemiş. Claude Code'da /plugin ile marketplace ekleyebilirsin."
                                    Foreground="{DynamicResource Muted}" TextWrapping="Wrap" TextAlignment="Center"
@@ -922,7 +954,17 @@
                                 <DataTemplate DataType="{x:Type local:MarketplaceGroupVm}">
                                     <StackPanel Margin="0,8,0,0">
                                         <TextBlock Text="{Binding Marketplace}" FontSize="12" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource Muted}" Margin="8,0,0,4"/>
+                                                   Foreground="{DynamicResource Muted}" Margin="8,0,0,4">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Marketplace}" Value="">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                         <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource MarketplaceRowTemplate}"/>
                                     </StackPanel>
                                 </DataTemplate>
