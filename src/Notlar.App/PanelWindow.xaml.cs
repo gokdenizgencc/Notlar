@@ -205,11 +205,19 @@ public partial class PanelWindow : Window
     /// <summary>Kompakt (sabit 360×520, NoResize) ve büyük (serbest boyutlandırılabilir, ~1000×720,
     /// geçerli ekranın görünür alanına ortalanmış/kenetlenmiş) mod arasında geçiş yapar; boyut/konum
     /// ve mod <see cref="AppSettings"/> içinde kalıcı tutulur.</summary>
+    /// <summary>Beyaz sistem çerçevesi yerine WindowChrome kenarı; büyük modda kenardan boyutlandırma.</summary>
+    private void SetResizeBorder(double thickness)
+    {
+        if (System.Windows.Shell.WindowChrome.GetWindowChrome(this) is { } chrome)
+            chrome.ResizeBorderThickness = new Thickness(thickness);
+    }
+
     private void ApplyWindowMode()
     {
         if (_settings.PanelLarge)
         {
             ResizeMode = ResizeMode.CanResizeWithGrip;
+            SetResizeBorder(6);
             MinWidth = 500;
             MinHeight = 400;
             var area = GetCurrentScreenWorkArea();
@@ -227,6 +235,7 @@ public partial class PanelWindow : Window
         else
         {
             ResizeMode = ResizeMode.NoResize;
+            SetResizeBorder(0);
             MinWidth = 0;
             MinHeight = 0;
             Width = 360;

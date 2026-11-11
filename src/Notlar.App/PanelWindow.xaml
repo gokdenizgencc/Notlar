@@ -8,6 +8,9 @@
         BorderBrush="{DynamicResource Border}" BorderThickness="1"
         FontFamily="Segoe UI" FontSize="13"
         Deactivated="Window_Deactivated" PreviewKeyDown="Window_PreviewKeyDown">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" ResizeBorderThickness="0"/>
+    </WindowChrome.WindowChrome>
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <Style x:Key="FlatButton" TargetType="Button">
