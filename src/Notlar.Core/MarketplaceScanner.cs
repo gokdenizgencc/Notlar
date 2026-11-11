@@ -1,11 +1,35 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace Notlar.Core;
 
-/// <summary>Bir marketplace'teki tek bir plugin kaydı: kurulu olup olmadığı ve (yerel bir kaynaktan
-/// geliyorsa) içerdiği skill adları.</summary>
+/// <summary>Bir marketplace'teki tek bir plugin kaydı: kurulu olup olmadığı, (yerel bir kaynaktan
+/// geliyorsa) içerdiği skill adları ve plugin-catalog-cache.json'dan gelen popülerlik verisi.</summary>
 public sealed record MarketplacePlugin(
-    string Marketplace, string Name, string Description, bool Installed, IReadOnlyList<string> Skills);
+    string Marketplace, string Name, string Description, bool Installed, IReadOnlyList<string> Skills,
+    int? UniqueInstalls = null, DateTimeOffset? LastUpdated = null, int? AlwaysOnTokens = null)
+{
+    /// <summary>AlwaysOnTokens'a göre kabaca bağlam yükü: "hafif" (&lt;1000), "orta" (&lt;4000),
+    /// "ağır" (≥4000). Veri yoksa null.</summary>
+    public string? ContextWeight => AlwaysOnTokens switch
+    {
+        null => null,
+        < 1000 => "hafif",
+        < 4000 => "orta",
+        _ => "ağır",
+    };
+}
+
+/// <summary>Keşfet listesi için sıralama seçenekleri.</summary>
+public enum PluginSort
+{
+    /// <summary>Kurulum sayısına göre (azalan, null'lar sonda), sonra isme göre.</summary>
+    Popular,
+    /// <summary>Son güncellenme zamanına göre (azalan, null'lar sonda).</summary>
+    RecentlyUpdated,
+    /// <summary>tr-TR kurallarına göre isim sırası.</summary>
+    Name,
+}
 
 /// <summary>%USERPROFILE%\.claude\plugins\marketplaces altındaki yerel marketplace klonlarını ve
 /// %USERPROFILE%\.claude\plugins\installed_plugins.json içindeki kurulu plugin listesini tarayarak
@@ -16,13 +40,15 @@ public static class MarketplaceScanner
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
 
     /// <summary>claudeDir\plugins\marketplaces altındaki her marketplace klasöründeki
-    /// .claude-plugin\marketplace.json dosyasını okur ve içindeki plugin'leri, kurulu olup olmadıklarıyla
-    /// birlikte döndürür.</summary>
+    /// .claude-plugin\marketplace.json dosyasını okur, içindeki plugin'leri kurulu olup olmadıklarıyla
+    /// birlikte, plugin-catalog-cache.json'dan gelen popülerlik verisiyle eşleyerek döndürür.
+    /// Sonuç varsayılan olarak <see cref="PluginSort.Popular"/> sırasındadır.</summary>
     public static IReadOnlyList<MarketplacePlugin> ScanAvailable(string? claudeDir = null)
     {
         claudeDir ??= DefaultClaudeDir;
         var marketplacesDir = Path.Combine(claudeDir, "plugins", "marketplaces");
         var installed = ScanInstalledNames(claudeDir);
+        var catalog = PluginCatalogCache.Load(claudeDir);
 
         var result = new List<MarketplacePlugin>();
         if (!Directory.Exists(marketplacesDir)) return result;
@@ -35,12 +61,73 @@ public static class MarketplaceScanner
 
             foreach (var plugin in ParseManifest(manifestPath, marketDir))
             {
-                var isInstalled = installed.Contains($"{plugin.Name}@{marketName}");
-                result.Add(plugin with { Marketplace = marketName, Installed = isInstalled });
+                var key = $"{plugin.Name}@{marketName}";
+                var isInstalled = installed.Contains(key);
+                var withMarket = plugin with { Marketplace = marketName, Installed = isInstalled };
+
+                if (catalog.TryGetValue(key, out var entry))
+                {
+                    withMarket = withMarket with
+                    {
+                        UniqueInstalls = entry.UniqueInstalls,
+                        LastUpdated = entry.LastUpdated,
+                        AlwaysOnTokens = entry.AlwaysOnTokens,
+                    };
+                }
+
+                result.Add(withMarket);
             }
         }
 
-        return result;
+        return Sort(result, PluginSort.Popular);
+    }
+
+    /// <summary>Plugin listesini verilen kritere göre sıralar; orijinal listeyi değiştirmez.</summary>
+    public static IReadOnlyList<MarketplacePlugin> Sort(IReadOnlyList<MarketplacePlugin> plugins, PluginSort sort)
+    {
+        var trTr = CultureInfo.GetCultureInfo("tr-TR");
+        IEnumerable<MarketplacePlugin> ordered = sort switch
+        {
+            PluginSort.Popular => plugins
+                .OrderByDescending(p => p.UniqueInstalls.HasValue)
+                .ThenByDescending(p => p.UniqueInstalls ?? int.MinValue)
+                .ThenBy(p => p.Name, StringComparer.Create(trTr, ignoreCase: false)),
+            PluginSort.RecentlyUpdated => plugins
+                .OrderByDescending(p => p.LastUpdated.HasValue)
+                .ThenByDescending(p => p.LastUpdated ?? DateTimeOffset.MinValue),
+            PluginSort.Name => plugins
+                .OrderBy(p => p.Name, StringComparer.Create(trTr, ignoreCase: false)),
+            _ => plugins,
+        };
+        return ordered.ToList();
+    }
+
+    /// <summary>Kurulum sayısını tr-TR kurallarına göre okunabilir biçimde döndürür:
+    /// 950 → "950 kurulum", 1636 → "1,6 bin kurulum", 23400 → "23,4 bin kurulum",
+    /// 1250000 → "1,3 milyon kurulum".</summary>
+    public static string FormatInstalls(int n)
+    {
+        var trTr = CultureInfo.GetCultureInfo("tr-TR");
+
+        if (n < 1000) return $"{n.ToString(trTr)} kurulum";
+
+        if (n < 1_000_000)
+        {
+            var thousands = n / 1000.0;
+            return $"{FormatOneDecimal(thousands, trTr)} bin kurulum";
+        }
+
+        var millions = n / 1_000_000.0;
+        return $"{FormatOneDecimal(millions, trTr)} milyon kurulum";
+    }
+
+    private static string FormatOneDecimal(double value, CultureInfo culture)
+    {
+        var rounded = Math.Round(value, 1, MidpointRounding.AwayFromZero);
+        var text = rounded.ToString("0.0", culture);
+        if (text.EndsWith(",0", StringComparison.Ordinal))
+            text = text[..^2];
+        return text;
     }
 
     /// <summary>claudeDir\plugins\installed_plugins.json içindeki "plugin@marketplace" anahtarlarını
