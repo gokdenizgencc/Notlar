@@ -10,7 +10,7 @@ public sealed class PlanStore
 {
     private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:ss.fffzzz";
     private const string PlanColumns = "id, title, project_path, status, created_at, updated_at, project_id";
-    private const string StepColumns = "id, plan_id, step_order, text, status, result, updated_at, author";
+    private const string StepColumns = "id, plan_id, step_order, text, status, result, updated_at, author, project_id";
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     private readonly string _connectionString;
@@ -54,33 +54,220 @@ public sealed class PlanStore
 
         MigratePlansTable(conn);
         MigrateStepsTable(conn);
+        EnsurePlanProjectsTable(conn);
 
         // İndeksler tablo taşımasından sonra oluşturulur (yeniden oluşturulan tablo eski indeksleri düşürür).
         using var idx = conn.CreateCommand();
         idx.CommandText = """
             CREATE INDEX IF NOT EXISTS ix_plans_live ON plans(deleted_at, updated_at);
             CREATE INDEX IF NOT EXISTS ix_plan_steps_plan ON plan_steps(plan_id, step_order);
+            CREATE INDEX IF NOT EXISTS ix_plan_projects_plan ON plan_projects(plan_id, position);
             """;
         idx.ExecuteNonQuery();
     }
 
-    /// <summary>Eski veritabanlarında plan_steps.author (adımı kimin eklediği) sütunu yoksa ekler; mevcut
-    /// adımlar kullanıcıya ('Ben') atanır. İdempotenttir.</summary>
+    /// <summary>Eski veritabanlarında plan_steps.author (adımı kimin eklediği) veya project_id (adımın bağlı
+    /// olduğu proje) sütunu yoksa ekler; mevcut adımlar kullanıcıya ('Ben') ve projesiz (NULL) atanır.
+    /// İdempotenttir.</summary>
     private static void MigrateStepsTable(SqliteConnection conn)
     {
         var hasAuthor = false;
+        var hasProjectId = false;
         using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = "PRAGMA table_info(plan_steps)";
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
-                hasAuthor |= string.Equals(reader.GetString(1), "author", StringComparison.OrdinalIgnoreCase);
+            {
+                var name = reader.GetString(1);
+                hasAuthor |= string.Equals(name, "author", StringComparison.OrdinalIgnoreCase);
+                hasProjectId |= string.Equals(name, "project_id", StringComparison.OrdinalIgnoreCase);
+            }
         }
-        if (hasAuthor) return;
 
-        using var alter = conn.CreateCommand();
-        alter.CommandText = "ALTER TABLE plan_steps ADD COLUMN author TEXT NOT NULL DEFAULT 'Ben'";
-        alter.ExecuteNonQuery();
+        if (!hasAuthor)
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE plan_steps ADD COLUMN author TEXT NOT NULL DEFAULT 'Ben'";
+            alter.ExecuteNonQuery();
+        }
+        if (!hasProjectId)
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE plan_steps ADD COLUMN project_id INTEGER NULL";
+            alter.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>plan_projects tablosunu (bir planın bağlı olduğu, sıralı proje listesi) yoksa oluşturur ve
+    /// eski plans.project_id değerlerini (varsa) position 0 olarak bu tabloya taşır. İdempotenttir: zaten
+    /// plan_projects'te satırı olan bir planı yeniden işlemez.</summary>
+    private static void EnsurePlanProjectsTable(SqliteConnection conn)
+    {
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                CREATE TABLE IF NOT EXISTS plan_projects (
+                    plan_id    INTEGER NOT NULL,
+                    project_id INTEGER NOT NULL,
+                    position   INTEGER NOT NULL,
+                    PRIMARY KEY (plan_id, project_id)
+                );
+                """;
+            cmd.ExecuteNonQuery();
+        }
+
+        using var migrate = conn.CreateCommand();
+        migrate.CommandText = """
+            INSERT INTO plan_projects (plan_id, project_id, position)
+            SELECT id, project_id, 0 FROM plans
+            WHERE project_id IS NOT NULL
+              AND id NOT IN (SELECT plan_id FROM plan_projects)
+            """;
+        migrate.ExecuteNonQuery();
+    }
+
+    /// <summary>Verilen id'lerin canlı (silinmemiş) projeler tablosunda var olduğunu doğrular; yoksa (veya
+    /// projects tablosu henüz oluşturulmamışsa) <see cref="ProjectNotFoundException"/> fırlatır.</summary>
+    private static void EnsureProjectsExist(SqliteConnection conn, IReadOnlyList<long> ids)
+    {
+        if (ids.Count == 0) return;
+
+        using (var tableCheck = conn.CreateCommand())
+        {
+            tableCheck.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'";
+            if (Convert.ToInt32(tableCheck.ExecuteScalar()) == 0)
+                throw new ProjectNotFoundException(ids[0]);
+        }
+
+        foreach (var id in ids)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM projects WHERE id = $id AND deleted_at IS NULL";
+            cmd.Parameters.AddWithValue("$id", id);
+            if (Convert.ToInt32(cmd.ExecuteScalar()) == 0)
+                throw new ProjectNotFoundException(id);
+        }
+    }
+
+    private static void InsertPlanProjectsInTx(SqliteConnection conn, SqliteTransaction tx, long planId, IReadOnlyList<long> projectIds)
+    {
+        for (var i = 0; i < projectIds.Count; i++)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "INSERT INTO plan_projects(plan_id, project_id, position) VALUES ($planId, $projectId, $position)";
+            cmd.Parameters.AddWithValue("$planId", planId);
+            cmd.Parameters.AddWithValue("$projectId", projectIds[i]);
+            cmd.Parameters.AddWithValue("$position", i);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>Bir adımın bağlı olduğu proje, o anda planın proje listesinde değilse sona ekler (ilk eklenen
+    /// proje ana proje olacağından plans.project_id de buna göre güncellenir).</summary>
+    private static void EnsureStepProjectIsInPlanInTx(SqliteConnection conn, SqliteTransaction tx, long planId, long projectId)
+    {
+        using (var check = conn.CreateCommand())
+        {
+            check.Transaction = tx;
+            check.CommandText = "SELECT COUNT(*) FROM plan_projects WHERE plan_id = $planId AND project_id = $projectId";
+            check.Parameters.AddWithValue("$planId", planId);
+            check.Parameters.AddWithValue("$projectId", projectId);
+            if (Convert.ToInt32(check.ExecuteScalar()) > 0) return;
+        }
+
+        int nextPosition;
+        using (var count = conn.CreateCommand())
+        {
+            count.Transaction = tx;
+            count.CommandText = "SELECT COUNT(*) FROM plan_projects WHERE plan_id = $planId";
+            count.Parameters.AddWithValue("$planId", planId);
+            nextPosition = Convert.ToInt32(count.ExecuteScalar());
+        }
+
+        using (var insert = conn.CreateCommand())
+        {
+            insert.Transaction = tx;
+            insert.CommandText = "INSERT INTO plan_projects(plan_id, project_id, position) VALUES ($planId, $projectId, $position)";
+            insert.Parameters.AddWithValue("$planId", planId);
+            insert.Parameters.AddWithValue("$projectId", projectId);
+            insert.Parameters.AddWithValue("$position", nextPosition);
+            insert.ExecuteNonQuery();
+        }
+
+        if (nextPosition == 0)
+        {
+            using var upd = conn.CreateCommand();
+            upd.Transaction = tx;
+            upd.CommandText = "UPDATE plans SET project_id = $projectId WHERE id = $id";
+            upd.Parameters.AddWithValue("$id", planId);
+            upd.Parameters.AddWithValue("$projectId", projectId);
+            upd.ExecuteNonQuery();
+        }
+    }
+
+    private static List<long> ResolveProjectIds(long? projectId, IReadOnlyList<long>? projectIds)
+    {
+        if (projectIds is { Count: > 0 })
+            return projectIds.Distinct().ToList();
+        if (projectId is { } id)
+            return [id];
+        return [];
+    }
+
+    /// <summary>Bir planın bağlı olduğu projelerin id'lerini sırayla döndürür (ilki ana proje). Boş liste:
+    /// plana hiç proje bağlı değil (ör. yalnızca <see cref="Plan.ProjectPath"/> ile bağlı olabilir).</summary>
+    public IReadOnlyList<long> GetPlanProjects(long planId)
+    {
+        _ = GetPlanOnly(planId) ?? throw new PlanNotFoundException(planId);
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT project_id FROM plan_projects WHERE plan_id = $planId ORDER BY position";
+        cmd.Parameters.AddWithValue("$planId", planId);
+        var ids = new List<long>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            ids.Add(reader.GetInt64(0));
+        return ids;
+    }
+
+    /// <summary>Bir planın bağlı olduğu proje listesini değiştirir: tekrarlar elenir, her id'nin var olan
+    /// (canlı) bir proje olması doğrulanır, ilki ana proje olur (plans.project_id de buna göre güncellenir).
+    /// Boş liste verilirse plan projesiz kalır.</summary>
+    public void SetPlanProjects(long planId, IReadOnlyList<long> projectIds)
+    {
+        _ = GetPlanOnly(planId) ?? throw new PlanNotFoundException(planId);
+        var ids = projectIds.Distinct().ToList();
+
+        using var conn = Open();
+        EnsureProjectsExist(conn, ids);
+
+        using (var tx = conn.BeginTransaction())
+        {
+            using (var del = conn.CreateCommand())
+            {
+                del.Transaction = tx;
+                del.CommandText = "DELETE FROM plan_projects WHERE plan_id = $planId";
+                del.Parameters.AddWithValue("$planId", planId);
+                del.ExecuteNonQuery();
+            }
+
+            InsertPlanProjectsInTx(conn, tx, planId, ids);
+
+            using (var upd = conn.CreateCommand())
+            {
+                upd.Transaction = tx;
+                upd.CommandText = "UPDATE plans SET project_id = $projectId, updated_at = $now WHERE id = $id";
+                upd.Parameters.AddWithValue("$id", planId);
+                upd.Parameters.AddWithValue("$projectId", ids.Count > 0 ? ids[0] : (object)DBNull.Value);
+                upd.Parameters.AddWithValue("$now", Now());
+                upd.ExecuteNonQuery();
+            }
+
+            tx.Commit();
+        }
+        _signal.Notify();
     }
 
     /// <summary>Eski veritabanlarını yeni şemaya taşır: project_id sütunu yoksa ekler; project_path hâlâ
@@ -137,19 +324,27 @@ public sealed class PlanStore
         tx.Commit();
     }
 
-    /// <summary><paramref name="author"/>: adımları ekleyen ("Ben" = kullanıcı; MCP üzerinden ise MCP yazarı).</summary>
-    public Plan CreatePlan(string title, string? projectPath, IEnumerable<string> steps, long? projectId = null, string author = NoteAuthor.Ben)
+    /// <summary><paramref name="author"/>: adımları ekleyen ("Ben" = kullanıcı; MCP üzerinden ise MCP yazarı).
+    /// <paramref name="projectIds"/> verilirse (tekrarlar elenerek) planın bağlı olduğu proje listesi olur;
+    /// ilki ana proje olur ve <paramref name="projectId"/>'den önceliklidir. İkisi de verilmezse plan
+    /// projesiz (yalnızca <paramref name="projectPath"/> ile, varsa) oluşturulur.</summary>
+    public Plan CreatePlan(
+        string title, string? projectPath, IEnumerable<string> steps, long? projectId = null,
+        string author = NoteAuthor.Ben, IReadOnlyList<long>? projectIds = null)
     {
         var stepAuthor = NoteAuthor.Normalize(author);
         var cleanTitle = ValidateTitle(title);
         var cleanPath = projectPath is null ? null : ValidateProjectPath(projectPath);
         var stepTexts = steps.Select(ValidateStepText).ToList();
+        var effectiveProjectIds = ResolveProjectIds(projectId, projectIds);
         var now = Now();
 
         long planId;
         using (var conn = Open())
-        using (var tx = conn.BeginTransaction())
         {
+            EnsureProjectsExist(conn, effectiveProjectIds);
+
+            using var tx = conn.BeginTransaction();
             using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
@@ -159,7 +354,7 @@ public sealed class PlanStore
                     """;
                 cmd.Parameters.AddWithValue("$title", cleanTitle);
                 cmd.Parameters.AddWithValue("$path", (object?)cleanPath ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$projectId", (object?)projectId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$projectId", effectiveProjectIds.Count > 0 ? effectiveProjectIds[0] : (object)DBNull.Value);
                 cmd.Parameters.AddWithValue("$now", now);
                 planId = (long)cmd.ExecuteScalar()!;
             }
@@ -180,6 +375,9 @@ public sealed class PlanStore
                 cmd.Parameters.AddWithValue("$now", now);
                 cmd.ExecuteNonQuery();
             }
+
+            if (effectiveProjectIds.Count > 0)
+                InsertPlanProjectsInTx(conn, tx, planId, effectiveProjectIds);
 
             tx.Commit();
         }
@@ -275,7 +473,9 @@ public sealed class PlanStore
         return GetPlanOnly(id)!;
     }
 
-    public PlanStep AddStep(long planId, string text, int? position = null, string author = NoteAuthor.Ben)
+    /// <summary><paramref name="projectId"/> verilirse adım o projeye bağlanır; proje planın proje
+    /// listesinde yoksa otomatik olarak sona eklenir (ilk proje ise ana proje olur).</summary>
+    public PlanStep AddStep(long planId, string text, int? position = null, string author = NoteAuthor.Ben, long? projectId = null)
     {
         _ = GetPlanOnly(planId) ?? throw new PlanNotFoundException(planId);
         var clean = ValidateStepText(text);
@@ -283,8 +483,15 @@ public sealed class PlanStore
 
         long stepId;
         using (var conn = Open())
-        using (var tx = conn.BeginTransaction())
         {
+            if (projectId is { } pid)
+                EnsureProjectsExist(conn, [pid]);
+
+            using var tx = conn.BeginTransaction();
+
+            if (projectId is { } pid2)
+                EnsureStepProjectIsInPlanInTx(conn, tx, planId, pid2);
+
             var count = CountSteps(conn, tx, planId);
             var insertAt = position is { } p ? Math.Clamp(p, 1, count + 1) : count + 1;
 
@@ -301,15 +508,65 @@ public sealed class PlanStore
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = """
-                    INSERT INTO plan_steps(plan_id, step_order, text, status, updated_at, author)
-                    VALUES ($planId, $order, $text, 'bekliyor', $now, $author) RETURNING id
+                    INSERT INTO plan_steps(plan_id, step_order, text, status, updated_at, author, project_id)
+                    VALUES ($planId, $order, $text, 'bekliyor', $now, $author, $projectId) RETURNING id
                     """;
                 cmd.Parameters.AddWithValue("$author", NoteAuthor.Normalize(author));
                 cmd.Parameters.AddWithValue("$planId", planId);
                 cmd.Parameters.AddWithValue("$order", insertAt);
                 cmd.Parameters.AddWithValue("$text", clean);
                 cmd.Parameters.AddWithValue("$now", now);
+                cmd.Parameters.AddWithValue("$projectId", (object?)projectId ?? DBNull.Value);
                 stepId = (long)cmd.ExecuteScalar()!;
+            }
+
+            tx.Commit();
+        }
+        _signal.Notify();
+        return GetStep(stepId)!;
+    }
+
+    /// <summary>Verilen notlardan plana yeni adımlar ekler: her adımın metni, notun metni tek satıra
+    /// indirgenmiş (bkz. <see cref="TextSafety.Flatten"/>) hâlidir. Adımlar notların sırasıyla sona eklenir.</summary>
+    public IReadOnlyList<PlanStep> AddStepsFromNotes(long planId, IEnumerable<Note> notes, string author = NoteAuthor.Ben, long? projectId = null)
+    {
+        var added = new List<PlanStep>();
+        foreach (var note in notes)
+            added.Add(AddStep(planId, TextSafety.Flatten(note.Text), position: null, author: author, projectId: projectId));
+        return added;
+    }
+
+    /// <summary>Bir adımın bağlı olduğu projeyi değiştirir; null verilirse adım projesiz kalır. Verilen
+    /// proje planın proje listesinde yoksa otomatik olarak sona eklenir.</summary>
+    public PlanStep SetStepProject(long stepId, long? projectId)
+    {
+        using var conn = Open();
+
+        long planId;
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT plan_id FROM plan_steps WHERE id = $id";
+            cmd.Parameters.AddWithValue("$id", stepId);
+            var result = cmd.ExecuteScalar() ?? throw new PlanStepNotFoundException(stepId);
+            planId = (long)result;
+        }
+
+        if (projectId is { } pid)
+            EnsureProjectsExist(conn, [pid]);
+
+        using (var tx = conn.BeginTransaction())
+        {
+            if (projectId is { } pid2)
+                EnsureStepProjectIsInPlanInTx(conn, tx, planId, pid2);
+
+            using (var upd = conn.CreateCommand())
+            {
+                upd.Transaction = tx;
+                upd.CommandText = "UPDATE plan_steps SET project_id = $projectId, updated_at = $now WHERE id = $id";
+                upd.Parameters.AddWithValue("$id", stepId);
+                upd.Parameters.AddWithValue("$projectId", (object?)projectId ?? DBNull.Value);
+                upd.Parameters.AddWithValue("$now", Now());
+                upd.ExecuteNonQuery();
             }
 
             tx.Commit();
@@ -648,5 +905,6 @@ public sealed class PlanStore
         ParseStepStatusDb(r.GetString(4)),
         r.IsDBNull(5) ? null : r.GetString(5),
         Parse(r.GetString(6)),
-        r.GetString(7));
+        r.GetString(7),
+        r.IsDBNull(8) ? null : r.GetInt64(8));
 }

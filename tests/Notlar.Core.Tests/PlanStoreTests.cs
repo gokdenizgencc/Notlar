@@ -14,6 +14,7 @@ public sealed class PlanFixture : IDisposable
     public CountingSignal Signal { get; } = new();
     public PlanStore Store { get; }
     public ProjectStore Projects { get; }
+    public NoteStore Notes { get; }
 
     public PlanFixture()
     {
@@ -21,6 +22,7 @@ public sealed class PlanFixture : IDisposable
         Directory.CreateDirectory(ProjectDir);
         Store = new PlanStore(DbPath, Time, Signal);
         Projects = new ProjectStore(DbPath, Time, Signal);
+        Notes = new NoteStore(DbPath, Time, Signal);
     }
 
     public PlanStore Reopen() => new(DbPath, Time, Signal);
@@ -383,5 +385,145 @@ public class PlanStoreTests
         var plan = reopened1.CreatePlan("yeni plan", null, ["x"]);
         Assert.Null(plan.ProjectPath);
         Assert.Equal("eski plan", reopened1.ListPlans().First(p => p.Title == "eski plan").Title);
+    }
+
+    [Fact]
+    public void CreatePlan_with_projectIds_sets_main_project_and_order()
+    {
+        using var f = new PlanFixture();
+        var a = f.Projects.Add("A", f.ProjectDir);
+        var dir2 = Path.Combine(f.Dir, "proje2");
+        Directory.CreateDirectory(dir2);
+        var b = f.Projects.Add("B", dir2);
+
+        var plan = f.Store.CreatePlan("çoklu", null, ["x"], projectIds: [a.Id, b.Id]);
+
+        Assert.Equal(a.Id, plan.ProjectId);
+        Assert.Equal([a.Id, b.Id], f.Store.GetPlanProjects(plan.Id));
+    }
+
+    [Fact]
+    public void CreatePlan_projectIds_dedupes_and_rejects_unknown_project()
+    {
+        using var f = new PlanFixture();
+        var a = f.Projects.Add("A", f.ProjectDir);
+
+        var plan = f.Store.CreatePlan("çoklu", null, ["x"], projectIds: [a.Id, a.Id]);
+        Assert.Equal([a.Id], f.Store.GetPlanProjects(plan.Id));
+
+        Assert.Throws<ProjectNotFoundException>(() => f.Store.CreatePlan("x", null, ["x"], projectIds: [999]));
+    }
+
+    [Fact]
+    public void SetPlanProjects_replaces_list_and_updates_main_project_id()
+    {
+        using var f = new PlanFixture();
+        var a = f.Projects.Add("A", f.ProjectDir);
+        var dir2 = Path.Combine(f.Dir, "proje2");
+        Directory.CreateDirectory(dir2);
+        var b = f.Projects.Add("B", dir2);
+        var plan = f.Store.CreatePlan("plan", null, ["x"], projectIds: [a.Id]);
+
+        f.Store.SetPlanProjects(plan.Id, [b.Id, a.Id]);
+
+        Assert.Equal([b.Id, a.Id], f.Store.GetPlanProjects(plan.Id));
+        var (updated, _) = f.Store.GetPlan(plan.Id);
+        Assert.Equal(b.Id, updated.ProjectId);
+    }
+
+    [Fact]
+    public void SetPlanProjects_empty_list_clears_projects()
+    {
+        using var f = new PlanFixture();
+        var a = f.Projects.Add("A", f.ProjectDir);
+        var plan = f.Store.CreatePlan("plan", null, ["x"], projectIds: [a.Id]);
+
+        f.Store.SetPlanProjects(plan.Id, []);
+
+        Assert.Empty(f.Store.GetPlanProjects(plan.Id));
+        var (updated, _) = f.Store.GetPlan(plan.Id);
+        Assert.Null(updated.ProjectId);
+    }
+
+    [Fact]
+    public void AddStep_with_projectId_sets_step_project_and_auto_adds_to_plan()
+    {
+        using var f = new PlanFixture();
+        var a = f.Projects.Add("A", f.ProjectDir);
+        var dir2 = Path.Combine(f.Dir, "proje2");
+        Directory.CreateDirectory(dir2);
+        var b = f.Projects.Add("B", dir2);
+        var plan = f.Store.CreatePlan("plan", null, ["x"], projectIds: [a.Id]);
+
+        var step = f.Store.AddStep(plan.Id, "yeni adım", projectId: b.Id);
+
+        Assert.Equal(b.Id, step.ProjectId);
+        Assert.Equal([a.Id, b.Id], f.Store.GetPlanProjects(plan.Id));
+    }
+
+    [Fact]
+    public void AddStep_with_unknown_projectId_throws()
+    {
+        using var f = new PlanFixture();
+        var plan = f.Store.CreatePlan("plan", null, ["x"]);
+        Assert.Throws<ProjectNotFoundException>(() => f.Store.AddStep(plan.Id, "adım", projectId: 999));
+    }
+
+    [Fact]
+    public void SetStepProject_updates_project_and_auto_adds_to_plan()
+    {
+        using var f = new PlanFixture();
+        var a = f.Projects.Add("A", f.ProjectDir);
+        var plan = f.Store.CreatePlan("plan", null, ["x"]);
+        var (_, steps) = f.Store.GetPlan(plan.Id);
+
+        var updated = f.Store.SetStepProject(steps[0].Id, a.Id);
+
+        Assert.Equal(a.Id, updated.ProjectId);
+        Assert.Equal([a.Id], f.Store.GetPlanProjects(plan.Id));
+
+        var cleared = f.Store.SetStepProject(steps[0].Id, null);
+        Assert.Null(cleared.ProjectId);
+    }
+
+    [Fact]
+    public void AddStepsFromNotes_adds_one_step_per_note_with_flattened_text()
+    {
+        using var f = new PlanFixture();
+        var plan = f.Store.CreatePlan("plan", null, ["ilk"]);
+        var note1 = f.Notes.Add("satır1\nsatır2");
+        var note2 = f.Notes.Add("tek satır");
+
+        var added = f.Store.AddStepsFromNotes(plan.Id, [note1, note2]);
+
+        Assert.Equal(2, added.Count);
+        Assert.Equal("satır1 satır2", added[0].Text);
+        Assert.Equal("tek satır", added[1].Text);
+        var (_, steps) = f.Store.GetPlan(plan.Id);
+        Assert.Equal(3, steps.Count);
+    }
+
+    [Fact]
+    public void Existing_database_with_project_id_is_migrated_into_plan_projects_idempotently()
+    {
+        using var f = new PlanFixture();
+        var a = f.Projects.Add("A", f.ProjectDir);
+        var plan = f.Store.CreatePlan("eski", f.ProjectDir, ["a"], projectId: a.Id);
+
+        // Eski şemayı simüle et: plan_projects tablosu hiç yokmuş gibi sil.
+        using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = f.DbPath }.ToString()))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DROP TABLE plan_projects";
+            cmd.ExecuteNonQuery();
+        }
+        SqliteConnection.ClearAllPools();
+
+        var reopened1 = f.Reopen();
+        var reopened2 = f.Reopen(); // idempotent olmalı
+        _ = reopened2;
+
+        Assert.Equal([a.Id], reopened1.GetPlanProjects(plan.Id));
     }
 }

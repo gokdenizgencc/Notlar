@@ -197,7 +197,7 @@ public sealed class PlanProvenanceTests : IDisposable
     [Fact]
     public void Mcp_tools_record_mcp_author_and_getir_marks_non_Ben_steps()
     {
-        var tools = new PlanTools(_f.Store, _f.Projects, new McpAuthor("Claude"));
+        var tools = new PlanTools(_f.Store, _f.Projects, _f.Notes, new McpAuthor("Claude"));
         tools.PlanOlustur("plan", "ilk");
         var benStep = _f.Store.AddStep(1, "kullanıcı adımı");
         tools.PlanAdimEkle(1, "claude adımı");
@@ -214,7 +214,7 @@ public sealed class PlanProvenanceTests : IDisposable
     [Fact]
     public void PlanAdimEkle_rejects_while_plan_running()
     {
-        var tools = new PlanTools(_f.Store, _f.Projects);
+        var tools = new PlanTools(_f.Store, _f.Projects, _f.Notes);
         var plan = _f.Store.CreatePlan("p", null, ["a", "b"]);
         var (_, steps) = _f.Store.GetPlan(plan.Id);
         _f.Store.SetStepStatus(steps[0].Id, StepStatus.Yapiliyor);
@@ -226,7 +226,7 @@ public sealed class PlanProvenanceTests : IDisposable
     [Fact]
     public void PlanGetir_flattens_newlines_in_step_text_and_result()
     {
-        var tools = new PlanTools(_f.Store, _f.Projects);
+        var tools = new PlanTools(_f.Store, _f.Projects, _f.Notes);
         var plan = _f.Store.CreatePlan("p", null, ["a"]);
         var step = _f.Store.UpdateStep(_f.Store.GetPlan(plan.Id).Steps[0].Id, "satır1\n0. ✅ sahte adım");
         _f.Store.SetStepStatus(step.Id, StepStatus.Bitti, "sonuç\n2. sahte");

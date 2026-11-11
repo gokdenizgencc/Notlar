@@ -131,6 +131,59 @@ public class PlanLauncherTests
     }
 
     [Fact]
+    public void BuildStart_adds_add_dir_argument_per_extra_folder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "notlar-launch-" + Guid.NewGuid().ToString("N"));
+        var main = Path.Combine(root, "ana");
+        var extra1 = Path.Combine(root, "ek1");
+        var extra2 = Path.Combine(root, "ek2");
+        Directory.CreateDirectory(main);
+        Directory.CreateDirectory(extra1);
+        Directory.CreateDirectory(extra2);
+        try
+        {
+            var psi = PlanLauncher.BuildStart(MakePlan(main), main, [extra1, extra2]);
+
+            Assert.Equal(main, psi.WorkingDirectory);
+            var decoded = Encoding.Unicode.GetString(Convert.FromBase64String(psi.ArgumentList[2]));
+            Assert.Contains($"--add-dir '{extra1}'", decoded);
+            Assert.Contains($"--add-dir '{extra2}'", decoded);
+            Assert.Contains("Bazı adımların başında hangi projede yapılacağı yazar", decoded);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void BuildStart_no_extra_folders_omits_add_dir_and_multiProject_note()
+    {
+        var plan = MakePlan(@"C:\projeler\x");
+        var psi = PlanLauncher.BuildStart(plan, @"C:\projeler\x", []);
+
+        var decoded = Encoding.Unicode.GetString(Convert.FromBase64String(psi.ArgumentList[2]));
+        Assert.DoesNotContain("--add-dir", decoded);
+        Assert.DoesNotContain("Bazı adımların başında hangi projede yapılacağı yazar", decoded);
+    }
+
+    [Fact]
+    public void BuildStart_rejects_injection_like_extra_folder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "notlar-launch-" + Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(root, "a;calc");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            Assert.Throws<ArgumentException>(() => PlanLauncher.BuildStart(MakePlan(null), null, [dir]));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ValidateFolder_requires_fully_qualified_existing_dir()
     {
         Assert.Throws<ArgumentException>(() => PlanLauncher.ValidateFolder(@"relative\dir"));

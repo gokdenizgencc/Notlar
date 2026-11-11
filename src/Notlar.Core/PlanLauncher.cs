@@ -22,20 +22,42 @@ public static class PlanLauncher
     /// <summary><paramref name="effectiveFolder"/>: planın çalıştırılacağı klasör (bkz. PlanFolder.Resolve);
     /// null ise plan belirli bir proje klasörüne bağlı değildir ve %USERPROFILE% kullanılır.
     /// İstem yalnızca plan id'si ve sabit Türkçe metin içerir (kullanıcı verisi içermez).</summary>
-    public static string BuildPrompt(Plan plan, string? effectiveFolder)
+    public static string BuildPrompt(Plan plan, string? effectiveFolder) => BuildPrompt(plan, effectiveFolder, multiProject: false);
+
+    /// <summary><paramref name="multiProject"/>: true ise, bazı adımların belirli bir projeye bağlı
+    /// olabileceğini ve o adımların o projenin klasöründe yapılması gerektiğini belirten ek bir cümle
+    /// eklenir (bkz. PlanFolder.ResolveAll).</summary>
+    public static string BuildPrompt(Plan plan, string? effectiveFolder, bool multiProject)
     {
         var folderNote = effectiveFolder is null
             ? " Bu plan belirli bir proje klasörüne bağlı değil."
             : "";
+        var multiProjectNote = multiProject
+            ? " Bazı adımların başında hangi projede yapılacağı yazar; o adımı o projenin klasöründe yap."
+            : "";
         return $"Notlar'daki #{plan.Id} numaralı planı uygula.{folderNote} Önce plan_getir ile planı oku, adımları sırayla yap; " +
             "her adıma başlarken plan_adim_durum ile 'yapiliyor', bitince 'bitti' ve kısa sonuç notu yaz; " +
-            "takılırsan 'hata' ile nedenini yaz ve bana sor.";
+            $"takılırsan 'hata' ile nedenini yaz ve bana sor.{multiProjectNote}";
     }
 
-    public static ProcessStartInfo BuildStart(Plan plan, string? effectiveFolder)
+    public static ProcessStartInfo BuildStart(Plan plan, string? effectiveFolder) =>
+        BuildStart(plan, effectiveFolder, extraFolders: null);
+
+    /// <summary><paramref name="mainFolder"/>: WorkingDirectory olarak kullanılır (bkz. tek-klasörlü
+    /// overload). <paramref name="extraFolders"/>: her biri doğrulanıp (bkz. ValidateFolder) `claude`
+    /// çağrısına ayrı bir `--add-dir "&lt;klasör&gt;"` argümanı olarak eklenir; böylece plan birden fazla
+    /// projeye bağlıysa Claude Code hepsine erişebilir. Klasör yolları, ValidateFolder'ın reddettiği
+    /// tırnak/noktalı virgül gibi karakterleri içeremeyeceğinden, komut metninin başka hiçbir yerine
+    /// gömülmeden tek başlarına güvenle tek tırnaklanabilir.</summary>
+    public static ProcessStartInfo BuildStart(Plan plan, string? mainFolder, IReadOnlyList<string>? extraFolders)
     {
-        var folder = effectiveFolder ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var command = $"claude {PowerShellQuote(BuildPrompt(plan, effectiveFolder))}";
+        var extras = (extraFolders ?? []).Select(ValidateFolder).ToList();
+        var folder = mainFolder ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        var sb = new StringBuilder("claude");
+        foreach (var extra in extras)
+            sb.Append(" --add-dir ").Append(PowerShellQuote(extra));
+        sb.Append(' ').Append(PowerShellQuote(BuildPrompt(plan, mainFolder, multiProject: extras.Count > 0)));
 
         var psi = new ProcessStartInfo
         {
@@ -45,22 +67,27 @@ public static class PlanLauncher
         };
         psi.ArgumentList.Add("-NoExit");
         psi.ArgumentList.Add("-EncodedCommand");
-        psi.ArgumentList.Add(EncodeCommand(command));
+        psi.ArgumentList.Add(EncodeCommand(sb.ToString()));
         return psi;
     }
 
     /// <summary>Yeni, görünür bir terminal açıp Claude Code'u planı uygulaması için başlatır.</summary>
-    public static void Launch(Plan plan, string? effectiveFolder)
+    public static void Launch(Plan plan, string? effectiveFolder) => Launch(plan, effectiveFolder, extraFolders: null);
+
+    /// <summary>Çoklu proje desteğiyle: ana klasör ve ek klasörler (bkz. BuildStart) ile başlatır.</summary>
+    public static void Launch(Plan plan, string? mainFolder, IReadOnlyList<string>? extraFolders)
     {
         if (!IsClaudeOnPath())
             throw new InvalidOperationException(
                 "'claude' komutu PATH üzerinde bulunamadı. Claude Code'un kurulu ve PATH'e eklenmiş olduğundan emin olun.");
 
         // Eski kayıtlarda doğrulanmamış bir yol kalmış olabilir; başlatmadan önce yeniden doğrula.
-        if (effectiveFolder is not null)
-            ValidateFolder(effectiveFolder);
+        if (mainFolder is not null)
+            ValidateFolder(mainFolder);
+        foreach (var extra in extraFolders ?? [])
+            ValidateFolder(extra);
 
-        Process.Start(BuildStart(plan, effectiveFolder));
+        Process.Start(BuildStart(plan, mainFolder, extraFolders));
     }
 
     /// <summary>Bir proje/plan klasör yolunu doğrular ve kırpılmış hâlini döndürür: tam (fully qualified) bir

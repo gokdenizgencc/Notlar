@@ -10,7 +10,7 @@ public sealed class PlanToolsTests : IDisposable
     private readonly PlanFixture _f = new();
     private readonly PlanTools _tools;
 
-    public PlanToolsTests() => _tools = new PlanTools(_f.Store, _f.Projects);
+    public PlanToolsTests() => _tools = new PlanTools(_f.Store, _f.Projects, _f.Notes);
 
     public void Dispose() => _f.Dispose();
 
@@ -102,7 +102,9 @@ public sealed class PlanToolsTests : IDisposable
 
         var result = _tools.PlanGetir(1);
 
-        Assert.Contains("Proje: Harika Proje", result);
+        Assert.Contains("Projeler:", result);
+        Assert.Contains("- Harika Proje", result);
+        Assert.Contains("[ana]", result);
         Assert.Contains($"Klasör: {_f.ProjectDir}", result);
     }
 
@@ -147,6 +149,78 @@ public sealed class PlanToolsTests : IDisposable
         Assert.Contains("1. yeni", result);
         var (_, steps) = _f.Store.GetPlan(1);
         Assert.Equal(["yeni", "a", "b"], steps.Select(s => s.Text));
+    }
+
+    [Fact]
+    public void PlanOlustur_with_projeler_links_multiple_projects_main_first()
+    {
+        var dir2 = Path.Combine(_f.Dir, "proje2");
+        Directory.CreateDirectory(dir2);
+        var a = _f.Projects.Add("Alfa", _f.ProjectDir);
+        var b = _f.Projects.Add("Beta", dir2);
+
+        _tools.PlanOlustur("plan", "a", projeler: $"{a.Name}\n{b.Name}");
+
+        var (plan, _) = _f.Store.GetPlan(1);
+        Assert.Equal(a.Id, plan.ProjectId);
+        Assert.Equal([a.Id, b.Id], _f.Store.GetPlanProjects(1));
+    }
+
+    [Fact]
+    public void PlanProjeleriAyarla_updates_plan_projects()
+    {
+        var a = _f.Projects.Add("Alfa", _f.ProjectDir);
+        _tools.PlanOlustur("plan", "a");
+
+        var result = _tools.PlanProjeleriAyarla(1, a.Name);
+
+        Assert.Contains("ana: Alfa", result);
+        Assert.Equal([a.Id], _f.Store.GetPlanProjects(1));
+    }
+
+    [Fact]
+    public void PlanAdimEkle_with_proje_links_step_to_project()
+    {
+        var a = _f.Projects.Add("Alfa", _f.ProjectDir);
+        _tools.PlanOlustur("plan", "a");
+
+        _tools.PlanAdimEkle(1, "yeni adım", proje: a.Name);
+
+        var (_, steps) = _f.Store.GetPlan(1);
+        Assert.Equal(a.Id, steps[1].ProjectId);
+    }
+
+    [Fact]
+    public void PlanAdimEkle_with_not_id_uses_note_text()
+    {
+        _tools.PlanOlustur("plan", "a");
+        var note = _f.Notes.Add("notun metni");
+
+        var result = _tools.PlanAdimEkle(1, not_id: note.Id);
+
+        Assert.Contains("notun metni", result);
+        var (_, steps) = _f.Store.GetPlan(1);
+        Assert.Equal("notun metni", steps[1].Text);
+    }
+
+    [Fact]
+    public void PlanAdimEkle_without_metin_or_not_id_throws()
+    {
+        _tools.PlanOlustur("plan", "a");
+        var ex = Assert.Throws<McpException>(() => _tools.PlanAdimEkle(1));
+        Assert.Equal("metin veya not_id verilmeli.", ex.Message);
+    }
+
+    [Fact]
+    public void PlanGetir_prefixes_step_with_project_name()
+    {
+        var a = _f.Projects.Add("Alfa", _f.ProjectDir);
+        _tools.PlanOlustur("plan", "a");
+        _tools.PlanAdimEkle(1, "ikinci", proje: a.Name);
+
+        var result = _tools.PlanGetir(1);
+
+        Assert.Contains("[Alfa] ikinci", result);
     }
 
     [Fact]
