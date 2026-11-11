@@ -10,7 +10,12 @@ public sealed class TaskToolsTests : IDisposable
     private readonly TaskFixture _f = new();
     private readonly TaskTools _tools;
 
-    public TaskToolsTests() => _tools = new TaskTools(_f.Store);
+    public TaskToolsTests()
+    {
+        var flags = new AppFlags(_f.DbPath);
+        flags.SetBool(AppFlags.KisiselMcpOkuma, true);
+        _tools = new TaskTools(_f.Store, flags: flags);
+    }
 
     public void Dispose() => _f.Dispose();
 

@@ -25,9 +25,13 @@ public static class ContextCommand
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Notlar bağlamı yüklenemedi: {ex.Message}");
+            Console.WriteLine(FormatError(ex));
         }
 
         return true;
     }
+
+    /// <summary>Hata satırı: yalnızca genel bir Türkçe mesaj ve istisna TÜRÜ. İstisna mesajı (dosya yolu veya
+    /// veritabanından gelen, Claude'un bağlamına sızabilecek metin içerebilir) bilerek yazılmaz.</summary>
+    public static string FormatError(Exception ex) => $"Notlar bağlamı yüklenemedi ({ex.GetType().Name}).";
 }

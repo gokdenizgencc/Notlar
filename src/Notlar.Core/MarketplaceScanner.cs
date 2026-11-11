@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Notlar.Core;
 
@@ -34,8 +35,16 @@ public enum PluginSort
 /// <summary>%USERPROFILE%\.claude\plugins\marketplaces altındaki yerel marketplace klonlarını ve
 /// %USERPROFILE%\.claude\plugins\installed_plugins.json içindeki kurulu plugin listesini tarayarak
 /// "Keşfet" sekmesi için kullanılabilir plugin kataloğunu çıkarır.</summary>
-public static class MarketplaceScanner
+public static partial class MarketplaceScanner
 {
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")]
+    private static partial Regex PluginNameRegex();
+
+    /// <summary>Plugin/marketplace adı güvenli mi: harf/rakamla başlar, yalnızca ASCII harf, rakam, '.', '_', '-'
+    /// içerir ve en fazla 64 karakterdir. Komut satırına (ör. <c>claude plugin install ad@market</c>)
+    /// verilmeden önce mutlaka bununla doğrulanmalıdır.</summary>
+    public static bool IsValidPluginName(string? name) => name is not null && PluginNameRegex().IsMatch(name);
+
     public static string DefaultClaudeDir { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
 
@@ -56,6 +65,7 @@ public static class MarketplaceScanner
         foreach (var marketDir in TryGetDirectories(marketplacesDir))
         {
             var marketName = Path.GetFileName(marketDir);
+            if (!IsValidPluginName(marketName)) continue;
             var manifestPath = Path.Combine(marketDir, ".claude-plugin", "marketplace.json");
             if (!File.Exists(manifestPath)) continue;
 
@@ -173,7 +183,7 @@ public static class MarketplaceScanner
         {
             if (!el.TryGetProperty("name", out var nameProp) || nameProp.ValueKind != JsonValueKind.String) continue;
             var name = nameProp.GetString();
-            if (string.IsNullOrWhiteSpace(name)) continue;
+            if (!IsValidPluginName(name)) continue;
 
             var description = el.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String
                 ? d.GetString() ?? ""
@@ -182,7 +192,7 @@ public static class MarketplaceScanner
             var localPath = TryGetLocalSourcePath(el);
             var skills = localPath is null ? [] : ScanLocalSkills(Path.Combine(marketDir, localPath));
 
-            yield return new MarketplacePlugin("", name, description, false, skills);
+            yield return new MarketplacePlugin("", name!, description, false, skills);
         }
     }
 
@@ -197,6 +207,9 @@ public static class MarketplaceScanner
         var value = source.GetString();
         if (string.IsNullOrWhiteSpace(value)) return null;
         if (value.Contains("://", StringComparison.Ordinal)) return null;
+        // Marketplace klasörünün dışına çıkmaya izin verme: köklü yollar ve '..' segmentleri reddedilir.
+        if (Path.IsPathRooted(value) || value.Contains(':')) return null;
+        if (value.Split('/', '\\').Any(seg => seg == "..")) return null;
         return value;
     }
 

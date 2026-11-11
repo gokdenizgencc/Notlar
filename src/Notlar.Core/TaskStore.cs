@@ -33,6 +33,7 @@ public sealed class TaskStore
                 author     TEXT    NOT NULL DEFAULT 'Claude',
                 deleted_at TEXT    NULL
             );
+            CREATE INDEX IF NOT EXISTS ix_tasks_live ON tasks(deleted_at, done, id);
             """;
         cmd.ExecuteNonQuery();
     }

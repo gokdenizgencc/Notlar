@@ -8,7 +8,7 @@ using Notlar.Core;
 namespace Notlar.Mcp;
 
 [McpServerToolType]
-public sealed class TaskTools(TaskStore store, McpAuthor? author = null)
+public sealed class TaskTools(TaskStore store, McpAuthor? author = null, AppFlags? flags = null)
 {
     [McpServerTool(Name = "kisisel_ekle")]
     [Description("Kullanıcının gizli, ÖZEL kişisel listesine yeni bir kayıt ekler (kişisel plan, iş, özel yapılacak). Notlar uygulamasının gizli bölümünde gösterilir. Yalnızca kullanıcı açıkça kişisel/özel bir şeyden bahsettiğinde kullan ('kişisel listeme ekle', 'kişisel planlarım', 'özel işlerim'). İş notlarını buraya ASLA koyma.")]
@@ -22,10 +22,15 @@ public sealed class TaskTools(TaskStore store, McpAuthor? author = null)
     });
 
     [McpServerTool(Name = "kisisel_listele")]
-    [Description("Kullanıcının gizli kişisel listesini gösterir; açık kayıtlar önce, tamamlananlar sonra listelenir. Bu veriler özeldir; kullanıcı açıkça istemeden okuma.")]
+    [Description("Kullanıcının gizli kişisel listesini gösterir; açık kayıtlar önce, tamamlananlar sonra listelenir. Bu veriler özeldir; kullanıcı açıkça istemeden okuma. Kullanıcı Notlar panelinden izin vermediyse kapalıdır.")]
     public string KisiselListele(
         [Description("true ise yalnızca tamamlanmamış kayıtlar.")] bool sadece_acik = false) => Run(() =>
     {
+        // Okuma kilidi: yalnızca kullanıcı panelden açıkça izin verdiyse (varsayılan kapalı). Her çağrıda
+        // yeniden okunur ki panelden yapılan değişiklik hemen geçerli olsun.
+        if (flags is null || !flags.GetBool(AppFlags.KisiselMcpOkuma))
+            throw new McpException("Kişisel liste Claude'a kapalı. Notlar panelindeki ayardan açabilirsin.");
+
         var tasks = store.List(sadece_acik);
         if (tasks.Count == 0)
             return "Kişisel kayıt yok.";

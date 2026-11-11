@@ -13,7 +13,10 @@ public sealed record Plan(
     DateTimeOffset UpdatedAt,
     long? ProjectId = null);
 
-public sealed record PlanStep(long Id, long PlanId, int Order, string Text, StepStatus Status, string? Result, DateTimeOffset UpdatedAt);
+/// <summary><paramref name="Author"/>: adımı ekleyen ("Ben" = kullanıcı, aksi halde MCP yazarı, ör. "Claude").</summary>
+public sealed record PlanStep(
+    long Id, long PlanId, int Order, string Text, StepStatus Status, string? Result, DateTimeOffset UpdatedAt,
+    string Author = NoteAuthor.Ben);
 
 /// <summary>Bir planın çalıştırılacağı klasörü belirler: plan bir projeye bağlıysa ve o proje hâlâ canlıysa
 /// projenin güncel yolu, aksi halde planın kendi kayıtlı proje_klasoru'u, o da yoksa null (klasöre bağlı

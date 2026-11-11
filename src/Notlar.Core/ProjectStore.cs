@@ -36,6 +36,7 @@ public sealed class ProjectStore
                 created_at TEXT    NOT NULL,
                 deleted_at TEXT    NULL
             );
+            CREATE INDEX IF NOT EXISTS ix_projects_live ON projects(deleted_at, name);
             """;
         cmd.ExecuteNonQuery();
     }
@@ -198,15 +199,7 @@ public sealed class ProjectStore
         return clean;
     }
 
-    private static string ValidatePath(string? path)
-    {
-        var clean = path?.Trim();
-        if (string.IsNullOrEmpty(clean))
-            throw new ArgumentException("Proje klasörü boş olamaz.");
-        if (!Directory.Exists(clean))
-            throw new ArgumentException($"Proje klasörü bulunamadı: {clean}");
-        return clean;
-    }
+    private static string ValidatePath(string? path) => PlanLauncher.ValidateFolder(path);
 
     private string Now() => Format(_time.GetLocalNow());
 

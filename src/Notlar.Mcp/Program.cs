@@ -16,6 +16,7 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 
 // stdout MCP protokolüne ayrılmıştır; tüm loglar stderr'e.
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+builder.Logging.SetMinimumLevel(LogLevel.Warning);
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton(new McpAuthor(McpAuthorParser.Parse(args)));
@@ -49,6 +50,7 @@ builder.Services.AddSingleton(sp => new PlanStore(
     AppPaths.DbPath,
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<IChangeSignal>()));
+builder.Services.AddSingleton(sp => new AppFlags(AppPaths.DbPath));
 builder.Services.AddSingleton(sp => new ProjectStore(
     AppPaths.DbPath,
     sp.GetRequiredService<TimeProvider>(),

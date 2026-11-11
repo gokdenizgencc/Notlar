@@ -40,6 +40,7 @@ public sealed class MemoryStore
                 updated_at TEXT    NOT NULL,
                 deleted_at TEXT    NULL
             );
+            CREATE INDEX IF NOT EXISTS ix_memory_live ON memory(deleted_at, category, updated_at);
             """;
         cmd.ExecuteNonQuery();
     }

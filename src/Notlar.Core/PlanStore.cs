@@ -10,7 +10,7 @@ public sealed class PlanStore
 {
     private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:ss.fffzzz";
     private const string PlanColumns = "id, title, project_path, status, created_at, updated_at, project_id";
-    private const string StepColumns = "id, plan_id, step_order, text, status, result, updated_at";
+    private const string StepColumns = "id, plan_id, step_order, text, status, result, updated_at, author";
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     private readonly string _connectionString;
@@ -46,12 +46,41 @@ public sealed class PlanStore
                 text       TEXT    NOT NULL,
                 status     TEXT    NOT NULL DEFAULT 'bekliyor',
                 result     TEXT    NULL,
-                updated_at TEXT    NOT NULL
+                updated_at TEXT    NOT NULL,
+                author     TEXT    NOT NULL DEFAULT 'Ben'
             );
             """;
         cmd.ExecuteNonQuery();
 
         MigratePlansTable(conn);
+        MigrateStepsTable(conn);
+
+        // İndeksler tablo taşımasından sonra oluşturulur (yeniden oluşturulan tablo eski indeksleri düşürür).
+        using var idx = conn.CreateCommand();
+        idx.CommandText = """
+            CREATE INDEX IF NOT EXISTS ix_plans_live ON plans(deleted_at, updated_at);
+            CREATE INDEX IF NOT EXISTS ix_plan_steps_plan ON plan_steps(plan_id, step_order);
+            """;
+        idx.ExecuteNonQuery();
+    }
+
+    /// <summary>Eski veritabanlarında plan_steps.author (adımı kimin eklediği) sütunu yoksa ekler; mevcut
+    /// adımlar kullanıcıya ('Ben') atanır. İdempotenttir.</summary>
+    private static void MigrateStepsTable(SqliteConnection conn)
+    {
+        var hasAuthor = false;
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(plan_steps)";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                hasAuthor |= string.Equals(reader.GetString(1), "author", StringComparison.OrdinalIgnoreCase);
+        }
+        if (hasAuthor) return;
+
+        using var alter = conn.CreateCommand();
+        alter.CommandText = "ALTER TABLE plan_steps ADD COLUMN author TEXT NOT NULL DEFAULT 'Ben'";
+        alter.ExecuteNonQuery();
     }
 
     /// <summary>Eski veritabanlarını yeni şemaya taşır: project_id sütunu yoksa ekler; project_path hâlâ
@@ -108,8 +137,10 @@ public sealed class PlanStore
         tx.Commit();
     }
 
-    public Plan CreatePlan(string title, string? projectPath, IEnumerable<string> steps, long? projectId = null)
+    /// <summary><paramref name="author"/>: adımları ekleyen ("Ben" = kullanıcı; MCP üzerinden ise MCP yazarı).</summary>
+    public Plan CreatePlan(string title, string? projectPath, IEnumerable<string> steps, long? projectId = null, string author = NoteAuthor.Ben)
     {
+        var stepAuthor = NoteAuthor.Normalize(author);
         var cleanTitle = ValidateTitle(title);
         var cleanPath = projectPath is null ? null : ValidateProjectPath(projectPath);
         var stepTexts = steps.Select(ValidateStepText).ToList();
@@ -139,9 +170,10 @@ public sealed class PlanStore
                 using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
                 cmd.CommandText = """
-                    INSERT INTO plan_steps(plan_id, step_order, text, status, updated_at)
-                    VALUES ($planId, $order, $text, 'bekliyor', $now)
+                    INSERT INTO plan_steps(plan_id, step_order, text, status, updated_at, author)
+                    VALUES ($planId, $order, $text, 'bekliyor', $now, $author)
                     """;
+                cmd.Parameters.AddWithValue("$author", stepAuthor);
                 cmd.Parameters.AddWithValue("$planId", planId);
                 cmd.Parameters.AddWithValue("$order", order++);
                 cmd.Parameters.AddWithValue("$text", text);
@@ -243,7 +275,7 @@ public sealed class PlanStore
         return GetPlanOnly(id)!;
     }
 
-    public PlanStep AddStep(long planId, string text, int? position = null)
+    public PlanStep AddStep(long planId, string text, int? position = null, string author = NoteAuthor.Ben)
     {
         _ = GetPlanOnly(planId) ?? throw new PlanNotFoundException(planId);
         var clean = ValidateStepText(text);
@@ -269,9 +301,10 @@ public sealed class PlanStore
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = """
-                    INSERT INTO plan_steps(plan_id, step_order, text, status, updated_at)
-                    VALUES ($planId, $order, $text, 'bekliyor', $now) RETURNING id
+                    INSERT INTO plan_steps(plan_id, step_order, text, status, updated_at, author)
+                    VALUES ($planId, $order, $text, 'bekliyor', $now, $author) RETURNING id
                     """;
+                cmd.Parameters.AddWithValue("$author", NoteAuthor.Normalize(author));
                 cmd.Parameters.AddWithValue("$planId", planId);
                 cmd.Parameters.AddWithValue("$order", insertAt);
                 cmd.Parameters.AddWithValue("$text", clean);
@@ -545,15 +578,7 @@ public sealed class PlanStore
         return clean;
     }
 
-    private static string ValidateProjectPath(string? path)
-    {
-        var clean = path?.Trim();
-        if (string.IsNullOrEmpty(clean))
-            throw new ArgumentException("Proje klasörü boş olamaz.");
-        if (!Directory.Exists(clean))
-            throw new ArgumentException($"Proje klasörü bulunamadı: {clean}");
-        return clean;
-    }
+    private static string ValidateProjectPath(string? path) => PlanLauncher.ValidateFolder(path);
 
     public static StepStatus ParseStepStatus(string value)
     {
@@ -622,5 +647,6 @@ public sealed class PlanStore
         r.GetString(3),
         ParseStepStatusDb(r.GetString(4)),
         r.IsDBNull(5) ? null : r.GetString(5),
-        Parse(r.GetString(6)));
+        Parse(r.GetString(6)),
+        r.GetString(7));
 }
