@@ -8,6 +8,11 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>NotlarApp</AssemblyName>
     <RootNamespace>Notlar.App</RootNamespace>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Notlar.Core\Notlar.Core.csproj" />

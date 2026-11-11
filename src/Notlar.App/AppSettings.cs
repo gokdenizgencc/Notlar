@@ -50,6 +50,10 @@ public sealed class AppSettings
     /// <summary>"Keşfet" sekmesindeki eklenti listesinin sıralama kriteri. Varsayılan: popülerliğe göre.</summary>
     public PluginSort DiscoverSort { get; set; } = PluginSort.Popular;
 
+    /// <summary>Veri klasörüne (%APPDATA%\Notlar) kullanıcıya özel korumalı DACL bir kez uygulandı mı?
+    /// Her başlangıçta tekrar denemeyi önlemek için saklanır.</summary>
+    public bool DataDirSecured { get; set; }
+
     public static event Action? Changed;
 
     private static string SettingsPath => Path.Combine(AppPaths.DataDir, "ayarlar.json");

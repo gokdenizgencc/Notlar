@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -215,6 +216,15 @@ public partial class PanelWindow : Window
         // böylece bir sonraki açılış her zaman kompakt/büyük moddan başlar.
         _fullScreen = false;
         UpdateFullScreenButtonVisual();
+
+        // Bellek ayak izini küçültmek için panel kapalıyken ağır önbellekleri bırak; bir sonraki açılışta
+        // yeniden kurulur (tarama kendi dosya önbelleğine sahip olduğundan hızlı kalır).
+        _skillInstalledCache = null;
+        _skillUsageDataCache = null;
+        _skillRegistryCache = null;
+        _skillTranslationsCache = null;
+        _marketplaceCache = null;
+        _skillLoadRequested = false;
     }
 
     /// <summary>Kompakt (sabit 360×520, NoResize) ve büyük (serbest boyutlandırılabilir, ~1000×720,
@@ -580,7 +590,10 @@ public partial class PanelWindow : Window
         var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         var path = Path.Combine(documents, $"Notlar-{DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.md");
         File.WriteAllText(path, MarkdownExporter.Export(_store.List(new NoteFilter())), new UTF8Encoding(false));
-        Process.Start("explorer.exe", $"/select,\"{path}\"");
+        var explorerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+        var psi = new ProcessStartInfo { FileName = explorerPath, UseShellExecute = false };
+        psi.ArgumentList.Add($"/select,{path}");
+        Process.Start(psi);
     });
 
     private void Window_Deactivated(object? sender, EventArgs e)
@@ -1489,17 +1502,22 @@ public partial class PanelWindow : Window
         if (sender is not FrameworkElement { DataContext: MarketplacePluginVm plugin } || plugin.Busy) return;
 
         var verb = plugin.Installed ? "kaldırmak" : "kurmak";
-        var question = $"\"{plugin.Name}\" eklentisini ({plugin.Marketplace}) {verb} istediğinize emin misiniz?";
+        var question = $"\"{SanitizeForDisplay(plugin.Name)}\" eklentisini ({SanitizeForDisplay(plugin.Marketplace)}) {verb} istediğinize emin misiniz?";
         if (MessageBox.Show(question, "Notlar", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
 
+        if (!IsValidPluginName(plugin.Name) || !IsValidPluginName(plugin.Marketplace))
+        {
+            ShowError("Eklenti veya pazar yeri adı geçersiz karakterler içeriyor; işlem yapılmadı.");
+            return;
+        }
+
         plugin.Busy = true;
-        var args = plugin.Installed
-            ? $"plugin uninstall \"{plugin.PluginId}\" -s user -y"
-            : $"plugin install \"{plugin.PluginId}\" -s user -y";
+        var verbArg = plugin.Installed ? "uninstall" : "install";
+        var argsList = new[] { "plugin", verbArg, plugin.PluginId, "-s", "user", "-y" };
         var wasInstalled = plugin.Installed;
 
-        Task.Run(() => RunClaudeCli(args)).ContinueWith(t => Dispatcher.InvokeAsync(() =>
+        Task.Run(() => RunClaudeCli(argsList)).ContinueWith(t => Dispatcher.InvokeAsync(() =>
         {
             plugin.Busy = false;
             if (t.IsFaulted)
@@ -1524,21 +1542,98 @@ public partial class PanelWindow : Window
         }), TaskScheduler.Default);
     }
 
-    /// <summary>"claude" CLI'yi verilen argümanlarla UI dışı bir iş parçacığında çalıştırır ve
-    /// çıkış kodu + yakalanan stdout/stderr ile döner. "claude" PATH'te bulunamazsa başarısız sayılır.</summary>
-    private static (bool Success, string Stdout, string Stderr) RunClaudeCli(string arguments)
+    private static readonly Regex PluginNamePattern = new(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", RegexOptions.Compiled);
+
+    /// <summary>Eklenti/pazar yeri adının komut satırına güvenle geçirilebilmesi için izin verilen
+    /// karakter kümesiyle sınırlı olup olmadığını kontrol eder (shell/argüman enjeksiyonunu önler).</summary>
+    private static bool IsValidPluginName(string? name) => name is not null && PluginNamePattern.IsMatch(name);
+
+    /// <summary>Kullanıcıya gösterilen ad içinden çift yönlü (bidi) kontrol karakterlerini ve satır
+    /// sonlarını temizler; onay kutusunda sahte görünüm/gizli metin enjeksiyonunu önler.</summary>
+    private static string SanitizeForDisplay(string text)
+    {
+        var sb = new StringBuilder(text.Length);
+        foreach (var c in text)
+        {
+            if (c is '\r' or '\n') continue;
+            var category = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (category == UnicodeCategory.Control) continue;
+            // Bidi/format kontrol karakterleri (ör. RLO, LRO, PDF, LRM/RLM) Cf kategorisindedir.
+            if (category == UnicodeCategory.Format) continue;
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    private static string? _claudeExePathCache;
+
+    /// <summary>"claude" komutunun PATH üzerindeki tam yolunu bulur: önce claude.exe, sonra claude.cmd
+    /// aranır. UseShellExecute=false + FileName="claude" bu makinede claude.cmd (npm kurulumu) için
+    /// çalışmadığından tam yol gereklidir.</summary>
+    private static string? ResolveClaudeExePath()
+    {
+        if (_claudeExePathCache is not null) return _claudeExePathCache;
+
+        var pathVar = Environment.GetEnvironmentVariable("PATH") ?? "";
+        foreach (var candidateName in new[] { "claude.exe", "claude.cmd" })
+        {
+            foreach (var dir in pathVar.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                try
+                {
+                    var candidate = Path.Combine(dir, candidateName);
+                    if (File.Exists(candidate)) return _claudeExePathCache = candidate;
+                }
+                catch (ArgumentException)
+                {
+                    // Bozuk PATH girdisini yok say.
+                }
+            }
+        }
+        return null;
+    }
+
+    /// <summary>"claude" CLI'yi verilen argümanlarla (ArgumentList; birleştirilmiş Arguments string'i yok,
+    /// böylece argüman enjeksiyonu önlenir) UI dışı bir iş parçacığında çalıştırır ve çıkış kodu +
+    /// yakalanan stdout/stderr ile döner. "claude" PATH'te bulunamazsa başarısız sayılır.</summary>
+    private static (bool Success, string Stdout, string Stderr) RunClaudeCli(IReadOnlyList<string> arguments)
     {
         try
         {
-            var psi = new ProcessStartInfo
+            var claudePath = ResolveClaudeExePath();
+            if (claudePath is null) return (false, "", "'claude' komutu bulunamadı.");
+
+            ProcessStartInfo psi;
+            if (string.Equals(Path.GetExtension(claudePath), ".cmd", StringComparison.OrdinalIgnoreCase))
             {
-                FileName = "claude",
-                Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
+                // .cmd doğrudan CreateProcess ile çalıştırılamaz; cmd.exe üzerinden başlatılmalı.
+                psi = new ProcessStartInfo
+                {
+                    FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe"),
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                psi.ArgumentList.Add("/d");
+                psi.ArgumentList.Add("/s");
+                psi.ArgumentList.Add("/c");
+                psi.ArgumentList.Add('"' + claudePath + '"');
+                foreach (var arg in arguments) psi.ArgumentList.Add(arg);
+            }
+            else
+            {
+                psi = new ProcessStartInfo
+                {
+                    FileName = claudePath,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                foreach (var arg in arguments) psi.ArgumentList.Add(arg);
+            }
+
             using var process = Process.Start(psi);
             if (process is null) return (false, "", "'claude' komutu başlatılamadı.");
             var stdout = process.StandardOutput.ReadToEnd();

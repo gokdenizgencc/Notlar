@@ -1,6 +1,10 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Win32;
 using Notlar.Core;
@@ -10,9 +14,25 @@ namespace Notlar.App;
 
 public partial class App : Application
 {
-    private const string MutexName = @"Local\Notlar.App.Tek";
-    private const string ShowEventName = @"Local\Notlar.App.Goster";
     private const int ASFW_ANY = -1;
+
+    private static readonly string MutexName = @"Local\Notlar.App.Tek." + CurrentUserSid();
+    private static readonly string ShowEventName = @"Local\Notlar.App.Goster." + CurrentUserSid();
+
+    /// <summary>Çekirdek nesne adlarının (mutex/olay) kullanıcıya özel olması için geçerli kullanıcının SID'i.
+    /// Alınamazsa boş döner; bu durumda ad paylaşılır ama uygulama yine de çalışır.</summary>
+    private static string CurrentUserSid()
+    {
+        try
+        {
+            return WindowsIdentity.GetCurrent().User?.Value ?? "";
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+            return "";
+        }
+    }
 
     private Mutex? _mutex;
     private bool _isFirstInstance;
@@ -67,6 +87,10 @@ public partial class App : Application
         Theme.Apply(Resources);
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
 
+        var dataDirExisted = Directory.Exists(AppPaths.DataDir);
+        Directory.CreateDirectory(AppPaths.DataDir);
+        TryLog(() => SecureDataDirOnce(justCreated: !dataDirExisted));
+
         NoteStore store;
         TaskStore taskStore;
         MemoryStore memoryStore;
@@ -94,8 +118,6 @@ public partial class App : Application
             return;
         }
 
-        TryLog(() => store.PurgeDeleted(TimeSpan.FromDays(7)));
-        TryLog(() => store.Backup(AppPaths.BackupDir, keep: 7));
         TryLog(AutoStart.EnsureRegistration);
 
         _panel = new PanelWindow(store, taskStore, memoryStore, skillRegistry, skillTranslations, planStore, projectStore);
@@ -119,6 +141,40 @@ public partial class App : Application
         }
         _showWait = ThreadPool.RegisterWaitForSingleObject(
             _showEvent, (_, _) => Dispatcher.InvokeAsync(_panel.ShowNearTray), null, Timeout.Infinite, executeOnlyOnce: false);
+
+        // Yedekleme ve temizlik I/O ağırlıklıdır; tepsi/panel zaten kurulduktan sonra arka planda çalıştır
+        // ki UI iş parçacığı başlangıçta bloklanmasın.
+        Task.Run(() =>
+        {
+            TryLog(() => store.PurgeDeleted(TimeSpan.FromDays(7)));
+            TryLog(() => store.Backup(AppPaths.BackupDir, keep: 7));
+        });
+    }
+
+    /// <summary>Veri klasörüne (%APPDATA%\Notlar) bir kez, korumalı (yalnızca geçerli kullanıcı + SYSTEM
+    /// tam yetki) bir DACL uygular. Klasör az önce oluşturulduysa ya da ayarlarda henüz "güvenli"
+    /// işaretlenmemişse çalışır; başarısızlık sessizce günlüğe yazılır, uygulama engellenmez.
+    /// %APPDATA%\Notlar dışına dokunmaz.</summary>
+    private static void SecureDataDirOnce(bool justCreated)
+    {
+        var settings = AppSettings.Load();
+        if (!justCreated && settings.DataDirSecured) return;
+
+        var userSid = WindowsIdentity.GetCurrent().User;
+        if (userSid is null) return;
+
+        var security = new DirectorySecurity();
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        security.AddAccessRule(new FileSystemAccessRule(
+            userSid, FileSystemRights.FullControl,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+        security.AddAccessRule(new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), FileSystemRights.FullControl,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+        new DirectoryInfo(AppPaths.DataDir).SetAccessControl(security);
+
+        settings.DataDirSecured = true;
+        settings.Save();
     }
 
     private static void TryLog(Action action)
