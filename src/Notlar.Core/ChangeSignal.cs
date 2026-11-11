@@ -20,6 +20,30 @@ public sealed class NamedEventChangeSignal(string name) : IChangeSignal, IDispos
     public void Dispose() => _handle.Dispose();
 }
 
+/// <summary>Named event oluşturmayı çökmeden dener. Başka bir sürecin aynı adı farklı bir bütünlük
+/// düzeyinde (ör. yönetici olarak) oluşturduğu durumlarda <see cref="UnauthorizedAccessException"/> veya
+/// <see cref="WaitHandleCannotBeOpenedException"/> fırlayabilir; bu durumda onError çağrılır ve
+/// <see cref="NullChangeSignal"/> döner, böylece uygulama canlı güncelleme olmadan çalışmaya devam eder.</summary>
+public static class ChangeSignals
+{
+    public static IChangeSignal CreateOrNull(string name, Action<Exception>? onError = null) =>
+        CreateOrNull(name, static n => new NamedEventChangeSignal(n), onError);
+
+    /// <summary>Test edilebilirlik için oluşturucu enjekte edilebilir seam.</summary>
+    internal static IChangeSignal CreateOrNull(string name, Func<string, IChangeSignal> creator, Action<Exception>? onError)
+    {
+        try
+        {
+            return creator(name);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
+        {
+            onError?.Invoke(ex);
+            return NullChangeSignal.Instance;
+        }
+    }
+}
+
 /// <summary>Sinyali arka plan thread'inde bekler; her sinyalde onChange çağrılır (UI thread'e dispatch çağıranın işi).
 /// onChange içinde oluşan hatalar işlemi sonlandırmaz; onError'a iletilir (verilmişse) ve dinleme sürer.</summary>
 public sealed class ChangeListener : IDisposable

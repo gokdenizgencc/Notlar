@@ -29,6 +29,19 @@ public class TagParserTests
     }
 
     [Fact]
+    public void Strip_normalizes_line_endings_to_single_space_regardless_of_style()
+    {
+        Assert.Equal("a b c", TagParser.Strip("a\r\nb\nc"));
+        Assert.Equal("a b c", TagParser.Strip("a\rb\nc"));
+    }
+
+    [Fact]
+    public void Strip_removes_tag_adjacent_to_newline_and_collapses_remaining_spaces()
+    {
+        Assert.Equal("Faturayı öde", TagParser.Strip("Faturayı #ev\nöde"));
+    }
+
+    [Fact]
     public void Normalize_trims_hash_and_lowercases()
     {
         Assert.Equal("iş", TagParser.Normalize(" #İş "));

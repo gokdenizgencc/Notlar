@@ -167,4 +167,22 @@ public class NoteStoreTests
         Assert.Equal("notlar-2026-11-03.db", files[0]);
         Assert.Equal("notlar-2026-11-09.db", files[^1]);
     }
+
+    [Fact]
+    public void Backup_ignores_leftover_tmp_from_failed_attempt_and_is_not_counted()
+    {
+        using var f = new StoreFixture();
+        f.Store.Add("x");
+        var dir = Path.Combine(f.Dir, "yedek");
+        Directory.CreateDirectory(dir);
+        var leftoverTmp = Path.Combine(dir, "notlar-2026-11-11.db.tmp");
+        File.WriteAllText(leftoverTmp, "yarım kalmış yedekten artık dosya");
+
+        var created = f.Store.Backup(dir, keep: 7);
+
+        Assert.NotNull(created);
+        Assert.Equal("notlar-2026-11-11.db", Path.GetFileName(created));
+        Assert.False(File.Exists(leftoverTmp));
+        Assert.Equal(["notlar-2026-11-11.db"], Directory.GetFiles(dir).Select(Path.GetFileName));
+    }
 }

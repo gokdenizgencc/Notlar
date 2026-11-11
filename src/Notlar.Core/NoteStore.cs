@@ -135,14 +135,32 @@ public sealed class NoteStore
         string? created = null;
         if (!File.Exists(path))
         {
-            using var source = Open();
-            using var target = new SqliteConnection(
-                new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
-            target.Open();
-            source.BackupDatabase(target);
-            created = path;
+            var tmpPath = path + ".tmp";
+            if (File.Exists(tmpPath))
+                File.Delete(tmpPath);
+            try
+            {
+                using (var source = Open())
+                using (var target = new SqliteConnection(
+                    new SqliteConnectionStringBuilder { DataSource = tmpPath, Pooling = false }.ToString()))
+                {
+                    target.Open();
+                    source.BackupDatabase(target);
+                }
+                File.Move(tmpPath, path);
+                created = path;
+            }
+            catch
+            {
+                if (File.Exists(tmpPath))
+                    File.Delete(tmpPath);
+                throw;
+            }
         }
-        foreach (var old in Directory.GetFiles(dir, "notlar-*.db").Order(StringComparer.Ordinal).Reverse().Skip(keep))
+        // Yalnızca tamamlanmış .db dosyaları rotasyona dahil edilir; yarım kalmış .tmp'ler sayılmaz.
+        foreach (var old in Directory.GetFiles(dir, "notlar-*.db")
+                     .Where(f => f.EndsWith(".db", StringComparison.OrdinalIgnoreCase))
+                     .Order(StringComparer.Ordinal).Reverse().Skip(keep))
             File.Delete(old);
         return created;
     }
