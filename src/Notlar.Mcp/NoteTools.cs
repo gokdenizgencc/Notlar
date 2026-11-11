@@ -15,7 +15,7 @@ public sealed class NoteTools(NoteStore store, TimeProvider time)
     [Description("Kullanıcının kişisel not uygulamasına yeni not ekler. Kullanıcı 'not al', 'not et', 'kaydet', 'aklında tut' dediğinde bunu kullan. Kayıt saati otomatik atanır. Metindeki #kelime etiket olur.")]
     public string NotEkle([Description("Not metni. İsteğe bağlı #etiket içerebilir.")] string metin) => Run(() =>
     {
-        var note = store.Add(metin);
+        var note = store.Add(metin, NoteAuthor.Claude);
         return $"Not eklendi: {NoteFormatter.Line(note)} — {DayGrouper.FormatDate(note.Day)}";
     });
 
@@ -25,12 +25,13 @@ public sealed class NoteTools(NoteStore store, TimeProvider time)
         [Description("Başlangıç tarihi (yyyy-MM-dd). Boşsa bitişten 6 gün öncesi.")] string? baslangic = null,
         [Description("Bitiş tarihi (yyyy-MM-dd). Boşsa bugün.")] string? bitis = null,
         [Description("Sadece bu etiketi taşıyan notlar, örn. 'iş'.")] string? etiket = null,
-        [Description("true ise yalnızca tamamlanmamış notlar.")] bool sadece_acik = false) => Run(() =>
+        [Description("true ise yalnızca tamamlanmamış notlar.")] bool sadece_acik = false,
+        [Description("Sadece bu yazarın notları: 'ben' veya 'claude'. Boşsa hepsi.")] string? yazar = null) => Run(() =>
     {
         var today = DateOnly.FromDateTime(time.GetLocalNow().DateTime);
         var to = ParseDate(bitis) ?? today;
         var from = ParseDate(baslangic) ?? to.AddDays(-6);
-        var notes = store.List(new NoteFilter(from, to, etiket, sadece_acik));
+        var notes = store.List(new NoteFilter(from, to, etiket, sadece_acik, ParseAuthor(yazar)));
         if (notes.Count == 0)
             return "Bu aralıkta not yok.";
 
@@ -77,6 +78,15 @@ public sealed class NoteTools(NoteStore store, TimeProvider time)
         if (DateOnly.TryParseExact(value.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
             return date;
         throw new ArgumentException($"Geçersiz tarih '{value}', yyyy-MM-dd bekleniyor.");
+    }
+
+    private static NoteAuthor? ParseAuthor(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        if (NoteAuthorExtensions.TryParse(value.Trim(), out var author))
+            return author;
+        throw new ArgumentException($"Geçersiz yazar '{value}', 'ben' veya 'claude' bekleniyor.");
     }
 
     private static string Run(Func<string> action)

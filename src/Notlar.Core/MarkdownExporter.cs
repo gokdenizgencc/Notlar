@@ -16,8 +16,10 @@ public static class MarkdownExporter
                 sb.Append(note.Done ? "- [x] " : "- [ ] ")
                   .Append(note.CreatedAt.ToString("HH:mm", CultureInfo.InvariantCulture))
                   .Append(' ')
-                  .Append(note.Text.ReplaceLineEndings(" "))
-                  .Append('\n');
+                  .Append(note.Text.ReplaceLineEndings(" "));
+                if (note.Author == NoteAuthor.Claude)
+                    sb.Append(" _(Claude)_");
+                sb.Append('\n');
             }
             sb.Append('\n');
         }

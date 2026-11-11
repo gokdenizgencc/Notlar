@@ -7,7 +7,7 @@ namespace Notlar.Core;
 public sealed class NoteStore
 {
     private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:ss.fffzzz";
-    private const string Columns = "id, text, created_at, updated_at, done";
+    private const string Columns = "id, text, created_at, updated_at, done, author";
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     private readonly string _connectionString;
@@ -23,32 +23,58 @@ public sealed class NoteStore
         _signal = signal;
 
         using var conn = Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            PRAGMA journal_mode=WAL;
-            CREATE TABLE IF NOT EXISTS notes (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                text       TEXT    NOT NULL,
-                created_at TEXT    NOT NULL,
-                updated_at TEXT    NULL,
-                done       INTEGER NOT NULL DEFAULT 0,
-                deleted_at TEXT    NULL
-            );
-            CREATE INDEX IF NOT EXISTS ix_notes_created_at ON notes(created_at);
-            """;
-        cmd.ExecuteNonQuery();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                PRAGMA journal_mode=WAL;
+                CREATE TABLE IF NOT EXISTS notes (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text       TEXT    NOT NULL,
+                    created_at TEXT    NOT NULL,
+                    updated_at TEXT    NULL,
+                    done       INTEGER NOT NULL DEFAULT 0,
+                    deleted_at TEXT    NULL,
+                    author     TEXT    NOT NULL DEFAULT 'ben'
+                );
+                CREATE INDEX IF NOT EXISTS ix_notes_created_at ON notes(created_at);
+                """;
+            cmd.ExecuteNonQuery();
+        }
+
+        // Eski şemadaki DB'lerde author kolonu yoksa ekle.
+        var hasAuthor = false;
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "PRAGMA table_info(notes)";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), "author", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasAuthor = true;
+                    break;
+                }
+            }
+        }
+        if (!hasAuthor)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "ALTER TABLE notes ADD COLUMN author TEXT NOT NULL DEFAULT 'ben'";
+            cmd.ExecuteNonQuery();
+        }
     }
 
-    public Note Add(string text)
+    public Note Add(string text, NoteAuthor author = NoteAuthor.Ben)
     {
         var clean = Validate(text);
         long id;
         using (var conn = Open())
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "INSERT INTO notes(text, created_at) VALUES($text, $now) RETURNING id";
+            cmd.CommandText = "INSERT INTO notes(text, created_at, author) VALUES($text, $now, $author) RETURNING id";
             cmd.Parameters.AddWithValue("$text", clean);
             cmd.Parameters.AddWithValue("$now", Now());
+            cmd.Parameters.AddWithValue("$author", author.ToDbValue());
             id = (long)cmd.ExecuteScalar()!;
         }
         _signal.Notify();
@@ -82,6 +108,11 @@ public sealed class NoteStore
         }
         if (filter.OnlyOpen)
             sql.Append(" AND done = 0");
+        if (filter.Author is { } author)
+        {
+            sql.Append(" AND author = $author");
+            cmd.Parameters.AddWithValue("$author", author.ToDbValue());
+        }
         sql.Append(" ORDER BY id");
         cmd.CommandText = sql.ToString();
 
@@ -244,5 +275,6 @@ public sealed class NoteStore
         r.GetString(1),
         Parse(r.GetString(2)),
         r.IsDBNull(3) ? null : Parse(r.GetString(3)),
-        r.GetInt64(4) != 0);
+        r.GetInt64(4) != 0,
+        NoteAuthorExtensions.TryParse(r.GetString(5), out var author) ? author : NoteAuthor.Ben);
 }

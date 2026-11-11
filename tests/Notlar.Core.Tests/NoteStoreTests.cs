@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Notlar.Core;
 
 namespace Notlar.Core.Tests;
@@ -57,6 +58,82 @@ public class NoteStoreTests
 
         Assert.Equal(["a #İş"], f.Store.List(new NoteFilter(Tag: "#iş")).Select(n => n.Text));
         Assert.Equal(["b #ev"], f.Store.List(new NoteFilter(Tag: "EV")).Select(n => n.Text));
+    }
+
+    [Fact]
+    public void Add_defaults_to_Ben_author()
+    {
+        using var f = new StoreFixture();
+        var note = f.Store.Add("x");
+        Assert.Equal(NoteAuthor.Ben, note.Author);
+    }
+
+    [Fact]
+    public void Add_roundtrips_author()
+    {
+        using var f = new StoreFixture();
+        var note = f.Store.Add("x", NoteAuthor.Claude);
+        Assert.Equal(NoteAuthor.Claude, note.Author);
+        Assert.Equal(NoteAuthor.Claude, f.Store.Get(note.Id)!.Author);
+        Assert.Equal(NoteAuthor.Claude, f.Reopen().Get(note.Id)!.Author);
+    }
+
+    [Fact]
+    public void List_filters_by_author()
+    {
+        using var f = new StoreFixture();
+        f.Store.Add("a", NoteAuthor.Ben);
+        f.Store.Add("b", NoteAuthor.Claude);
+
+        Assert.Equal(["a"], f.Store.List(new NoteFilter(Author: NoteAuthor.Ben)).Select(n => n.Text));
+        Assert.Equal(["b"], f.Store.List(new NoteFilter(Author: NoteAuthor.Claude)).Select(n => n.Text));
+        Assert.Equal(2, f.Store.List(new NoteFilter()).Count);
+    }
+
+    [Fact]
+    public void Migrates_old_schema_without_author_column()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "notlar-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var oldDbPath = Path.Combine(dir, "eski.db");
+
+        try
+        {
+        using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = oldDbPath }.ToString()))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE notes (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text       TEXT    NOT NULL,
+                    created_at TEXT    NOT NULL,
+                    updated_at TEXT    NULL,
+                    done       INTEGER NOT NULL DEFAULT 0,
+                    deleted_at TEXT    NULL
+                );
+                INSERT INTO notes(text, created_at) VALUES ('eski not', '2026-11-11T14:32:00.000+03:00');
+                """;
+            cmd.ExecuteNonQuery();
+        }
+        SqliteConnection.ClearAllPools();
+
+        var time = new FakeTime(new DateTimeOffset(2026, 11, 11, 14, 32, 0, Tr));
+        var signal = new CountingSignal();
+        var store = new NoteStore(oldDbPath, time, signal);
+
+        var existing = store.Get(1)!;
+        Assert.Equal("eski not", existing.Text);
+        Assert.Equal(NoteAuthor.Ben, existing.Author);
+
+        var added = store.Add("yeni not", NoteAuthor.Claude);
+        Assert.Equal(NoteAuthor.Claude, added.Author);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
+        }
     }
 
     [Fact]

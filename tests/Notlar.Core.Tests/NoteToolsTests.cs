@@ -20,7 +20,7 @@ public sealed class NoteToolsTests : IDisposable
     {
         var result = _tools.NotEkle("Faturayı öde #ev");
 
-        Assert.Equal("Not eklendi: [ ] 14:32 Faturayı öde #ev  (id: 1) — 11 Kasım 2026, Çarşamba", result);
+        Assert.Equal("Not eklendi: [ ] 14:32 Faturayı öde #ev  (id: 1, yazar: Claude) — 11 Kasım 2026, Çarşamba", result);
         Assert.Single(_f.Store.List(new NoteFilter()));
     }
 
@@ -42,10 +42,10 @@ public sealed class NoteToolsTests : IDisposable
 
         Assert.Equal(
             "## BUGÜN · 11 Kasım 2026, Çarşamba\n" +
-            "[ ] 09:00 bugün  (id: 3)\n" +
+            "[ ] 09:00 bugün  (id: 3, yazar: Claude)\n" +
             "\n" +
             "## 5 Kasım 2026, Perşembe\n" +
-            "[ ] 10:00 sınırda  (id: 2)",
+            "[ ] 10:00 sınırda  (id: 2, yazar: Claude)",
             result.ReplaceLineEndings("\n"));
     }
 
@@ -78,18 +78,37 @@ public sealed class NoteToolsTests : IDisposable
     }
 
     [Fact]
+    public void NotlariListele_filters_by_yazar()
+    {
+        _f.Store.Add("ben notu");
+        _tools.NotEkle("claude notu");
+
+        var result = _tools.NotlariListele(yazar: "ben");
+
+        Assert.Contains("ben notu", result);
+        Assert.DoesNotContain("claude notu", result);
+    }
+
+    [Fact]
+    public void NotlariListele_rejects_bad_yazar()
+    {
+        var ex = Assert.Throws<McpException>(() => _tools.NotlariListele(yazar: "biri"));
+        Assert.Equal("Geçersiz yazar 'biri', 'ben' veya 'claude' bekleniyor.", ex.Message);
+    }
+
+    [Fact]
     public void NotGuncelle_changes_text()
     {
         _tools.NotEkle("eski");
-        Assert.Equal("Not güncellendi: [ ] 14:32 yeni  (id: 1)", _tools.NotGuncelle(1, "yeni"));
+        Assert.Equal("Not güncellendi: [ ] 14:32 yeni  (id: 1, yazar: Claude)", _tools.NotGuncelle(1, "yeni"));
     }
 
     [Fact]
     public void NotTamamla_marks_and_unmarks()
     {
         _tools.NotEkle("x");
-        Assert.Equal("Not tamamlandı: [x] 14:32 x  (id: 1)", _tools.NotTamamla(1));
-        Assert.Equal("Not tekrar açıldı: [ ] 14:32 x  (id: 1)", _tools.NotTamamla(1, tamamlandi: false));
+        Assert.Equal("Not tamamlandı: [x] 14:32 x  (id: 1, yazar: Claude)", _tools.NotTamamla(1));
+        Assert.Equal("Not tekrar açıldı: [ ] 14:32 x  (id: 1, yazar: Claude)", _tools.NotTamamla(1, tamamlandi: false));
     }
 
     [Fact]
@@ -109,7 +128,7 @@ public sealed class NoteToolsTests : IDisposable
         var result = _tools.NotEkle("satır1\nsatır2\r\nsatır3");
 
         Assert.Equal(
-            "Not eklendi: [ ] 14:32 satır1 satır2 satır3  (id: 1) — 11 Kasım 2026, Çarşamba",
+            "Not eklendi: [ ] 14:32 satır1 satır2 satır3  (id: 1, yazar: Claude) — 11 Kasım 2026, Çarşamba",
             result);
     }
 

@@ -34,4 +34,19 @@ public class MarkdownExporterTests
         Note[] notes = [new(1, "satır1\nsatır2", new DateTimeOffset(2026, 11, 11, 8, 0, 0, Tr), null, false)];
         Assert.Contains("- [ ] 08:00 satır1 satır2\n", MarkdownExporter.Export(notes));
     }
+
+    [Fact]
+    public void Export_marks_Claude_notes_with_suffix()
+    {
+        Note[] notes =
+        [
+            new(1, "ben notu", new DateTimeOffset(2026, 11, 11, 8, 0, 0, Tr), null, false, NoteAuthor.Ben),
+            new(2, "claude notu", new DateTimeOffset(2026, 11, 11, 9, 0, 0, Tr), null, false, NoteAuthor.Claude),
+        ];
+
+        var result = MarkdownExporter.Export(notes);
+
+        Assert.Contains("- [ ] 08:00 ben notu\n", result);
+        Assert.Contains("- [ ] 09:00 claude notu _(Claude)_\n", result);
+    }
 }
