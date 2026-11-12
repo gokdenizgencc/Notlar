@@ -13,7 +13,15 @@ namespace Notlar.Core;
 public static class PlanLauncher
 {
     /// <summary>`claude` komutunun PATH üzerinde bulunup bulunmadığını kontrol eder.</summary>
-    public static bool IsClaudeOnPath() => FindOnPath("claude") is not null;
+    public static bool IsClaudeOnPath() => FindClaude() is not null;
+
+    /// <summary>`claude` komutunun PATH üzerindeki tam yolu (PATHEXT sırasıyla, ör. claude.exe / claude.cmd);
+    /// bulunamazsa null.</summary>
+    public static string? FindClaude() => FindOnPath("claude");
+
+    /// <summary>`claude` PATH'te bulunamadığında gösterilen Türkçe hata mesajı.</summary>
+    internal const string ClaudeNotFoundMessage =
+        "'claude' komutu PATH üzerinde bulunamadı. Claude Code'un kurulu ve PATH'e eklenmiş olduğundan emin olun.";
 
     /// <summary>powershell.exe'nin mutlak yolu (PATH aramasına güvenilmez).</summary>
     public static string PowerShellPath =>
@@ -78,8 +86,7 @@ public static class PlanLauncher
     public static void Launch(Plan plan, string? mainFolder, IReadOnlyList<string>? extraFolders)
     {
         if (!IsClaudeOnPath())
-            throw new InvalidOperationException(
-                "'claude' komutu PATH üzerinde bulunamadı. Claude Code'un kurulu ve PATH'e eklenmiş olduğundan emin olun.");
+            throw new InvalidOperationException(ClaudeNotFoundMessage);
 
         // Eski kayıtlarda doğrulanmamış bir yol kalmış olabilir; başlatmadan önce yeniden doğrula.
         if (mainFolder is not null)

@@ -44,4 +44,6 @@ public static class AppPaths
     public static string DbPath => Path.Combine(DataDir, "notlar.db");
     public static string BackupDir => Path.Combine(DataDir, "yedek");
     public static string LogPath => Path.Combine(DataDir, "log.txt");
+    public static string RecordingsDir => Path.Combine(DataDir, "kayitlar");
+    public static string ModelsDir => Path.Combine(DataDir, "modeller");
 }

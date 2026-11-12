@@ -1,0 +1,370 @@
+using System.Globalization;
+using Microsoft.Data.Sqlite;
+
+namespace Notlar.Core;
+
+/// <summary>Toplantı kayıtları ve transkript segmentleri. Aynı SQLite dosyasını (AppPaths.DbPath) diğer
+/// store'larla paylaşır. Ses dosyaları burada değil, AppPaths.RecordingsDir altında &lt;id&gt; klasöründe durur;
+/// store yalnızca ses dosyalarının silinip silinmediğini (audio_deleted) izler.</summary>
+public sealed class RecordingStore
+{
+    private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:ss.fffzzz";
+    private const string Columns = "id, title, started_at, ended_at, status, language, summary, plan_id, error, audio_deleted";
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+    /// <summary>Desteklenen transkripsiyon dilleri.</summary>
+    public static readonly IReadOnlyList<string> Languages = ["tr", "en", "auto"];
+
+    private readonly string _connectionString;
+    private readonly TimeProvider _time;
+    private readonly IChangeSignal _signal;
+
+    public RecordingStore(string dbPath, TimeProvider time, IChangeSignal signal)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dbPath))!);
+        // DefaultTimeout: SQLITE_BUSY durumunda 5 sn yeniden dener.
+        _connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath, DefaultTimeout = 5 }.ToString();
+        _time = time;
+        _signal = signal;
+
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            PRAGMA journal_mode=WAL;
+            CREATE TABLE IF NOT EXISTS recordings (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                title         TEXT    NOT NULL,
+                started_at    TEXT    NOT NULL,
+                ended_at      TEXT    NULL,
+                status        TEXT    NOT NULL,
+                language      TEXT    NOT NULL DEFAULT 'tr',
+                summary       TEXT    NULL,
+                plan_id       INTEGER NULL,
+                error         TEXT    NULL,
+                audio_deleted INTEGER NOT NULL DEFAULT 0,
+                deleted_at    TEXT    NULL
+            );
+            CREATE TABLE IF NOT EXISTS recording_segments (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                recording_id INTEGER NOT NULL,
+                start_ms     INTEGER NOT NULL,
+                end_ms       INTEGER NOT NULL,
+                speaker      TEXT    NOT NULL,
+                text         TEXT    NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_recseg ON recording_segments(recording_id, start_ms);
+            """;
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Yeni bir kayıt başlatır: başlık "Toplantı dd.MM.yyyy HH:mm", durum Kaydediliyor.</summary>
+    public Recording Start(string language)
+    {
+        var lang = ValidateLanguage(language);
+        var now = _time.GetLocalNow();
+        long id;
+        using (var conn = Open())
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO recordings(title, started_at, status, language)
+                VALUES($title, $now, $status, $language) RETURNING id
+                """;
+            cmd.Parameters.AddWithValue("$title", $"Toplantı {now.ToString("dd.MM.yyyy HH:mm", Inv)}");
+            cmd.Parameters.AddWithValue("$now", Format(now));
+            cmd.Parameters.AddWithValue("$status", nameof(RecordingStatus.Kaydediliyor));
+            cmd.Parameters.AddWithValue("$language", lang);
+            id = (long)cmd.ExecuteScalar()!;
+        }
+        _signal.Notify();
+        return Get(id);
+    }
+
+    /// <summary>Kaydı bitirir: ended_at = şimdi, durum Bekliyor (çeviri kuyruğuna alınmaya hazır).</summary>
+    public Recording Finish(long id)
+    {
+        Update(id, "ended_at = $now, status = $value", nameof(RecordingStatus.Bekliyor));
+        return Get(id);
+    }
+
+    public void MarkTranscribing(long id) =>
+        Update(id, "status = $value, error = NULL", nameof(RecordingStatus.Cevriliyor));
+
+    public void MarkFailed(long id, string error)
+    {
+        var clean = string.IsNullOrWhiteSpace(error) ? "Bilinmeyen hata." : error.Trim();
+        Update(id, "status = 'Hata', error = $value", clean);
+    }
+
+    /// <summary>Kaydın segmentlerini verilenlerle değiştirir (tek işlemde), durumu Hazir yapar ve hatayı temizler.
+    /// Boş liste geçerlidir (hiç konuşma bulunamadı).</summary>
+    public Recording SaveTranscript(long id, IReadOnlyList<TranscriptSegment> segments)
+    {
+        using (var conn = Open())
+        using (var tx = conn.BeginTransaction())
+        {
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "UPDATE recordings SET status = $status, error = NULL WHERE id = $id AND deleted_at IS NULL";
+                cmd.Parameters.AddWithValue("$status", nameof(RecordingStatus.Hazir));
+                cmd.Parameters.AddWithValue("$id", id);
+                if (cmd.ExecuteNonQuery() == 0)
+                    throw new RecordingNotFoundException(id);
+            }
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "DELETE FROM recording_segments WHERE recording_id = $id";
+                cmd.Parameters.AddWithValue("$id", id);
+                cmd.ExecuteNonQuery();
+            }
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = """
+                    INSERT INTO recording_segments(recording_id, start_ms, end_ms, speaker, text)
+                    VALUES($id, $start, $end, $speaker, $text)
+                    """;
+                cmd.Parameters.AddWithValue("$id", id);
+                var start = cmd.Parameters.Add("$start", SqliteType.Integer);
+                var end = cmd.Parameters.Add("$end", SqliteType.Integer);
+                var speaker = cmd.Parameters.Add("$speaker", SqliteType.Text);
+                var text = cmd.Parameters.Add("$text", SqliteType.Text);
+                foreach (var s in segments)
+                {
+                    start.Value = s.StartMs;
+                    end.Value = s.EndMs;
+                    speaker.Value = s.Speaker.ToString();
+                    text.Value = s.Text ?? "";
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            tx.Commit();
+        }
+        _signal.Notify();
+        return Get(id);
+    }
+
+    /// <summary>Kaydı yeniden çevrilmek üzere Bekliyor durumuna alır.</summary>
+    public Recording Requeue(long id)
+    {
+        Update(id, "status = $value, error = NULL", nameof(RecordingStatus.Bekliyor));
+        return Get(id);
+    }
+
+    public Recording Rename(long id, string title)
+    {
+        var clean = title?.Trim();
+        if (string.IsNullOrEmpty(clean))
+            throw new ArgumentException("Başlık boş olamaz.");
+        Update(id, "title = $value", clean);
+        return Get(id);
+    }
+
+    /// <summary>Özeti ayarlar; null veya boş metin özeti temizler.</summary>
+    public Recording SetSummary(long id, string? summary)
+    {
+        var clean = string.IsNullOrWhiteSpace(summary) ? null : summary.Trim();
+        Update(id, "summary = $value", clean);
+        return Get(id);
+    }
+
+    public Recording SetPlan(long id, long? planId)
+    {
+        Update(id, "plan_id = $value", planId);
+        return Get(id);
+    }
+
+    public Recording SetLanguage(long id, string language)
+    {
+        Update(id, "language = $value", ValidateLanguage(language));
+        return Get(id);
+    }
+
+    /// <summary>Ses dosyalarının silindiğini işaretler. Silinmiş (soft delete) kayıtlarda da çalışır; böylece
+    /// <see cref="ListAudioOlderThan"/> ile bulunan artakalan ses klasörleri temizlenip işaretlenebilir.</summary>
+    public void MarkAudioDeleted(long id) => Update(id, "audio_deleted = 1", null, includeDeleted: true);
+
+    public Recording Get(long id)
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"SELECT {Columns} FROM recordings WHERE id = $id AND deleted_at IS NULL";
+        cmd.Parameters.AddWithValue("$id", id);
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? Map(reader) : throw new RecordingNotFoundException(id);
+    }
+
+    /// <summary>Silinmemiş kayıtlar, yeniden eskiye.</summary>
+    public IReadOnlyList<Recording> List(int limit = 50)
+    {
+        if (limit < 1)
+            throw new ArgumentException("Kayıt sayısı en az 1 olmalı.");
+        return Query($"SELECT {Columns} FROM recordings WHERE deleted_at IS NULL ORDER BY id DESC LIMIT $limit",
+            cmd => cmd.Parameters.AddWithValue("$limit", limit));
+    }
+
+    /// <summary>Metne çevrilmiş (Hazir) en yeni kayıt; yoksa null.</summary>
+    public Recording? GetLatestReady()
+    {
+        var list = Query($"SELECT {Columns} FROM recordings WHERE deleted_at IS NULL AND status = $status ORDER BY id DESC LIMIT 1",
+            cmd => cmd.Parameters.AddWithValue("$status", nameof(RecordingStatus.Hazir)));
+        return list.Count > 0 ? list[0] : null;
+    }
+
+    public IReadOnlyList<TranscriptSegment> GetSegments(long id)
+    {
+        Get(id); // yoksa / silinmişse RecordingNotFoundException
+
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT start_ms, end_ms, speaker, text FROM recording_segments
+            WHERE recording_id = $id ORDER BY start_ms, id
+            """;
+        cmd.Parameters.AddWithValue("$id", id);
+        var segments = new List<TranscriptSegment>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            segments.Add(new TranscriptSegment(
+                reader.GetInt64(0),
+                reader.GetInt64(1),
+                Enum.Parse<Speaker>(reader.GetString(2)),
+                reader.GetString(3)));
+        }
+        return segments;
+    }
+
+    /// <summary>Uygulama başlangıcında çağrılır: yarım kalmış kayıtları (Kaydediliyor → Bekliyor; ended_at boşsa
+    /// şimdi) ve yarım kalmış çevirileri (Cevriliyor → Bekliyor) kurtarır. Kuyruğa alınması gereken tüm Bekliyor
+    /// kayıtların id'lerini (eskiden yeniye) döndürür.</summary>
+    public IReadOnlyList<long> RecoverInterrupted()
+    {
+        var ids = new List<long>();
+        int changed;
+        using (var conn = Open())
+        using (var tx = conn.BeginTransaction())
+        {
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = """
+                    UPDATE recordings SET status = 'Bekliyor', ended_at = COALESCE(ended_at, $now)
+                    WHERE deleted_at IS NULL AND status = 'Kaydediliyor';
+                    """;
+                cmd.Parameters.AddWithValue("$now", Now());
+                changed = cmd.ExecuteNonQuery();
+            }
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "UPDATE recordings SET status = 'Bekliyor' WHERE deleted_at IS NULL AND status = 'Cevriliyor'";
+                changed += cmd.ExecuteNonQuery();
+            }
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "SELECT id FROM recordings WHERE deleted_at IS NULL AND status = 'Bekliyor' ORDER BY id";
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                    ids.Add(reader.GetInt64(0));
+            }
+            tx.Commit();
+        }
+        if (changed > 0)
+            _signal.Notify();
+        return ids;
+    }
+
+    /// <summary>Kaydı siler (soft delete). Ses klasörünü silmek çağıranın işidir.</summary>
+    public void Delete(long id) => Update(id, "deleted_at = $now", null);
+
+    /// <summary>Ses dosyaları hâlâ duran (audio_deleted = 0) ve <paramref name="age"/>'den önce bitmiş kayıtlar.
+    /// Silinmiş (soft delete) kayıtlar yaşına bakılmaksızın dahildir: silme sırasında klasör kaldırılamadıysa
+    /// artakalan ses de temizlenmeli.</summary>
+    public IReadOnlyList<Recording> ListAudioOlderThan(TimeSpan age)
+    {
+        var cutoff = _time.GetLocalNow() - age;
+        var result = new List<Recording>();
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT {Columns}, deleted_at FROM recordings
+            WHERE audio_deleted = 0 AND (ended_at IS NOT NULL OR deleted_at IS NOT NULL)
+            ORDER BY id
+            """;
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var r = Map(reader);
+            var deleted = !reader.IsDBNull(10);
+            if (deleted || (r.EndedAt is { } ended && ended <= cutoff))
+                result.Add(r);
+        }
+        return result;
+    }
+
+    private IReadOnlyList<Recording> Query(string sql, Action<SqliteCommand> bind)
+    {
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        bind(cmd);
+        var list = new List<Recording>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            list.Add(Map(reader));
+        return list;
+    }
+
+    private void Update(long id, string set, object? value, bool includeDeleted = false)
+    {
+        using (var conn = Open())
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = $"UPDATE recordings SET {set} WHERE id = $id{(includeDeleted ? "" : " AND deleted_at IS NULL")}";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.Parameters.AddWithValue("$now", Now());
+            cmd.Parameters.AddWithValue("$value", value ?? DBNull.Value);
+            if (cmd.ExecuteNonQuery() == 0)
+                throw new RecordingNotFoundException(id);
+        }
+        _signal.Notify();
+    }
+
+    private SqliteConnection Open()
+    {
+        var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+        return conn;
+    }
+
+    /// <summary>Dil kodunu doğrular ve normalize eder (kırpılmış, küçük harf): yalnızca 'tr', 'en', 'auto'.</summary>
+    public static string ValidateLanguage(string? language)
+    {
+        var clean = language?.Trim().ToLowerInvariant();
+        if (clean is null || !Languages.Contains(clean))
+            throw new ArgumentException($"Desteklenmeyen dil: '{language}'. Geçerli değerler: tr, en, auto.");
+        return clean;
+    }
+
+    private string Now() => Format(_time.GetLocalNow());
+
+    private static string Format(DateTimeOffset value) => value.ToString(TimeFormat, Inv);
+
+    private static DateTimeOffset Parse(string value) => DateTimeOffset.ParseExact(value, TimeFormat, Inv);
+
+    private static Recording Map(SqliteDataReader r) => new(
+        r.GetInt64(0),
+        r.GetString(1),
+        Parse(r.GetString(2)),
+        r.IsDBNull(3) ? null : Parse(r.GetString(3)),
+        Enum.TryParse<RecordingStatus>(r.GetString(4), out var status) ? status : RecordingStatus.Hata,
+        r.GetString(5),
+        r.IsDBNull(6) ? null : r.GetString(6),
+        r.IsDBNull(7) ? null : r.GetInt64(7),
+        r.IsDBNull(8) ? null : r.GetString(8),
+        r.GetInt64(9) != 0);
+}
