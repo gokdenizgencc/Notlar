@@ -12,6 +12,14 @@ public static class AppLog
     public static void Write(Exception? ex)
     {
         if (ex is null) return;
+        Append(ex.ToString());
+    }
+
+    /// <summary>Hata olmayan tanılama satırı (ör. Whisper'ın hangi arka ucu (GPU/CPU) kullandığı).</summary>
+    public static void Info(string message) => Append(message);
+
+    private static void Append(string text)
+    {
         try
         {
             lock (Gate)
@@ -25,7 +33,7 @@ public static class AppLog
                 {
                     // Döndürme başarısız olsa bile (ör. dosya başka bir süreçte açık) günlük eklemesi devam etsin.
                 }
-                File.AppendAllText(AppPaths.LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}{Environment.NewLine}{Environment.NewLine}");
+                File.AppendAllText(AppPaths.LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {text}{Environment.NewLine}{Environment.NewLine}");
             }
         }
         catch

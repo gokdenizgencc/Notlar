@@ -7,6 +7,7 @@
     <PackageReference Include="NAudio" Version="3.3.0" />
     <PackageReference Include="Whisper.net" Version="1.9.1" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime.Vulkan" Version="1.9.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Notlar.Core\Notlar.Core.csproj" />
@@ -14,4 +15,11 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Notlar.Kayit.Tests" />
   </ItemGroup>
+  <!-- Whisper.net.Runtime.Vulkan, linux-x64 kütüphanelerini (~61 MB) koşulsuz kopyalıyor; uygulama yalnızca Windows'ta
+       çalıştığından bunlar çıktıya (ve bu projeye başvuran App'in çıktısına/publish'ine) alınmaz. -->
+  <Target Name="RemoveVulkanLinuxRuntime" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <None Remove="@(None)" Condition="$([System.String]::Copy('%(None.TargetPath)').Replace('\', '/').StartsWith('runtimes/vulkan/linux-'))" />
+    </ItemGroup>
+  </Target>
 </Project>

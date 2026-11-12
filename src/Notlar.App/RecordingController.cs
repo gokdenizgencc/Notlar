@@ -52,6 +52,7 @@ public sealed class RecordingController : IDisposable
         _queue.Completed += id => Post(() => OnQueueCompleted(id));
         _queue.Failed += (id, message) => Post(() => OnQueueFailed(id, message));
         _recorder.Error += ex => Post(() => OnRecorderError(ex));
+        WhisperRuntime.Diagnostic += AppLog.Info;
 
         // Önceki oturumda yarım kalan kayıt / çeviriler (uygulama kapandı, çöktü…) yeniden kuyruğa alınır.
         try
