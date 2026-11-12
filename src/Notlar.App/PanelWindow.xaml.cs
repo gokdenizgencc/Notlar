@@ -2295,37 +2295,14 @@ public partial class PanelWindow : Window
         if (_currentPlan is { } plan) RunPlan(plan.Id);
     }
 
-    /// <summary>▶ Çalıştır: önce 'claude' komutunun PATH'te olup olmadığını kontrol eder, sonra kullanıcıdan
-    /// açık onay alır; onaysız hiçbir şey başlatılmaz.</summary>
-    private void RunPlan(long id)
-    {
-        if (!PlanLauncher.IsClaudeOnPath())
-        {
-            ShowError("'claude' komutu PATH üzerinde bulunamadı. Claude Code'un kurulu ve PATH'e eklenmiş olduğundan emin olun.");
-            return;
-        }
+    /// <summary>▶ Çalıştır: bkz. <see cref="PlanRunFlow"/> (PATH kontrolü → açık onay → başlat).</summary>
+    private void RunPlan(long id) =>
+        PlanRunFlow.Run(this, id, _planStore, _projectStore, ShowError, onPlanMissing: Reload);
 
-        Plan plan;
-        IReadOnlyList<PlanStep> steps;
-        try
-        {
-            (plan, steps) = _planStore.GetPlan(id);
-        }
-        catch (PlanNotFoundException)
-        {
-            Reload();
-            return;
-        }
+    /// <summary>"🎙 Kayıtlar" sekme düğmesi: Kayıtlar penceresini açar (App bağlar; panel içeriği değişmez).</summary>
+    public Action? OpenRecordings { get; set; }
 
-        var (mainFolder, extraFolders) = PlanFolder.ResolveAll(plan, _projectStore, _planStore);
-        var folderLabel = mainFolder ?? "Kullanıcı klasörü (proje bağlı değil)";
-        var projectNameById = _projectStore.List().ToDictionary(p => p.Id, p => p.Name);
-        var confirmWindow = new RunPlanConfirmWindow(plan.Title, folderLabel, extraFolders, steps, projectNameById) { Owner = this };
-        confirmWindow.ShowDialog();
-        if (!confirmWindow.Confirmed) return;
-
-        Try(() => PlanLauncher.Launch(plan, mainFolder, extraFolders));
-    }
+    private void RecordingsTab_Click(object sender, RoutedEventArgs e) => OpenRecordings?.Invoke();
 
     private void PlanTitleEditButton_Click(object sender, RoutedEventArgs e)
     {

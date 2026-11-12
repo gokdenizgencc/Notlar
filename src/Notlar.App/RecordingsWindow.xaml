@@ -1,0 +1,314 @@
+<Window x:Class="Notlar.App.RecordingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Kayıtlar" Width="1060" Height="720" MinWidth="760" MinHeight="460"
+        WindowStartupLocation="CenterScreen" ResizeMode="CanResizeWithGrip"
+        Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
+        FontFamily="Segoe UI" FontSize="13"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        Closing="Window_Closing"
+        Closed="Window_Closed">
+    <Window.Resources>
+        <Style x:Key="FlatButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="6">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.45"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource FlatButton}">
+            <Setter Property="Background" Value="{DynamicResource Accent}"/>
+            <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+            <Setter Property="Padding" Value="14,6"/>
+        </Style>
+
+        <!-- Kayıt işlemleri: çerçeveli, üzerine gelince vurgulanan düğmeler. -->
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource Surface}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}" CornerRadius="6">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource TagBg}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.45"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="RecordingItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TagBg}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SectionLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+
+        <Style x:Key="ReadOnlyBox" TargetType="TextBox">
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="Background" Value="{DynamicResource Surface}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource Fg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="VerticalContentAlignment" Value="Top"/>
+        </Style>
+
+        <Style x:Key="Placeholder" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+            <Setter Property="Margin" Value="14,10,14,0"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Üst şerit: başlık + kayıt düğmesi ve süre -->
+        <Border Grid.Row="0" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                BorderThickness="0,0,0,1" Padding="20,14">
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                    <TextBlock x:Name="RecordElapsedText" Foreground="{DynamicResource Danger}" FontSize="15" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="0,0,12,0" Visibility="Collapsed"/>
+                    <Button x:Name="RecordButton" Content="⏺ Kaydı başlat" Click="RecordButton_Click"
+                            Style="{StaticResource AccentButton}" Padding="16,7"/>
+                </StackPanel>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Toplantı kayıtları" FontSize="22" FontWeight="SemiBold"/>
+                    <TextBlock Foreground="{DynamicResource Muted}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
+                               Text="Mikrofon (Ben) ve bilgisayardan gelen ses (Karşı taraf) kaydedilir; metne çeviri bu bilgisayarda yapılır."/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320" MinWidth="220"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*" MinWidth="420"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Sol: kayıt listesi -->
+            <Grid Grid.Column="0">
+                <ListBox x:Name="RecordingsList" Background="Transparent" BorderThickness="0" Padding="8"
+                         Foreground="{DynamicResource Fg}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ItemContainerStyle="{StaticResource RecordingItemStyle}"
+                         SelectionMode="Single"
+                         SelectionChanged="RecordingsList_SelectionChanged">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <DockPanel Margin="0,3,0,0" LastChildFill="True">
+                                    <Border DockPanel.Dock="Right" Background="{Binding StatusBrush}" CornerRadius="8"
+                                            Padding="7,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding StatusLabel}" FontSize="11" Foreground="White"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding Meta}" FontSize="11" Foreground="{DynamicResource Muted}"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                </DockPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock x:Name="EmptyListText" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" TextAlignment="Center"
+                           HorizontalAlignment="Center" VerticalAlignment="Top" Margin="20,40,20,0" Visibility="Collapsed"
+                           Text="Henüz kayıt yok. Yukarıdaki düğmeyle ya da tepsi menüsünden kayda başlayabilirsiniz."/>
+            </Grid>
+
+            <GridSplitter Grid.Column="1" Width="5" Background="Transparent" HorizontalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"/>
+
+            <!-- Sağ: seçili kayıt -->
+            <Border Grid.Column="2" BorderBrush="{DynamicResource Border}" BorderThickness="1,0,0,0">
+                <Grid>
+                    <TextBlock x:Name="NoSelectionText" Text="Bir kayıt seçin." Foreground="{DynamicResource Muted}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                    <Grid x:Name="DetailPanel" Margin="20,14,20,16" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBox x:Name="TitleBox" Grid.Row="0" FontSize="20" FontWeight="SemiBold"
+                                 Background="Transparent" Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
+                                 BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1" Padding="0,2"
+                                 ToolTip="Başlığı düzenleyin; Enter ile ya da başka yere tıklayınca kaydedilir (Esc: vazgeç)"
+                                 KeyDown="TitleBox_KeyDown" LostKeyboardFocus="TitleBox_LostKeyboardFocus"/>
+
+                        <!-- Tarih · süre · bağlı plan -->
+                        <TextBlock x:Name="MetaText" Grid.Row="1" Foreground="{DynamicResource Muted}" Margin="0,8,0,0"
+                                   TextWrapping="Wrap"/>
+
+                        <!-- Durum + ilerleme + hata -->
+                        <StackPanel Grid.Row="2" Margin="0,8,0,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Border x:Name="StatusBadge" CornerRadius="8" Padding="8,2" VerticalAlignment="Center">
+                                    <TextBlock x:Name="StatusBadgeText" FontSize="11" Foreground="White"/>
+                                </Border>
+                                <TextBlock x:Name="StatusText" Foreground="{DynamicResource Muted}" Margin="8,0,0,0"
+                                           VerticalAlignment="Center"/>
+                                <ProgressBar x:Name="TranscribeProgress" Width="180" Height="6" Margin="10,0,0,0"
+                                             Minimum="0" Maximum="1" VerticalAlignment="Center" BorderThickness="0"
+                                             Foreground="{DynamicResource Accent}" Background="{DynamicResource Surface}"
+                                             Visibility="Collapsed"/>
+                            </StackPanel>
+                            <TextBlock x:Name="ErrorText" Foreground="{DynamicResource Danger}" TextWrapping="Wrap"
+                                       Margin="0,6,0,0" Visibility="Collapsed"/>
+                        </StackPanel>
+
+                        <!-- Dil ve proje -->
+                        <WrapPanel Grid.Row="3" Margin="0,12,0,0">
+                            <TextBlock Text="Dil" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,6,6"/>
+                            <ComboBox x:Name="LanguageBox" Width="130" Margin="0,0,16,6" DisplayMemberPath="Label"
+                                      ToolTip="Metne çeviri dili; yeni kayıtlar için de varsayılan olur"
+                                      SelectionChanged="LanguageBox_SelectionChanged"/>
+                            <TextBlock Text="Proje" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,6,6"/>
+                            <ComboBox x:Name="ProjectBox" Width="220" Margin="0,0,0,6" DisplayMemberPath="Name"
+                                      ToolTip="Görev planı bu projeye bağlanır; Claude oturumu bu projenin klasöründe açılır"
+                                      SelectionChanged="ProjectBox_SelectionChanged"/>
+                        </WrapPanel>
+
+                        <!-- İşlemler -->
+                        <WrapPanel Grid.Row="4" Margin="0,8,0,0">
+                            <Button x:Name="SummarizeButton" Content="✨ Özetle" Style="{StaticResource ActionButton}"
+                                    ToolTip="Transkripti Claude'a özetlet" Click="SummarizeButton_Click"/>
+                            <Button x:Name="PlanButton" Content="🗂 Görev planla" Style="{StaticResource ActionButton}"
+                                    ToolTip="Transkriptten Claude'a görev planı çıkart" Click="PlanButton_Click"/>
+                            <Button x:Name="RunPlanButton" Content="▶ Planı başlat" Style="{StaticResource ActionButton}"
+                                    ToolTip="Bu kayıttan oluşturulan planı Claude Code ile çalıştır" Click="RunPlanButton_Click"/>
+                            <Button x:Name="ClaudeButton" Content="💬 Claude'a bağla" Style="{StaticResource ActionButton}"
+                                    ToolTip="Bu kayıt hakkında konuşmak için Claude Code oturumu aç" Click="ClaudeButton_Click"/>
+                            <Button x:Name="RequeueButton" Content="🔁 Yeniden çevir" Style="{StaticResource ActionButton}"
+                                    Click="RequeueButton_Click"/>
+                            <Button x:Name="CopyButton" Content="📋 Kopyala" Style="{StaticResource ActionButton}"
+                                    ToolTip="Transkripti ve özeti panoya kopyala" Click="CopyButton_Click"/>
+                            <Button x:Name="DeleteButton" Content="🗑 Sil" Style="{StaticResource ActionButton}"
+                                    Foreground="{DynamicResource Danger}" Click="DeleteButton_Click"/>
+                        </WrapPanel>
+
+                        <!-- Bilgi / hata mesajı -->
+                        <Border x:Name="MessageBar" Grid.Row="5" Background="{DynamicResource TagBg}" CornerRadius="6"
+                                Padding="10,6" Margin="0,4,0,4" Visibility="Collapsed">
+                            <DockPanel LastChildFill="True">
+                                <Button DockPanel.Dock="Right" Content="✕" Style="{StaticResource FlatButton}" Padding="6,0"
+                                        ToolTip="Kapat" Click="MessageClose_Click"/>
+                                <TextBlock x:Name="MessageText" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Border>
+
+                        <!-- Transkript ve özet -->
+                        <Grid Grid.Row="6" Margin="0,8,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="3*" MinHeight="80"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="2*" MinHeight="70"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Transkript" Style="{StaticResource SectionLabel}"/>
+                                <TextBox x:Name="TranscriptBox" Grid.Row="1" Style="{StaticResource ReadOnlyBox}"/>
+                                <TextBlock x:Name="TranscriptPlaceholder" Grid.Row="1" Style="{StaticResource Placeholder}"/>
+                            </Grid>
+
+                            <GridSplitter Grid.Row="1" Height="10" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                                          Background="Transparent" ResizeBehavior="PreviousAndNext" ResizeDirection="Rows"/>
+
+                            <Grid Grid.Row="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Özet" Style="{StaticResource SectionLabel}"/>
+                                <TextBox x:Name="SummaryBox" Grid.Row="1" Style="{StaticResource ReadOnlyBox}"/>
+                                <TextBlock x:Name="SummaryPlaceholder" Grid.Row="1" Style="{StaticResource Placeholder}"
+                                           Text="Henüz özet yok. ✨ Özetle ile Claude'a özetletebilirsiniz."/>
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

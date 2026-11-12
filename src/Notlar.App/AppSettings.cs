@@ -54,6 +54,13 @@ public sealed class AppSettings
     /// Her başlangıçta tekrar denemeyi önlemek için saklanır.</summary>
     public bool DataDirSecured { get; set; }
 
+    /// <summary>İlk kayıttan önce gösterilen tek seferlik KVKK uyarısı ("katılımcıları bilgilendir") onaylandı mı?</summary>
+    public bool RecordingConsentShown { get; set; }
+
+    /// <summary>Yeni toplantı kayıtlarının transkripsiyon dili: 'tr' | 'en' | 'auto'. Kayıtlar penceresindeki dil
+    /// seçimiyle güncellenir.</summary>
+    public string RecordingLanguage { get; set; } = "tr";
+
     public static event Action? Changed;
 
     private static string SettingsPath => Path.Combine(AppPaths.DataDir, "ayarlar.json");

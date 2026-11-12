@@ -30,6 +30,9 @@ public partial class App : Application
     private ChangeListener? _listener;
     private TrayIcon? _tray;
     private PanelWindow? _panel;
+    private RecordingController? _recordings;
+    private PlanStore? _planStore;
+    private ProjectStore? _projectStore;
 
     [DllImport("user32.dll")]
     private static extern bool AllowSetForegroundWindow(int dwProcessId);
@@ -88,6 +91,7 @@ public partial class App : Application
         SkillTranslations skillTranslations;
         PlanStore planStore;
         ProjectStore projectStore;
+        RecordingStore recordingStore;
         AppFlags appFlags;
         try
         {
@@ -99,6 +103,7 @@ public partial class App : Application
             skillTranslations = new SkillTranslations(AppPaths.DbPath, TimeProvider.System, signal);
             planStore = new PlanStore(AppPaths.DbPath, TimeProvider.System, signal);
             projectStore = new ProjectStore(AppPaths.DbPath, TimeProvider.System, signal);
+            recordingStore = new RecordingStore(AppPaths.DbPath, TimeProvider.System, signal);
             appFlags = new AppFlags(AppPaths.DbPath, signal);
         }
         catch (Exception ex)
@@ -112,18 +117,31 @@ public partial class App : Application
 
         TryLog(AutoStart.EnsureRegistration);
 
+        _planStore = planStore;
+        _projectStore = projectStore;
         _panel = new PanelWindow(store, taskStore, memoryStore, skillRegistry, skillTranslations, planStore, projectStore, appFlags);
+        var recordings = _recordings = new RecordingController(recordingStore, planStore, Dispatcher);
+        _panel.OpenRecordings = () => OpenRecordings(null);
         _tray = new TrayIcon(
             onToggle: _panel.Toggle,
             onOpen: _panel.ShowNearTray,
             onExport: _panel.ExportMarkdown,
-            onExit: ExitApp);
+            onExit: ExitApp,
+            isRecording: () => recordings.IsRecording,
+            recordingElapsed: () => recordings.Elapsed,
+            onToggleRecording: ToggleRecording,
+            onOpenRecordings: () => OpenRecordings(null));
+        recordings.RecordingStateChanged += () => _tray?.SetRecording(recordings.IsRecording);
+        recordings.Completed += OnRecordingCompleted;
+        recordings.Failed += OnRecordingFailed;
+        recordings.Warning += message => _tray?.ShowBalloon("Notlar — kayıt", message, () => OpenRecordings(null), isError: true);
         try
         {
             _listener = new ChangeListener(AppPaths.ChangeEventName, () => Dispatcher.InvokeAsync(() =>
             {
                 _panel.Reload();
                 NoteEditorWindow.ReloadAll();
+                RecordingsWindow.ReloadAll();
             }), AppLog.Write);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
@@ -194,11 +212,53 @@ public partial class App : Application
 
     private void ExitApp() => Shutdown();
 
+    /// <summary>Tepsi menüsü: kayıt sürüyorsa durdurur, yoksa başlatır.</summary>
+    private void ToggleRecording()
+    {
+        if (_recordings is not { } recordings) return;
+        if (recordings.IsRecording) recordings.Stop();
+        else recordings.Start(owner: null);
+    }
+
+    /// <summary>Kayıtlar penceresini açar (açıksa öne getirir); <paramref name="selectId"/> verilirse o kaydı seçer.</summary>
+    private void OpenRecordings(long? selectId)
+    {
+        if (_recordings is null || _planStore is null || _projectStore is null) return;
+        RecordingsWindow.Open(_recordings, _planStore, _projectStore, selectId);
+    }
+
+    private void OnRecordingCompleted(long id)
+    {
+        var title = TryGetRecordingTitle(id);
+        _tray?.ShowBalloon("Notlar", $"Kayıt metne çevrildi: {title}", () => OpenRecordings(id));
+    }
+
+    private void OnRecordingFailed(long id, string message)
+    {
+        var title = TryGetRecordingTitle(id);
+        _tray?.ShowBalloon("Kayıt metne çevrilemedi", $"{title}: {message}", () => OpenRecordings(id), isError: true);
+    }
+
+    private string TryGetRecordingTitle(long id)
+    {
+        try
+        {
+            return _recordings?.Store.Get(id).Title ?? $"#{id}";
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+            return $"#{id}";
+        }
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _showWait?.Unregister(null);
         _closeWait?.Unregister(null);
+        // Kayıt sürüyorsa düzgün durdurulup bitirilir; bir sonraki açılışta çeviri kuyruğuna alınır.
+        _recordings?.Dispose();
         _listener?.Dispose();
         _tray?.Dispose();
         if (_isFirstInstance) _mutex?.ReleaseMutex();

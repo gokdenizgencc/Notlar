@@ -604,7 +604,10 @@
             <Button x:Name="SkillsTabButton" Content="🧩 Yetenekler" Click="SkillsTab_Click"
                     Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,4"/>
             <Button x:Name="PlansTabButton" Content="📋 Planlar" Click="PlansTab_Click"
-                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,0,4"/>
+                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,4"/>
+            <Button x:Name="RecordingsTabButton" Content="🎙 Kayıtlar" Click="RecordingsTab_Click"
+                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,0,4"
+                    ToolTip="Toplantı kayıtları penceresini aç"/>
         </WrapPanel>
 
         <Border x:Name="NotesInputBorder" Grid.Row="3" Margin="12,0,12,8" Background="{DynamicResource Surface}"

@@ -12,5 +12,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Notlar.Core\Notlar.Core.csproj" />
+    <ProjectReference Include="..\Notlar.Kayit\Notlar.Kayit.csproj" />
   </ItemGroup>
 </Project>
