@@ -7,14 +7,15 @@ public static class SpeechSegmenter
     private const int FrameMs = 30;
     private const float MinThreshold = 0.008f;
     private const double NoiseFloorPercentile = 0.20;
-    private const float NoiseFloorFactor = 3f;
+    // 3 kat, kısık mikrofonlarda konuşmayı kırpıyordu (gerçek kayıtta konuşma ≈ gürültü × 2.5).
+    private const float NoiseFloorFactor = 2f;
     private const int MergeGapMs = 600;
     private const int PadMs = 200;
     private const int MinRegionMs = 250;
     private const int MaxRegionMs = 28_000;
 
     /// <summary>Konuşma bölgelerini örnek indisleri olarak döndürür (<c>Start</c> dahil, <c>End</c> hariç).
-    /// Algoritma: 30 ms çerçeve RMS; eşik = max(0.008, gürültü tabanı (çerçeve RMS'lerinin 20. yüzdeliği) × 3);
+    /// Algoritma: 30 ms çerçeve RMS; eşik = max(0.008, gürültü tabanı (çerçeve RMS'lerinin 20. yüzdeliği) × 2);
     /// ardışık konuşma çerçeveleri bölge olur; 600 ms'den kısa boşluklar birleştirilir; 250 ms'den kısa
     /// (dolgu öncesi) bölgeler atılır; kalanlara iki yandan 200 ms dolgu eklenir (sınırlara kırpılır);
     /// 28 sn'den uzun bölgeler 28 sn'lik parçalara bölünür. Tamamen sessiz giriş → boş liste.</summary>
@@ -39,7 +40,7 @@ public static class SpeechSegmenter
             rms[f] = (float)Math.Sqrt(sum / frame.Length);
         }
 
-        // 2) Eşik: gürültü tabanının 3 katı, en az 0.008.
+        // 2) Eşik: gürültü tabanının 2 katı, en az 0.008.
         var sorted = (float[])rms.Clone();
         Array.Sort(sorted);
         var noiseFloor = sorted[(int)(NoiseFloorPercentile * (sorted.Length - 1))];

@@ -48,6 +48,28 @@ public class SpeechSegmenterTests
     }
 
     [Fact]
+    public void Quiet_speech_at_two_and_a_half_times_the_noise_floor_is_detected()
+    {
+        // Kısık mikrofon: gürültü RMS ≈ 0.0076, konuşma RMS ≈ 0.019 (gerçek bir kayıttan ölçülen düzey).
+        // Eşik gürültü tabanının 3 katı olunca (≈0.023) bu konuşma tamamen kırpılıyordu.
+        var rnd = new Random(7);
+        var noiseAmp = 0.0076f * MathF.Sqrt(3) * 2; // düzgün dağılım (-a/2..a/2) RMS'i = a/√12
+        var samples = new float[S(6)];
+        for (var i = 0; i < samples.Length; i++)
+        {
+            var noise = (float)((rnd.NextDouble() - 0.5) * noiseAmp);
+            var speech = i >= S(2) && i < S(4) ? (float)(0.019 * Math.Sqrt(2) * Math.Sin(2 * Math.PI * 220 * i / Sr)) : 0f;
+            samples[i] = noise + speech;
+        }
+
+        var regions = SpeechSegmenter.Detect(samples);
+
+        var (start, end) = Assert.Single(regions);
+        AssertNear(S(2) - Pad, start);
+        AssertNear(S(4) + Pad, end);
+    }
+
+    [Fact]
     public void Single_tone_region_is_detected_with_padding()
     {
         var samples = Build((2, false), (3, true), (2, false));

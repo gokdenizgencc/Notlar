@@ -106,7 +106,7 @@ Dil doğrulaması: yalnızca `tr`, `en`, `auto`; aksi `ArgumentException`.
 ## Saf mantık (Core, unit testli)
 
 **SpeechSegmenter** — `static IReadOnlyList<(int Start, int End)> Detect(ReadOnlySpan<float> samples, int sampleRate = 16000)`:
-30 ms çerçeve RMS; eşik = max(0.008, gürültü tabanı (çerçeve RMS'lerinin 20. yüzdeliği) × 3); konuşma çerçevesi
+30 ms çerçeve RMS; eşik = max(0.008, gürültü tabanı (çerçeve RMS'lerinin 20. yüzdeliği) × 2); konuşma çerçevesi
 dizileri; 600 ms'den kısa boşluklar birleştirilir; her bölge 200 ms pad (sınırlara kırpılır); 250 ms'den kısa
 bölgeler atılır; 28 sn'den uzun bölgeler 28 sn'lik parçalara bölünür. Tamamen sessiz giriş → boş liste.
 

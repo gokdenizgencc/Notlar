@@ -27,6 +27,9 @@ public sealed class WhisperTranscriber
     /// <summary>Aralarındaki sessizlik bundan uzun olan bölgeler aynı pencereye konmaz.</summary>
     internal const int MaxGroupGapSamples = 5 * SampleRate;
 
+    /// <summary>Her pencerenin iki yanına eklenen gerçek ses bağlamı (28 + 2×1 sn ≤ Whisper'ın 30 sn penceresi).</summary>
+    internal const int ContextPadSamples = 1 * SampleRate;
+
     public static int Threads => Math.Max(1, Environment.ProcessorCount / 2);
 
     /// <summary><paramref name="language"/>: "tr", "en" gibi iki harfli kod ya da "auto" (Whisper dili kendisi bulur).
@@ -41,7 +44,7 @@ public sealed class WhisperTranscriber
 
         var samples = await Task.Run(() => ReadMono16k(wavPath), cancellationToken).ConfigureAwait(false);
         var regions = SpeechSegmenter.Detect(samples, SampleRate);
-        var windows = GroupRegions(regions, MaxWindowSamples, MaxGroupGapSamples);
+        var windows = PadWindows(GroupRegions(regions, MaxWindowSamples, MaxGroupGapSamples), samples.Length, ContextPadSamples);
         if (windows.Count == 0)
         {
             progress?.Report(1.0);
@@ -227,5 +230,23 @@ public sealed class WhisperTranscriber
             windows.Add((start, end));
         }
         return windows;
+    }
+
+    /// <summary>Pencereleri iki yandan en çok <paramref name="pad"/> örnek gerçek sesle genişletir (komşu pencereyle
+    /// aradaki boşluğun yarısını geçmeden, dosya sınırlarında kırpılarak). Konuşmanın hemen bitiminde kesilen
+    /// pencerelerde Whisper (özellikle kısık sesli kayıtlarda) metni atlayıp "Altyazı M.K." gibi uydurma çıktı
+    /// üretiyordu; arkaya sıfır (sessizlik) eklemek düzeltmiyor, gerçek ses bağlamı düzeltiyor.</summary>
+    internal static IReadOnlyList<(int Start, int End)> PadWindows(IReadOnlyList<(int Start, int End)> windows,
+        int totalSamples, int pad)
+    {
+        var padded = new List<(int Start, int End)>(windows.Count);
+        for (var i = 0; i < windows.Count; i++)
+        {
+            var (start, end) = windows[i];
+            var before = i == 0 ? start : (start - windows[i - 1].End) / 2;
+            var after = i == windows.Count - 1 ? totalSamples - end : (windows[i + 1].Start - end) / 2;
+            padded.Add((start - Math.Clamp(before, 0, pad), end + Math.Clamp(after, 0, pad)));
+        }
+        return padded;
     }
 }
