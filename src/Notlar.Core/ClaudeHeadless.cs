@@ -25,6 +25,7 @@ public static class ClaudeHeadless
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(5);
 
     private const string InvalidPlanMessage = "Claude geçerli bir plan döndürmedi.";
+    private const string NoActionItemsMessage = "Toplantıda plana dönüştürülecek bir iş bulunamadı.";
     private const int StderrExcerptLength = 300;
 
     private const string DataWarning =
@@ -97,9 +98,12 @@ public static class ClaudeHeadless
           .Append("\"Ben\" kaydı yapan kullanıcıdır, \"Karşı taraf\" diğer katılımcılardır. ")
           .Append("Metin otomatik çeviri olduğundan yazım hataları içerebilir.\n\n");
         AppendMeta(sb, r);
-        sb.Append("Görev: Toplantıda kararlaştırılan ve kullanıcının (\"Ben\") yapması gereken işlerden bir görev planı çıkar. ")
+        sb.Append("Görev: Toplantıda kararlaştırılan tüm aksiyon ve işlerden bir görev planı çıkar. ")
+          .Append("Kullanıcının (\"Ben\") kendi işlerini öne al; başka birine verilen işleri de dahil et ve adımın başına ")
+          .Append("\"Sorumlu: iş\" biçiminde kişiyi yaz (ör. \"Ayşe: Sunumu hazırla\"). ")
           .Append($"En çok {MaxPlanSteps} adım yaz; her adım tek başına anlaşılır, eyleme dönük, kısa bir Türkçe cümle olsun ")
-          .Append("(fiille başlasın, ör. \"Bütçe tablosunu güncelle\"). Adımları yapılma sırasına göre diz.\n")
+          .Append("(fiille başlasın, ör. \"Bütçe tablosunu güncelle\"). Adımları yapılma sırasına göre diz. ")
+          .Append("Toplantıda hiç iş konuşulmadıysa \"adimlar\" boş dizi olsun.\n")
           .Append("Yanıt olarak YALNIZCA şu biçimde geçerli bir JSON döndür, başka hiçbir metin, açıklama veya kod çiti ekleme:\n")
           .Append("{\"baslik\":\"...\",\"adimlar\":[\"...\"]}\n")
           .Append("\"baslik\" planın kısa Türkçe başlığıdır; \"adimlar\" adım metinlerinin dizisidir.\n\n");
@@ -135,20 +139,21 @@ public static class ClaudeHeadless
             if (title.Length == 0)
                 title = TextSafety.Flatten(fallbackTitle);
 
-            var steps = new List<string>();
-            if (root.TryGetProperty("adimlar", out var a) && a.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in a.EnumerateArray())
-                {
-                    if (item.ValueKind != JsonValueKind.String) continue;
-                    var step = TextSafety.Flatten(item.GetString());
-                    if (step.Length == 0) continue;
-                    steps.Add(step);
-                    if (steps.Count == MaxPlanSteps) break;
-                }
-            }
-            if (steps.Count == 0)
+            if (!root.TryGetProperty("adimlar", out var a) || a.ValueKind != JsonValueKind.Array)
                 throw new FormatException(InvalidPlanMessage);
+
+            var steps = new List<string>();
+            foreach (var item in a.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String) continue;
+                var step = TextSafety.Flatten(item.GetString());
+                if (step.Length == 0) continue;
+                steps.Add(step);
+                if (steps.Count == MaxPlanSteps) break;
+            }
+            // Geçerli biçimde boş dizi: Claude toplantıda iş bulamadı (bozuk çıktıdan ayrı, anlaşılır mesaj).
+            if (steps.Count == 0)
+                throw new FormatException(NoActionItemsMessage);
             return (title, steps);
         }
         catch (JsonException ex)

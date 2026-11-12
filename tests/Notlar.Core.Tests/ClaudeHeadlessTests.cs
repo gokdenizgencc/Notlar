@@ -126,6 +126,26 @@ public class ClaudeHeadlessTests
     }
 
     [Fact]
+    public void Plan_input_asks_for_all_action_items_with_owner_not_only_users()
+    {
+        var input = ClaudeHeadless.BuildPlanInput(Rec, Segs);
+
+        // Yalnızca "Ben"in işleri istenirse, kullanıcının konuşmadığı toplantılarda plan boş döner.
+        Assert.DoesNotContain("kullanıcının (\"Ben\") yapması gereken işlerden", input);
+        Assert.Contains("tüm aksiyon", input);
+        Assert.Contains("Sorumlu: iş", input);
+    }
+
+    [Theory]
+    [InlineData("{\"baslik\":\"x\",\"adimlar\":[]}")]
+    [InlineData("{\"baslik\":\"x\",\"adimlar\":[\"\",\"   \"]}")]
+    public void ParsePlan_empty_steps_explains_no_action_items_found(string output)
+    {
+        var ex = Assert.Throws<FormatException>(() => ClaudeHeadless.ParsePlan(output, "y"));
+        Assert.Equal("Toplantıda plana dönüştürülecek bir iş bulunamadı.", ex.Message);
+    }
+
+    [Fact]
     public void Inputs_reject_empty_transcript()
     {
         Assert.Throws<ArgumentException>(() => ClaudeHeadless.BuildSummaryInput(Rec, []));
@@ -187,8 +207,6 @@ public class ClaudeHeadlessTests
     [InlineData("{bozuk json")]
     [InlineData("{\"baslik\":\"x\",\"adimlar\":[\"a\"")]
     [InlineData("{\"baslik\":\"x\"}")]
-    [InlineData("{\"baslik\":\"x\",\"adimlar\":[]}")]
-    [InlineData("{\"baslik\":\"x\",\"adimlar\":[\"\",\"   \"]}")]
     [InlineData("{\"baslik\":\"x\",\"adimlar\":\"tek metin\"}")]
     [InlineData("[\"a\",\"b\"]")]
     public void ParsePlan_invalid_output_throws_FormatException(string output)
