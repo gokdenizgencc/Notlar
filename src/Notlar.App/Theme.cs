@@ -26,6 +26,13 @@ public static class Theme
         Set(resources, "Danger", light ? "#C42B1C" : "#9E2A2A");
         Set(resources, "Success", light ? "#107C10" : "#5FB55A");
         Set(resources, "Warning", light ? "#9D5D00" : "#C9972C");
+        // Panel düzeni: kayıt düğmesi, ikon şeridi, transkript konuşmacıları.
+        Set(resources, "Record", light ? "#C42B1C" : "#D9363E");
+        Set(resources, "OnRecord", "#FFFFFF");
+        Set(resources, "RailBg", light ? "#EBEBEB" : "#181818");
+        Set(resources, "NavActiveBg", light ? "#DCE9F7" : "#2B3A45");
+        Set(resources, "SpeakerBen", light ? "#0F6CBD" : "#7FB7D9");
+        Set(resources, "SpeakerKarsi", light ? "#9D5D00" : "#E0A85B");
     }
 
     private static void Set(ResourceDictionary resources, string key, string hex)
