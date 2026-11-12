@@ -31,8 +31,6 @@ public partial class App : Application
     private TrayIcon? _tray;
     private PanelWindow? _panel;
     private RecordingController? _recordings;
-    private PlanStore? _planStore;
-    private ProjectStore? _projectStore;
 
     [DllImport("user32.dll")]
     private static extern bool AllowSetForegroundWindow(int dwProcessId);
@@ -117,11 +115,10 @@ public partial class App : Application
 
         TryLog(AutoStart.EnsureRegistration);
 
-        _planStore = planStore;
-        _projectStore = projectStore;
-        _panel = new PanelWindow(store, taskStore, memoryStore, skillRegistry, skillTranslations, planStore, projectStore, appFlags);
+        // Kayıt denetleyicisi panelden önce kurulur: panel Kayıtlar görünümünü ve sağ alttaki kayıt düğmesini ona bağlar.
         var recordings = _recordings = new RecordingController(recordingStore, planStore, Dispatcher);
-        _panel.OpenRecordings = () => OpenRecordings(null);
+        _panel = new PanelWindow(store, taskStore, memoryStore, skillRegistry, skillTranslations, planStore, projectStore,
+            appFlags, recordings);
         _tray = new TrayIcon(
             onToggle: _panel.Toggle,
             onOpen: _panel.ShowNearTray,
@@ -141,7 +138,6 @@ public partial class App : Application
             {
                 _panel.Reload();
                 NoteEditorWindow.ReloadAll();
-                RecordingsWindow.ReloadAll();
             }), AppLog.Write);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
@@ -220,12 +216,8 @@ public partial class App : Application
         else recordings.Start(owner: null);
     }
 
-    /// <summary>Kayıtlar penceresini açar (açıksa öne getirir); <paramref name="selectId"/> verilirse o kaydı seçer.</summary>
-    private void OpenRecordings(long? selectId)
-    {
-        if (_recordings is null || _planStore is null || _projectStore is null) return;
-        RecordingsWindow.Open(_recordings, _planStore, _projectStore, selectId);
-    }
+    /// <summary>Paneli Kayıtlar bölümünde açar; <paramref name="selectId"/> verilirse o kaydı seçer.</summary>
+    private void OpenRecordings(long? selectId) => _panel?.ShowRecordings(selectId);
 
     private void OnRecordingCompleted(long id)
     {

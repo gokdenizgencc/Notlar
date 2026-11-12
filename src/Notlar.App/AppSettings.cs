@@ -7,7 +7,7 @@ using Notlar.Core;
 
 namespace Notlar.App;
 
-/// <summary>Uygulama görünüm ayarları (yazı boyutu, yazar renkleri). JSON olarak diske kaydedilir.</summary>
+/// <summary>Uygulama ayarları (görünüm, panel, kayıt). JSON olarak diske kaydedilir; panelin ⚙ Ayarlar görünümünden düzenlenir.</summary>
 public sealed class AppSettings
 {
     public const double MinDayFontSize = 10;
@@ -57,8 +57,8 @@ public sealed class AppSettings
     /// <summary>İlk kayıttan önce gösterilen tek seferlik KVKK uyarısı ("katılımcıları bilgilendir") onaylandı mı?</summary>
     public bool RecordingConsentShown { get; set; }
 
-    /// <summary>Yeni toplantı kayıtlarının transkripsiyon dili: 'tr' | 'en' | 'auto'. Kayıtlar penceresindeki dil
-    /// seçimiyle güncellenir.</summary>
+    /// <summary>Yeni toplantı kayıtlarının transkripsiyon dili: 'tr' | 'en' | 'auto'. Kayıtlar'daki dil seçimiyle ve
+    /// ⚙ Ayarlar'dan güncellenir.</summary>
     public string RecordingLanguage { get; set; } = "tr";
 
     public static event Action? Changed;
@@ -118,6 +118,17 @@ public sealed class AppSettings
         DayFontSize = DefaultDayFontSize,
         AuthorColors = CreateDefaultAuthorColors(),
     };
+
+    /// <summary>Diskteki güncel ayarları okur, <paramref name="mutate"/> ile değiştirir ve kaydeder. Uzun yaşayan
+    /// bir örneği kaydetmenin, başka bir yerin (ör. panel konumu) yazdığı alanları eski değerle ezmesini önler.
+    /// Kaydetme hatası çağırana fırlatılır.</summary>
+    public static AppSettings Update(Action<AppSettings> mutate)
+    {
+        var settings = Load();
+        mutate(settings);
+        settings.Save();
+        return settings;
+    }
 
     /// <summary>Ayarları JSON olarak atomik şekilde (tmp dosyaya yazıp yer değiştirerek) kaydeder ve <see cref="Changed"/> olayını tetikler.</summary>
     public void Save()

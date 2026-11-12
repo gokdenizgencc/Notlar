@@ -1,0 +1,27 @@
+<UserControl x:Class="Notlar.App.AppearanceSettings"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Görünüm ayarları (yazı boyutu, yazar renkleri): hem AppearanceWindow'da hem panelin ⚙ Ayarlar
+         görünümünde kullanılır. Kendi kaydırma çubuğu yoktur; kaydırmayı barındıran taraf sağlar. -->
+    <StackPanel>
+        <TextBlock x:Name="FontSizeCaption" Text="Yazı boyutu" FontWeight="SemiBold" Margin="0,0,0,6"/>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Slider x:Name="FontSizeSlider" Grid.Column="0" Minimum="10" Maximum="40" TickFrequency="1"
+                    IsSnapToTickEnabled="True" ValueChanged="FontSizeSlider_ValueChanged" VerticalAlignment="Center"
+                    AutomationProperties.Name="Yazı boyutu"/>
+            <TextBlock x:Name="FontSizeValueText" Grid.Column="1" Width="32" Margin="8,0,0,0" TextAlignment="Right"
+                       VerticalAlignment="Center" Foreground="{DynamicResource Muted}"/>
+        </Grid>
+        <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                CornerRadius="6" Margin="0,10,0,0" Padding="10,8">
+            <TextBlock x:Name="FontSizePreviewText" Text="Örnek not metni önizlemesi" TextWrapping="Wrap"/>
+        </Border>
+
+        <TextBlock Text="Yazar renkleri" FontWeight="SemiBold" Margin="0,16,0,6"/>
+        <StackPanel x:Name="AuthorColorsPanel"/>
+    </StackPanel>
+</UserControl>

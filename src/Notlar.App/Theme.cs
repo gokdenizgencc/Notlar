@@ -33,6 +33,9 @@ public static class Theme
         Set(resources, "NavActiveBg", light ? "#DCE9F7" : "#2B3A45");
         Set(resources, "SpeakerBen", light ? "#0F6CBD" : "#7FB7D9");
         Set(resources, "SpeakerKarsi", light ? "#9D5D00" : "#E0A85B");
+        // Hata METNİ rengi: "Danger" koyu temada arka plan (beyaz yazılı şerit/düğme) için koyu kırmızıdır ve
+        // koyu zeminde yazı olarak okunmaz (~2,2:1). Yazı/ikon için bu kullanılır (Bg ve Surface üzerinde ≥4,5:1).
+        Set(resources, "DangerText", light ? "#C42B1C" : "#FF8A80");
     }
 
     private static void Set(ResourceDictionary resources, string key, string hex)

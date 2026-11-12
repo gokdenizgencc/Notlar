@@ -30,6 +30,48 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- FlatButton'ın aç/kapa eşi: açıkken vurgu renginde (ör. "+ Yeni kart", "+" Elle ekle). -->
+        <Style x:Key="FlatToggle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="10">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Surface}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Accent}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Başlıksız Expander: açma/kapama dışarıdaki bir ToggleButton'dan (IsExpanded bağlı) yapılır. -->
+        <Style x:Key="HeaderlessExpander" TargetType="Expander">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <ContentPresenter x:Name="ExpandSite" Visibility="Collapsed"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="ExpandSite" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <DataTemplate x:Key="NoteRowTemplate" DataType="{x:Type local:NoteItem}">
             <Border x:Name="Row" Focusable="True" FocusVisualStyle="{x:Null}"
                     Background="Transparent" Padding="8,5" CornerRadius="4"
@@ -555,62 +597,53 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Border x:Name="DragBar" Grid.Row="0" Height="28" Background="{DynamicResource Surface}"
+        <!-- Üst çubuk: solda sürükleme tutamacı + etkin bölümün adı (üçlü tık: kişisel bölüm), sağda pencere düğmeleri. -->
+        <Border x:Name="DragBar" Grid.Row="0" Height="30" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="0,0,0,1"
-                Cursor="SizeAll" ToolTip="Sürükleyerek taşı"
                 MouseLeftButtonDown="DragBar_MouseLeftButtonDown">
-            <Grid>
-                <TextBlock Text="⠿" Foreground="{DynamicResource Muted}" FontSize="14"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0">
+            <DockPanel LastChildFill="True">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0">
                     <Button x:Name="FullScreenButton" Content="⛶" ToolTip="Tam ekran" Click="FullScreenButton_Click"
                             Style="{StaticResource FlatButton}" Padding="6,2"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0">
                     <Button x:Name="PinButton" Content="📌" ToolTip="Sabitle" Click="PinButton_Click"
-                            Style="{StaticResource FlatButton}" Padding="6,2"/>
-                    <Button x:Name="SizeToggleButton" Content="⤢" ToolTip="Genişlet" Click="SizeToggleButton_Click"
                             Style="{StaticResource FlatButton}" Padding="6,2" Margin="2,0,0,0"/>
-                    <Button Content="—" ToolTip="Gizle" Click="HideButton_Click"
+                    <Button x:Name="SizeToggleButton" Content="⤢" ToolTip="Büyük moda geç" Click="SizeToggleButton_Click"
+                            Style="{StaticResource FlatButton}" Padding="6,2" Margin="2,0,0,0"/>
+                    <Button Content="—" ToolTip="Gizle (Esc)" Click="HideButton_Click"
                             Style="{StaticResource FlatButton}" Padding="8,2" Margin="2,0,0,0"/>
                 </StackPanel>
-            </Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0"
+                            Cursor="SizeAll" ToolTip="Sürükleyerek taşı; çift tık: büyük/kompakt mod">
+                    <TextBlock Text="⠿" Foreground="{DynamicResource Muted}" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="HeaderText" Text="Notlar" FontWeight="SemiBold" VerticalAlignment="Center"
+                               Margin="8,0,0,0" MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
-        <DockPanel x:Name="HeaderBar" Grid.Row="1" Margin="14,10,10,6" LastChildFill="True"
-                   MouseLeftButtonDown="HeaderBar_MouseLeftButtonDown">
-            <TextBlock x:Name="HeaderText" Text="📝 Notlar" FontSize="15" FontWeight="SemiBold"
-                       VerticalAlignment="Center"
-                       MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
-        </DockPanel>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-        <WrapPanel x:Name="TabsRow" Grid.Row="2" Orientation="Horizontal" Margin="14,0,14,8">
-            <Button x:Name="NotesTabButton" Content="📝 Notlar" Click="NotesTab_Click"
-                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,4"/>
-            <Button x:Name="MemoryTabButton" Content="🧠 Hafıza" Click="MemoryTab_Click"
-                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,4"/>
-            <Button x:Name="SkillsTabButton" Content="🧩 Yetenekler" Click="SkillsTab_Click"
-                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,4"/>
-            <Button x:Name="PlansTabButton" Content="📋 Planlar" Click="PlansTab_Click"
-                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,6,4"/>
-            <Button x:Name="RecordingsTabButton" Content="🎙 Kayıtlar" Click="RecordingsTab_Click"
-                    Style="{StaticResource FlatButton}" Padding="10,4" Margin="0,0,0,4"
-                    ToolTip="Toplantı kayıtları penceresini aç"/>
-        </WrapPanel>
+            <local:NavRail x:Name="Rail" Grid.Column="0"/>
 
-        <Border x:Name="NotesInputBorder" Grid.Row="3" Margin="12,0,12,8" Background="{DynamicResource Surface}"
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+        <Border x:Name="NotesInputBorder" Grid.Row="0" Margin="10,10,10,6" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="1" CornerRadius="6">
             <Grid>
                 <TextBox x:Name="InputBox" Background="Transparent" BorderThickness="0" Padding="8,7"
@@ -632,7 +665,7 @@
             </Grid>
         </Border>
 
-        <StackPanel x:Name="TaskInputBorder" Grid.Row="3" Margin="12,0,12,8" Visibility="Collapsed">
+        <StackPanel x:Name="TaskInputBorder" Grid.Row="0" Margin="10,10,10,8" Visibility="Collapsed">
             <CheckBox x:Name="KisiselOkumaCheckBox" Content="Claude okuyabilsin" Foreground="{DynamicResource Fg}"
                       Margin="2,0,2,6" HorizontalAlignment="Left"
                       Checked="KisiselOkumaCheckBox_Changed" Unchecked="KisiselOkumaCheckBox_Changed"
@@ -660,42 +693,47 @@
             </Border>
         </StackPanel>
 
-        <StackPanel x:Name="MemoryInputPanel" Grid.Row="3" Margin="12,0,12,8" Visibility="Collapsed">
-            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
-                    BorderThickness="1" CornerRadius="6" Margin="0,0,0,6">
-                <Grid>
-                    <TextBox x:Name="MemorySearchBox" Background="Transparent" BorderThickness="0" Padding="8,7,28,7"
-                             Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
-                             TextChanged="MemorySearchBox_TextChanged"/>
-                    <TextBlock Text="Hafızada ara..." Foreground="{DynamicResource Muted}"
-                               Margin="11,7" IsHitTestVisible="False">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Text, ElementName=MemorySearchBox}" Value="">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                    <Button Content="✕" ToolTip="Temizle" Click="MemorySearchClear_Click"
-                            HorizontalAlignment="Right" Margin="0,0,4,0">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
-                                <Setter Property="Visibility" Value="Visible"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Text, ElementName=MemorySearchBox}" Value="">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </Grid>
-            </Border>
-            <Expander x:Name="MemoryAddExpander" Header="+ Yeni kart" Foreground="{DynamicResource Muted}"
+        <StackPanel x:Name="MemoryInputPanel" Grid.Row="0" Margin="10,10,10,6" Visibility="Collapsed">
+            <DockPanel LastChildFill="True">
+                <ToggleButton DockPanel.Dock="Right" Content="+ Yeni kart" ToolTip="Yeni hafıza kartı ekle"
+                              IsChecked="{Binding IsExpanded, ElementName=MemoryAddExpander}"
+                              Style="{StaticResource FlatToggle}" Padding="8,4" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                        BorderThickness="1" CornerRadius="6">
+                    <Grid>
+                        <TextBox x:Name="MemorySearchBox" Background="Transparent" BorderThickness="0" Padding="8,7,28,7"
+                                 Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
+                                 TextChanged="MemorySearchBox_TextChanged"/>
+                        <TextBlock Text="Hafızada ara..." Foreground="{DynamicResource Muted}"
+                                   Margin="11,7" IsHitTestVisible="False">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=MemorySearchBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <Button Content="✕" ToolTip="Temizle" Click="MemorySearchClear_Click"
+                                HorizontalAlignment="Right" Margin="0,0,4,0">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=MemorySearchBox}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+                </Border>
+            </DockPanel>
+            <Expander x:Name="MemoryAddExpander" Style="{StaticResource HeaderlessExpander}"
                       IsExpanded="False" Expanded="MemoryAddExpander_Expanded">
                 <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
                         BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,0">
@@ -750,65 +788,66 @@
             </Expander>
         </StackPanel>
 
-        <StackPanel x:Name="SkillsHeaderPanel" Grid.Row="3" Margin="12,0,12,8" Visibility="Collapsed">
-            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
-                    BorderThickness="1" CornerRadius="6" Margin="0,0,0,6">
-                <Grid>
-                    <TextBox x:Name="SkillSearchBox" Background="Transparent" BorderThickness="0" Padding="8,7,28,7"
-                             Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
-                             TextChanged="SkillSearchBox_TextChanged"/>
-                    <TextBlock Text="Yeteneklerde ara..." Foreground="{DynamicResource Muted}"
-                               Margin="11,7" IsHitTestVisible="False">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Text, ElementName=SkillSearchBox}" Value="">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                    <Button Content="✕" ToolTip="Temizle" Click="SkillSearchClear_Click"
-                            HorizontalAlignment="Right" Margin="0,0,4,0">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
-                                <Setter Property="Visibility" Value="Visible"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Text, ElementName=SkillSearchBox}" Value="">
-                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </Grid>
-            </Border>
-            <DockPanel LastChildFill="False" Margin="0,0,0,4">
-                <WrapPanel DockPanel.Dock="Left">
-                    <Button x:Name="SkillShowInstalledButton" Content="Kurulu" Click="SkillShowInstalled_Click"
-                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,4"/>
-                    <Button x:Name="SkillShowDiscoverButton" Content="Keşfet" Click="SkillShowDiscover_Click"
-                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,0,4"/>
-                </WrapPanel>
+        <StackPanel x:Name="SkillsHeaderPanel" Grid.Row="0" Margin="10,10,10,6" Visibility="Collapsed">
+            <DockPanel LastChildFill="True" Margin="0,0,0,6">
+                <ToggleButton DockPanel.Dock="Right" Content="+" FontSize="15" ToolTip="Elle yetenek ekle"
+                              IsChecked="{Binding IsExpanded, ElementName=SkillAddExpander}"
+                              Style="{StaticResource FlatToggle}" Padding="8,4" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                        BorderThickness="1" CornerRadius="6">
+                    <Grid>
+                        <TextBox x:Name="SkillSearchBox" Background="Transparent" BorderThickness="0" Padding="8,7,28,7"
+                                 Foreground="{DynamicResource Fg}" CaretBrush="{DynamicResource Fg}"
+                                 TextChanged="SkillSearchBox_TextChanged"/>
+                        <TextBlock Text="Yeteneklerde ara..." Foreground="{DynamicResource Muted}"
+                                   Margin="11,7" IsHitTestVisible="False">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SkillSearchBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <Button Content="✕" ToolTip="Temizle" Click="SkillSearchClear_Click"
+                                HorizontalAlignment="Right" Margin="0,0,4,0">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SkillSearchBox}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+                </Border>
             </DockPanel>
-            <DockPanel x:Name="SkillStatusRow" Margin="0,0,0,4" Visibility="Collapsed" LastChildFill="True">
+            <DockPanel LastChildFill="False" Margin="0,0,0,2">
+                <Button DockPanel.Dock="Right" Content="↻" ToolTip="Yeniden tara" Click="SkillRefresh_Click"
+                        Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" Padding="8,2"/>
+                <Button x:Name="SkillSortButton" DockPanel.Dock="Right" Content="Kullanıma göre ▾" ToolTip="Sıralama"
+                        Click="SkillSortButton_Click" Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,2,0"/>
+                <Border DockPanel.Dock="Left" Background="{DynamicResource Surface}" CornerRadius="11" Padding="2">
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="SkillShowInstalledButton" Content="Kurulu" Click="SkillShowInstalled_Click"
+                                Style="{StaticResource FlatButton}" Padding="10,2"/>
+                        <Button x:Name="SkillShowDiscoverButton" Content="Keşfet" Click="SkillShowDiscover_Click"
+                                Style="{StaticResource FlatButton}" Padding="10,2"/>
+                    </StackPanel>
+                </Border>
+            </DockPanel>
+            <DockPanel x:Name="SkillStatusRow" Margin="0,4,0,0" Visibility="Collapsed" LastChildFill="True">
                 <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="SkillStatusClose_Click"
                         Style="{StaticResource FlatButton}"/>
                 <TextBlock x:Name="SkillStatusText" Foreground="{DynamicResource Accent}" TextWrapping="Wrap"/>
             </DockPanel>
-            <DockPanel x:Name="SkillSortRow" LastChildFill="False" Margin="0,0,0,4">
-                <Button DockPanel.Dock="Right" Content="↻ Yenile" ToolTip="Yeniden tara" Click="SkillRefresh_Click"
-                        Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" Padding="8,2"/>
-                <WrapPanel DockPanel.Dock="Left">
-                    <Button x:Name="SkillSortUsageButton" Content="Kullanıma göre" Click="SkillSortUsage_Click"
-                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,4"/>
-                    <Button x:Name="SkillSortNameButton" Content="Ada göre" Click="SkillSortName_Click"
-                            Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,0,4"/>
-                </WrapPanel>
-            </DockPanel>
-            <Expander x:Name="SkillAddExpander" Header="+ Elle ekle" Foreground="{DynamicResource Muted}" IsExpanded="False"
+            <Expander x:Name="SkillAddExpander" Style="{StaticResource HeaderlessExpander}" IsExpanded="False"
                       Expanded="SkillAddExpander_Expanded">
                 <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
                         BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,6,0,0">
@@ -863,72 +902,52 @@
             </Expander>
         </StackPanel>
 
-        <DockPanel Grid.Row="4" Margin="12,0,12,4" LastChildFill="True">
+        <!-- Notlar: yazar çipleri + ▾ #etiket menüsü + 📅 (Başka gün) tek satırda. -->
+        <DockPanel x:Name="NotesFilterRow" Grid.Row="1" Margin="10,0,10,4" LastChildFill="True">
+            <Grid DockPanel.Dock="Right" VerticalAlignment="Top">
+                <Button x:Name="OtherDayButton" Content="📅" ToolTip="Başka gün aç" Click="OtherDayButton_Click"
+                        Style="{StaticResource FlatButton}" Padding="6,2"/>
+                <Popup x:Name="OtherDayPopup" PlacementTarget="{Binding ElementName=OtherDayButton}" Placement="Bottom"
+                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                    <Calendar x:Name="OtherDayCalendar" SelectedDatesChanged="OtherDayCalendar_SelectedDatesChanged"/>
+                </Popup>
+            </Grid>
             <Button x:Name="FilterClearButton" DockPanel.Dock="Right" Content="✕" ToolTip="Filtreyi temizle"
-                    Click="FilterClear_Click" Style="{StaticResource FlatButton}" Visibility="Collapsed"/>
-            <ItemsControl x:Name="AuthorFilterRow" ItemsSource="{Binding AuthorFilters}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="{x:Type local:AuthorChip}">
-                        <Button Content="{Binding Label}" Click="AuthorChip_Click" Margin="0,0,6,4" Padding="10,2">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
-                                    <Setter Property="Background" Value="{DynamicResource Surface}"/>
-                                    <Setter Property="Foreground" Value="{Binding Color}"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                            <Setter Property="Background" Value="{DynamicResource Accent}"/>
-                                            <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                    Click="FilterClear_Click" Style="{StaticResource FlatButton}" Visibility="Collapsed"
+                    VerticalAlignment="Top" Padding="6,2"/>
+            <WrapPanel>
+                <ItemsControl x:Name="AuthorFilterRow" ItemsSource="{Binding AuthorFilters}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:AuthorChip}">
+                            <Button Content="{Binding Label}" Click="AuthorChip_Click" Margin="0,0,4,4" Padding="8,1">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
+                                        <Setter Property="Background" Value="{DynamicResource Surface}"/>
+                                        <Setter Property="Foreground" Value="{Binding Color}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                <Setter Property="Background" Value="{DynamicResource Accent}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button x:Name="TagFilterButton" Content="▾ #etiket" ToolTip="Etikete göre süz" Click="TagFilterButton_Click"
+                        Style="{StaticResource FlatButton}" Padding="8,1" Margin="0,0,4,4" Visibility="Collapsed"/>
+            </WrapPanel>
         </DockPanel>
 
-        <ItemsControl x:Name="TagRow" Grid.Row="5" ItemsSource="{Binding Tags}" Margin="12,0,12,6" Visibility="Collapsed">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type local:TagChip}">
-                    <Button Content="{Binding Label}" Click="TagChip_Click" Margin="0,0,6,4" Padding="10,2">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource FlatButton}">
-                                <Setter Property="Background" Value="{DynamicResource Surface}"/>
-                                <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource Accent}"/>
-                                        <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                    </Button>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <ScrollViewer Grid.Row="6" VerticalScrollBarVisibility="Auto" Padding="6,0,6,8">
+        <!-- Alt kenarda 56 px boşluk: son satır sağ alttaki kayıt düğmesinin altında kalmasın. -->
+        <ScrollViewer x:Name="MainScroll" Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="4,0,4,56">
             <Grid>
                 <StackPanel x:Name="DayListPanel">
-                    <DockPanel Margin="2,0,2,6" LastChildFill="False">
-                        <Button DockPanel.Dock="Left" Content="📅 Başka gün" Click="OtherDayButton_Click"
-                                Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
-                        <DatePicker x:Name="OtherDayPicker" DockPanel.Dock="Left" Visibility="Collapsed"
-                                    Margin="8,0,0,0" Width="130"
-                                    SelectedDateChanged="OtherDayPicker_SelectedDateChanged"
-                                    CalendarClosed="OtherDayPicker_CalendarClosed"/>
-                        <Button DockPanel.Dock="Left" Content="✕" ToolTip="Kapat" Click="OtherDayClose_Click"
-                                Style="{StaticResource FlatButton}" Margin="2,0,0,0"
-                                Visibility="{Binding Visibility, ElementName=OtherDayPicker}"/>
-                    </DockPanel>
                     <Grid>
                         <TextBlock x:Name="EmptyText" Text="Henüz not yok." Foreground="{DynamicResource Muted}"
                                    HorizontalAlignment="Center" Margin="0,40,0,0" Visibility="Collapsed"/>
@@ -1030,16 +1049,6 @@
                     </StackPanel>
 
                     <StackPanel x:Name="DiscoverPanel" Visibility="Collapsed">
-                        <DockPanel LastChildFill="False" Margin="0,0,0,4">
-                            <WrapPanel DockPanel.Dock="Left">
-                                <Button x:Name="DiscoverSortPopularButton" Content="Popüler" Click="DiscoverSortPopular_Click"
-                                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,4"/>
-                                <Button x:Name="DiscoverSortRecentButton" Content="Yeni güncellenen" Click="DiscoverSortRecent_Click"
-                                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,4"/>
-                                <Button x:Name="DiscoverSortNameButton" Content="Ada göre" Click="DiscoverSortName_Click"
-                                        Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,0,4"/>
-                            </WrapPanel>
-                        </DockPanel>
                         <TextBlock x:Name="DiscoverHintText"
                                    Text="Henüz bir marketplace eklenmemiş. Claude Code'da /plugin ile marketplace ekleyebilirsin."
                                    Foreground="{DynamicResource Muted}" TextWrapping="Wrap" TextAlignment="Center"
@@ -1269,7 +1278,15 @@
             </Grid>
         </ScrollViewer>
 
-        <Border x:Name="SelectionBar" Grid.Row="7" Background="{DynamicResource Surface}"
+        <!-- Panel içinde barındırılan görünümler (kendi düzen/kaydırmalarını yönetirler). -->
+        <local:RecordingsView x:Name="RecordingsViewHost" Grid.Row="2" Visibility="Collapsed"/>
+        <local:SettingsView x:Name="SettingsViewHost" Grid.Row="2" Visibility="Collapsed"/>
+
+        <!-- Sağ altta sabit kayıt düğmesi (Kayıtlar sekmesinde gizli; orada listenin üstündeki büyük düğme var). -->
+        <local:RecordFab x:Name="RecordButton" Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                         Margin="0,0,12,12"/>
+
+        <Border x:Name="SelectionBar" Grid.Row="3" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,8" Visibility="Collapsed">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="✕" ToolTip="Seçimden çık" Click="SelectModeExit_Click"
@@ -1280,7 +1297,7 @@
             </DockPanel>
         </Border>
 
-        <Border x:Name="PlanAddedBar" Grid.Row="8" Background="{DynamicResource Surface}"
+        <Border x:Name="PlanAddedBar" Grid.Row="4" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,8" Visibility="Collapsed">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="PlanAddedClose_Click"
@@ -1291,7 +1308,7 @@
             </DockPanel>
         </Border>
 
-        <Border x:Name="UndoBar" Grid.Row="9" Background="{DynamicResource Surface}"
+        <Border x:Name="UndoBar" Grid.Row="5" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,8" Visibility="Collapsed">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="UndoClose_Click"
@@ -1302,12 +1319,14 @@
             </DockPanel>
         </Border>
 
-        <Border x:Name="ErrorBar" Grid.Row="10" Background="{DynamicResource Danger}" Padding="12,6" Visibility="Collapsed">
+        <Border x:Name="ErrorBar" Grid.Row="6" Background="{DynamicResource Danger}" Padding="12,6" Visibility="Collapsed">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="✕" ToolTip="Kapat" Click="ErrorClose_Click"
                         Style="{StaticResource FlatButton}" Foreground="White" Margin="6,0,0,0"/>
                 <TextBlock x:Name="ErrorText" Foreground="White" TextWrapping="Wrap"/>
             </DockPanel>
         </Border>
+            </Grid>
+        </Grid>
     </Grid>
 </Window>

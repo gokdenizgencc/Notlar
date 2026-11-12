@@ -1,6 +1,228 @@
 <UserControl x:Class="Notlar.App.SettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- SÖZLEŞME stub'ı: ⚙ Ayarlar görünümü (bkz. docs/superpowers/specs/2026-11-12-arayuz-duzeni-design.md). -->
-    <Grid />
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Notlar.App"
+             Foreground="{DynamicResource Fg}">
+    <!-- Panel içindeki ⚙ Ayarlar görünümü (bkz. docs/superpowers/specs/2026-11-12-arayuz-duzeni-design.md).
+         Kompakt panelde ~314 px genişliğe sığar; büyük modda okunabilir bir sütun genişliğinde kalır.
+         Değişiklikler anında kaydedilir; Reload() her açılışta güncel değerleri okur. -->
+    <UserControl.Resources>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+        <Style x:Key="FieldTitle" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{DynamicResource Muted}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="Divider" TargetType="Border">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource Border}"/>
+            <Setter Property="Margin" Value="0,16,0,14"/>
+        </Style>
+        <Style x:Key="SettingCheck" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <!-- Açıklama satırı onay kutusunun metin hizasından başlar. -->
+        <Style x:Key="CheckHint" TargetType="TextBlock" BasedOn="{StaticResource Hint}">
+            <Setter Property="Margin" Value="20,2,0,12"/>
+        </Style>
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource Surface}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}" CornerRadius="6">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="LinkButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter x:Name="Cp" VerticalAlignment="Center"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Dil seçimi: segment/çip görünümlü radyo düğmeleri (tema renkleriyle; ComboBox koyu temada açık kalıyor). -->
+        <Style x:Key="Chip" TargetType="RadioButton">
+            <Setter Property="Background" Value="{DynamicResource Surface}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="12" Padding="12,4">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource Accent}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                  Focusable="False">
+        <StackPanel Margin="12,10,12,16" MaxWidth="560" HorizontalAlignment="Stretch">
+
+            <!-- Kaydetme hatası vb. (birkaç saniye görünür). -->
+            <Border x:Name="StatusBar" Visibility="Collapsed" Margin="0,0,0,10" Padding="8,6" CornerRadius="6"
+                    Background="{DynamicResource Surface}" BorderBrush="{DynamicResource DangerText}" BorderThickness="1">
+                <TextBlock x:Name="StatusText" TextWrapping="Wrap" Foreground="{DynamicResource DangerText}"/>
+            </Border>
+
+            <!-- ── Görünüm ─────────────────────────────────────────────── -->
+            <TextBlock Text="Görünüm" Style="{StaticResource SectionTitle}"/>
+
+            <TextBlock Text="Not editörü yazı boyutu" Style="{StaticResource FieldTitle}"/>
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Slider x:Name="EditorFontSlider" TickFrequency="1" IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                        ValueChanged="EditorFontSlider_ValueChanged" AutomationProperties.Name="Not editörü yazı boyutu"/>
+                <TextBlock x:Name="EditorFontValueText" Grid.Column="1" Width="32" Margin="8,0,0,0" TextAlignment="Right"
+                           VerticalAlignment="Center" Foreground="{DynamicResource Muted}"/>
+            </Grid>
+            <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,14"
+                       Text="Tam ekran not editöründe Ctrl + tekerlek ile de değişir."/>
+
+            <local:AppearanceSettings x:Name="Appearance" FontSizeTitle="Gün penceresi yazı boyutu"/>
+
+            <Button Content="Görünümü varsayılana döndür" Style="{StaticResource LinkButton}" Margin="0,2,0,0"
+                    Click="AppearanceReset_Click"/>
+
+            <Border Style="{StaticResource Divider}"/>
+
+            <!-- ── Genel ───────────────────────────────────────────────── -->
+            <TextBlock Text="Genel" Style="{StaticResource SectionTitle}"/>
+
+            <CheckBox x:Name="AutoStartCheck" Content="Windows ile başlat" Style="{StaticResource SettingCheck}"
+                      Checked="AutoStartCheck_Changed" Unchecked="AutoStartCheck_Changed"/>
+            <TextBlock Style="{StaticResource CheckHint}"
+                       Text="Oturum açınca Notlar tepside başlar. Tepsi menüsündeki seçenekle aynıdır."/>
+
+            <CheckBox x:Name="PinnedCheck" Content="Paneli sabitle (📌)" Style="{StaticResource SettingCheck}"
+                      Checked="PinnedCheck_Changed" Unchecked="PinnedCheck_Changed"/>
+            <TextBlock Style="{StaticResource CheckHint}"
+                       Text="Başka pencereye geçince panel gizlenmez; yalnızca — düğmesi, Esc ya da tepsi simgesi gizler."/>
+
+            <StackPanel x:Name="LargeModeRow">
+                <CheckBox x:Name="LargeModeCheck" Content="Büyük mod (⤢)" Style="{StaticResource SettingCheck}"
+                          Checked="LargeModeCheck_Changed" Unchecked="LargeModeCheck_Changed"/>
+                <TextBlock Style="{StaticResource CheckHint}"
+                           Text="Panel serbestçe boyutlandırılabilen geniş bir pencere olarak açılır; boyutu ve konumu hatırlanır."/>
+            </StackPanel>
+
+            <Border Style="{StaticResource Divider}" Margin="0,4,0,14"/>
+
+            <!-- ── Kayıt ───────────────────────────────────────────────── -->
+            <TextBlock Text="Kayıt" Style="{StaticResource SectionTitle}"/>
+
+            <TextBlock Text="Yeni kayıtların dili" Style="{StaticResource FieldTitle}"/>
+            <WrapPanel x:Name="LanguagePanel">
+                <RadioButton x:Name="LangTr" Content="Türkçe" Tag="tr" GroupName="RecordingLanguage"
+                             Style="{StaticResource Chip}" Checked="Language_Checked"/>
+                <RadioButton x:Name="LangEn" Content="İngilizce" Tag="en" GroupName="RecordingLanguage"
+                             Style="{StaticResource Chip}" Checked="Language_Checked"/>
+                <RadioButton x:Name="LangAuto" Content="Otomatik" Tag="auto" GroupName="RecordingLanguage"
+                             Style="{StaticResource Chip}" Checked="Language_Checked"
+                             ToolTip="Konuşmanın dili otomatik algılanır."/>
+            </WrapPanel>
+            <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,12"
+                       Text="Var olan bir kaydın dili Kayıtlar'da, kaydın ⋯ menüsünden değiştirilir."/>
+
+            <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,8" Foreground="{DynamicResource Fg}"
+                       Text="Ses dosyaları 14 gün sonra silinir; transkript ve özetler kalır."/>
+
+            <TextBlock x:Name="BackendText" Style="{StaticResource Hint}" Margin="0,0,0,2"/>
+            <TextBlock x:Name="GpuOffText" Style="{StaticResource Hint}" Margin="0,0,0,2" Visibility="Collapsed"/>
+
+            <Button Content="📁 Kayıt klasörünü aç" Style="{StaticResource ActionButton}" Margin="0,10,0,0"
+                    Click="OpenRecordingsDir_Click"/>
+
+            <Border Style="{StaticResource Divider}"/>
+
+            <!-- ── Gizlilik ────────────────────────────────────────────── -->
+            <TextBlock Text="Gizlilik" Style="{StaticResource SectionTitle}"/>
+
+            <CheckBox x:Name="KisiselOkumaCheck" Content="Claude kişisel listeyi okuyabilsin"
+                      Style="{StaticResource SettingCheck}"
+                      Checked="KisiselOkumaCheck_Changed" Unchecked="KisiselOkumaCheck_Changed"/>
+            <TextBlock x:Name="KisiselOkumaHint" Style="{StaticResource CheckHint}" Margin="20,2,0,0"
+                       Text="Kapalıyken Claude (MCP) kişisel listeyi okuyamaz; yalnızca ekleme yapabilir. Varsayılan: kapalı."/>
+
+            <Border Style="{StaticResource Divider}"/>
+
+            <!-- ── Hakkında ────────────────────────────────────────────── -->
+            <TextBlock Text="Hakkında" Style="{StaticResource SectionTitle}"/>
+
+            <TextBlock x:Name="VersionText" Margin="0,0,0,4"/>
+            <TextBlock Style="{StaticResource Hint}" Text="Veri klasörü (notlar, ayarlar, kayıtlar, yedekler):"/>
+            <TextBox x:Name="DataDirText" IsReadOnly="True" BorderThickness="0" Background="Transparent"
+                     Foreground="{DynamicResource Muted}" CaretBrush="{DynamicResource Fg}" FontSize="12"
+                     TextWrapping="Wrap" Padding="0" Margin="-2,2,0,0"/>
+
+            <Button Content="📁 Veri klasörünü aç" Style="{StaticResource ActionButton}" Margin="0,10,0,0"
+                    Click="OpenDataDir_Click"/>
+        </StackPanel>
+    </ScrollViewer>
 </UserControl>

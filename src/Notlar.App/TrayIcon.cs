@@ -21,7 +21,7 @@ public sealed class TrayIcon : IDisposable
     /// <param name="isRecording">Kayıt sürüyor mu (menü açılırken öğe metni için).</param>
     /// <param name="recordingElapsed">Süren kaydın süresi.</param>
     /// <param name="onToggleRecording">"🎙 Kaydı başlat" / "⏹ Kaydı durdur".</param>
-    /// <param name="onOpenRecordings">"Kayıtlar…" — Kayıtlar penceresini açar.</param>
+    /// <param name="onOpenRecordings">"Kayıtlar…" — paneli Kayıtlar bölümünde açar.</param>
     public TrayIcon(Action onToggle, Action onOpen, Action onExport, Action onExit,
         Func<bool> isRecording, Func<TimeSpan> recordingElapsed, Action onToggleRecording, Action onOpenRecordings)
     {

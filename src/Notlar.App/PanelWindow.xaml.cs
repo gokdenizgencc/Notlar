@@ -26,9 +26,9 @@ public partial class PanelWindow : Window
 
     private enum UndoKind { Note, Task, Memory, Skill, Plan, Project }
 
-    /// <summary>Panelin görünür modu: normal not günlüğü, görünür hafıza kartları sekmesi, görünür
-    /// yetenek kataloğu sekmesi, görünür planlar sekmesi ya da üçlü tıklamayla açılan gizli kişisel liste.</summary>
-    private enum Mode { Notes, Memory, Skills, Plans, Personal }
+    /// <summary>Panelin görünür modu: normal not günlüğü, hafıza kartları, yetenek kataloğu, planlar, panel içi
+    /// Kayıtlar ve ⚙ Ayarlar görünümleri ya da üst çubuktaki bölüm adına üçlü tıklamayla açılan gizli kişisel liste.</summary>
+    private enum Mode { Notes, Memory, Skills, Plans, Recordings, Settings, Personal }
 
     private static readonly CultureInfo TrTr = CultureInfo.GetCultureInfo("tr-TR");
 
@@ -40,7 +40,13 @@ public partial class PanelWindow : Window
     private readonly PlanStore _planStore;
     private readonly ProjectStore _projectStore;
     private readonly AppFlags? _appFlags;
+    private readonly RecordingController _recordings;
     private bool _kisiselOkumaSyncing;
+    /// <summary>Panelin açtığı bir onay/uyarı penceresi sürerken (ör. kayıt başlatma) odak kaybında gizlenmeyi engeller.</summary>
+    private bool _suppressAutoHide;
+    /// <summary>Ayar değişikliği büyük olasılıkla Ayarlar görünümünün kendisinden geldiğinde, görünümü yeniden yükleyip
+    /// kullanıcının o an etkileştiği denetimi sıfırlamamak için.</summary>
+    private bool _skipSettingsViewReload;
     private readonly SkillUsageCache _skillUsageCache = new();
     private readonly DispatcherTimer _undoTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private readonly DispatcherTimer _errorTimer = new() { Interval = TimeSpan.FromSeconds(4) };
@@ -102,8 +108,10 @@ public partial class PanelWindow : Window
     public ObservableCollection<PlanStepProjectOption> PlanStepProjectOptions { get; } = [];
 
     public PanelWindow(NoteStore store, TaskStore taskStore, MemoryStore memoryStore, SkillRegistry skillRegistry,
-        SkillTranslations skillTranslations, PlanStore planStore, ProjectStore projectStore, AppFlags? appFlags = null)
+        SkillTranslations skillTranslations, PlanStore planStore, ProjectStore projectStore, AppFlags appFlags,
+        RecordingController recordings)
     {
+        _recordings = recordings;
         _store = store;
         _taskStore = taskStore;
         _memoryStore = memoryStore;
@@ -120,9 +128,94 @@ public partial class PanelWindow : Window
         _errorTimer.Tick += (_, _) => { _errorTimer.Stop(); ErrorBar.Visibility = Visibility.Collapsed; };
         _skillStatusTimer.Tick += (_, _) => { _skillStatusTimer.Stop(); SkillStatusRow.Visibility = Visibility.Collapsed; };
         AppSettings.Changed += OnSettingsChanged;
+
+        Rail.SectionRequested += NavigateTo;
+        RecordingsViewHost.Initialize(recordings, planStore, projectStore);
+        RecordingsViewHost.Wide = _settings.PanelLarge;
+        // Olaylar Initialize'dan önce bağlanır: Ayarlar görünümü "Büyük mod" anahtarını yalnızca bağlıysa gösterir.
+        SettingsViewHost.PinToggleRequested += TogglePinned;
+        SettingsViewHost.LargeModeToggleRequested += ToggleSize;
+        SettingsViewHost.Initialize(_settings, appFlags);
+        RecordButton.Attach(recordings);
+        RecordButton.ToggleRequested += ToggleRecording;
+
         UpdatePinButtonVisual();
         UpdateFullScreenButtonVisual();
     }
+
+    /// <summary>Paneli gösterir, Kayıtlar bölümüne geçer ve <paramref name="selectId"/> verilmişse o kaydı seçer
+    /// (tepsi "Kayıtlar…" menüsü ve kayıt balonu tıklamaları buradan gelir).</summary>
+    public void ShowRecordings(long? selectId)
+    {
+        CancelAllEdits();
+        ResetSelectMode();
+        _mode = Mode.Recordings;
+        if (IsVisible)
+        {
+            ReloadCore();
+            Activate();
+        }
+        else
+        {
+            ShowNearTray();
+        }
+        if (selectId is { } id) RecordingsViewHost.Select(id);
+    }
+
+    /// <summary>Sağ alttaki kayıt düğmesi: kayıt sürüyorsa durdurur, yoksa başlatır. İlk kayıtta gösterilen onay
+    /// penceresi panelin odağını alacağından, bu sürede panel kendiliğinden gizlenmez.</summary>
+    private void ToggleRecording()
+    {
+        if (_recordings.IsRecording)
+        {
+            _recordings.Stop();
+            return;
+        }
+        _suppressAutoHide = true;
+        try
+        {
+            _recordings.Start(owner: this);
+        }
+        finally
+        {
+            _suppressAutoHide = false;
+        }
+    }
+
+    /// <summary>Sol şerit / Ctrl+1…5: ilgili bölüme geçer. Kişisel bölümdeyken (şerit gizli) yok sayılır.</summary>
+    private void NavigateTo(PanelSection section)
+    {
+        if (_mode == Mode.Personal) return;
+        var target = section switch
+        {
+            PanelSection.Memory => Mode.Memory,
+            PanelSection.Plans => Mode.Plans,
+            PanelSection.Recordings => Mode.Recordings,
+            PanelSection.Skills => Mode.Skills,
+            PanelSection.Settings => Mode.Settings,
+            _ => Mode.Notes,
+        };
+        CancelAllEdits();
+        _mode = target;
+        Reload();
+        switch (_mode)
+        {
+            case Mode.Notes: InputBox.Focus(); break;
+            case Mode.Memory: MemorySearchBox.Focus(); break;
+            case Mode.Skills: SkillSearchBox.Focus(); break;
+        }
+    }
+
+    private static PanelSection? SectionOf(Mode mode) => mode switch
+    {
+        Mode.Notes => PanelSection.Notes,
+        Mode.Memory => PanelSection.Memory,
+        Mode.Plans => PanelSection.Plans,
+        Mode.Recordings => PanelSection.Recordings,
+        Mode.Skills => PanelSection.Skills,
+        Mode.Settings => PanelSection.Settings,
+        _ => null,
+    };
 
     private bool AnyEditing => DayNotes.Any(n => n.IsEditing) || Tasks.Any(t => t.IsEditing)
         || MemoryGroups.Any(g => g.Items.Any(m => m.IsEditing))
@@ -134,7 +227,17 @@ public partial class PanelWindow : Window
         Dispatcher.InvokeAsync(() =>
         {
             _settings = AppSettings.Load();
-            if (IsVisible) ReloadCore();
+            UpdatePinButtonVisual();
+            if (!IsVisible) return;
+            _skipSettingsViewReload = true;
+            try
+            {
+                ReloadCore();
+            }
+            finally
+            {
+                _skipSettingsViewReload = false;
+            }
         });
     }
 
@@ -171,7 +274,7 @@ public partial class PanelWindow : Window
             case Mode.Personal: TaskInputBox.Focus(); break;
             case Mode.Memory: MemorySearchBox.Focus(); break;
             case Mode.Skills: SkillSearchBox.Focus(); break;
-            case Mode.Plans: break;
+            case Mode.Plans or Mode.Recordings or Mode.Settings: break;
             default: InputBox.Focus(); break;
         }
     }
@@ -194,7 +297,10 @@ public partial class PanelWindow : Window
         PinButton.Foreground = _settings.PanelPinned ? (Brush)FindResource("OnAccent") : (Brush)FindResource("Muted");
     }
 
-    private void PinButton_Click(object sender, RoutedEventArgs e)
+    private void PinButton_Click(object sender, RoutedEventArgs e) => TogglePinned();
+
+    /// <summary>📌 düğmesi ve Ayarlar'daki "Paneli sabitle" anahtarı aynı yoldan geçer.</summary>
+    private void TogglePinned()
     {
         _settings.PanelPinned = !_settings.PanelPinned;
         _settings.Save();
@@ -249,6 +355,8 @@ public partial class PanelWindow : Window
 
     private void ApplyWindowMode()
     {
+        // Kayıtlar görünümü büyük/tam ekranda liste + detayı yan yana, kompakt panelde sırayla gösterir.
+        RecordingsViewHost.Wide = _fullScreen || _settings.PanelLarge;
         if (_fullScreen)
         {
             ResizeMode = ResizeMode.NoResize;
@@ -261,7 +369,7 @@ public partial class PanelWindow : Window
             Left = fsArea.Left;
             Top = fsArea.Top;
             SizeToggleButton.Content = "⤡";
-            SizeToggleButton.ToolTip = "Küçült";
+            SizeToggleButton.ToolTip = "Tam ekrandan çık (büyük mod)";
             return;
         }
         if (_settings.PanelLarge)
@@ -280,7 +388,7 @@ public partial class PanelWindow : Window
             Left = Math.Clamp(left, area.Left, Math.Max(area.Left, area.Right - width));
             Top = Math.Clamp(top, area.Top, Math.Max(area.Top, area.Bottom - height));
             SizeToggleButton.Content = "⤡";
-            SizeToggleButton.ToolTip = "Küçült";
+            SizeToggleButton.ToolTip = "Kompakt moda dön";
         }
         else
         {
@@ -291,7 +399,7 @@ public partial class PanelWindow : Window
             Width = 360;
             Height = 520;
             SizeToggleButton.Content = "⤢";
-            SizeToggleButton.ToolTip = "Genişlet";
+            SizeToggleButton.ToolTip = "Büyük moda geç";
         }
     }
 
@@ -389,15 +497,6 @@ public partial class PanelWindow : Window
         FullScreenButton.Foreground = _fullScreen ? (Brush)FindResource("OnAccent") : (Brush)FindResource("Muted");
     }
 
-    /// <summary>Başlık çubuğunun boş alanına çift tıklama, büyüt/küçült modunu değiştirir (düğmeler ve
-    /// başlık metni kendi tıklama işleyicilerine sahip olduğundan burada yalnızca doğrudan DockPanel'e
-    /// gelen tıklamalar işlenir, böylece sürükleme/üçlü tıklama davranışı bozulmaz).</summary>
-    private void HeaderBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2 && Equals(e.OriginalSource, sender))
-            ToggleSize();
-    }
-
     /// <summary>Açık düzenlemeleri kaydetmeden kapatır, böylece ardından çağrılan Reload() ertelenmez.</summary>
     private void CancelAllEdits()
     {
@@ -445,16 +544,25 @@ public partial class PanelWindow : Window
             HeaderText.Text = _mode switch
             {
                 Mode.Personal => "🔒 Kişisel",
-                Mode.Memory => "🧠 Hafıza",
-                Mode.Skills => "🧩 Yetenekler",
-                Mode.Plans => "📋 Planlar",
-                _ => "📝 Notlar",
+                Mode.Memory => "Hafıza",
+                Mode.Skills => "Yetenekler",
+                Mode.Plans => "Planlar",
+                Mode.Recordings => "Kayıtlar",
+                Mode.Settings => "Ayarlar",
+                _ => "Notlar",
             };
-            TabsRow.Visibility = _mode == Mode.Personal ? Visibility.Collapsed : Visibility.Visible;
-            SetTabStyle(NotesTabButton, _mode == Mode.Notes);
-            SetTabStyle(MemoryTabButton, _mode == Mode.Memory);
-            SetTabStyle(SkillsTabButton, _mode == Mode.Skills);
-            SetTabStyle(PlansTabButton, _mode == Mode.Plans);
+            // Kişisel bölümde (eski sekme satırı gibi) gezinme şeridi gizlenir; çıkış yine üçlü tıklamayla.
+            Rail.Visibility = _mode == Mode.Personal ? Visibility.Collapsed : Visibility.Visible;
+            Rail.SetActive(SectionOf(_mode));
+
+            var hostedView = _mode is Mode.Recordings or Mode.Settings;
+            MainScroll.Visibility = hostedView ? Visibility.Collapsed : Visibility.Visible;
+            RecordingsViewHost.Visibility = _mode == Mode.Recordings ? Visibility.Visible : Visibility.Collapsed;
+            SettingsViewHost.Visibility = _mode == Mode.Settings ? Visibility.Visible : Visibility.Collapsed;
+            // Kayıtlar bölümünde listenin üstündeki büyük kayıt düğmesi yeterli; sabit düğme gizlenir.
+            RecordButton.Visibility = _mode == Mode.Recordings ? Visibility.Collapsed : Visibility.Visible;
+            if (_mode == Mode.Recordings) RecordingsViewHost.Reload();
+            if (_mode == Mode.Settings && !_skipSettingsViewReload) SettingsViewHost.Reload();
 
             NotesInputBorder.Visibility = _mode == Mode.Notes ? Visibility.Visible : Visibility.Collapsed;
             TaskInputBorder.Visibility = _mode == Mode.Personal ? Visibility.Visible : Visibility.Collapsed;
@@ -473,9 +581,7 @@ public partial class PanelWindow : Window
 
             if (_mode != Mode.Notes)
             {
-                AuthorFilterRow.Visibility = Visibility.Collapsed;
-                FilterClearButton.Visibility = Visibility.Collapsed;
-                TagRow.Visibility = Visibility.Collapsed;
+                NotesFilterRow.Visibility = Visibility.Collapsed;
                 DayListPanel.Visibility = Visibility.Collapsed;
                 DayViewPanel.Visibility = Visibility.Collapsed;
                 ResetSelectMode();
@@ -508,7 +614,10 @@ public partial class PanelWindow : Window
             Tags.Add(new TagChip(null, "Tümü", _tagFilter is null));
             foreach (var tag in tags)
                 Tags.Add(new TagChip(tag, "#" + tag, tag == _tagFilter));
-            TagRow.Visibility = tags.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            TagFilterButton.Visibility = tags.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            TagFilterButton.Content = _tagFilter is null ? "▾ #etiket" : $"▾ #{_tagFilter}";
+            TagFilterButton.Background = _tagFilter is null ? Brushes.Transparent : (Brush)FindResource("Accent");
+            TagFilterButton.Foreground = _tagFilter is null ? (Brush)FindResource("Muted") : (Brush)FindResource("OnAccent");
 
             var visible = _tagFilter is null ? byAuthor : byAuthor.Where(n => n.Tags.Contains(_tagFilter)).ToList();
             var groups = DayGrouper.Group(visible);
@@ -544,7 +653,7 @@ public partial class PanelWindow : Window
 
             DayListPanel.Visibility = _selectedDay is null ? Visibility.Visible : Visibility.Collapsed;
             DayViewPanel.Visibility = _selectedDay is null ? Visibility.Collapsed : Visibility.Visible;
-            AuthorFilterRow.Visibility = Visibility.Visible;
+            NotesFilterRow.Visibility = Visibility.Visible;
             FilterClearButton.Visibility = _authorFilter is not null || _tagFilter is not null
                 ? Visibility.Visible : Visibility.Collapsed;
 
@@ -617,7 +726,7 @@ public partial class PanelWindow : Window
 
     private void Window_Deactivated(object? sender, EventArgs e)
     {
-        if (_dragging || _fullScreen) return;
+        if (_dragging || _fullScreen || _suppressAutoHide) return;
         if (!_settings.PanelPinned && !_settings.PanelLarge) HidePanel();
     }
 
@@ -659,8 +768,12 @@ public partial class PanelWindow : Window
         _settings.Save();
     }
 
+    /// <summary>Üst çubuktaki bölüm adı: üçlü tıklama gizli kişisel bölümü açar/kapatır (eski başlık satırındaki
+    /// erişim yolunun aynısı). Sabitliyken tek tıklama sürükler. Olay üst çubuğa kabarmaz; böylece üçlü tıklamanın
+    /// ikinci tıklaması büyük/kompakt mod geçişi yapmaz.</summary>
     private void HeaderText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        e.Handled = true;
         if (e.ClickCount == 3)
         {
             CancelAllEdits();
@@ -677,52 +790,46 @@ public partial class PanelWindow : Window
             return;
         }
 
-        if (e.ClickCount == 1 && _settings.PanelPinned)
+        if (e.ClickCount == 1 && _settings.PanelPinned && !_fullScreen)
         {
-            try { DragMove(); } catch (InvalidOperationException) { return; }
-            _settings.PanelLeft = Left;
-            _settings.PanelTop = Top;
-            _settings.Save();
+            _dragging = true;
+            try { DragMove(); }
+            catch (InvalidOperationException) { return; }
+            finally { _dragging = false; }
+            SavePanelPosition();
         }
     }
 
-    private void NotesTab_Click(object sender, RoutedEventArgs e)
+    /// <summary>Ctrl+1…5 → sol şeridin ilk beş bölümü (Notlar, Hafıza, Planlar, Kayıtlar, Yetenekler).</summary>
+    private static PanelSection? SectionForShortcut(KeyEventArgs e)
     {
-        if (_mode == Mode.Personal) return;
-        CancelAllEdits();
-        _mode = Mode.Notes;
-        Reload();
-    }
-
-    private void MemoryTab_Click(object sender, RoutedEventArgs e)
-    {
-        if (_mode == Mode.Personal) return;
-        CancelAllEdits();
-        _mode = Mode.Memory;
-        Reload();
-    }
-
-    private void SkillsTab_Click(object sender, RoutedEventArgs e)
-    {
-        if (_mode == Mode.Personal) return;
-        CancelAllEdits();
-        _mode = Mode.Skills;
-        Reload();
-    }
-
-    private void PlansTab_Click(object sender, RoutedEventArgs e)
-    {
-        if (_mode == Mode.Personal) return;
-        CancelAllEdits();
-        _mode = Mode.Plans;
-        Reload();
+        if (Keyboard.Modifiers != ModifierKeys.Control) return null;
+        return e.Key switch
+        {
+            Key.D1 or Key.NumPad1 => PanelSection.Notes,
+            Key.D2 or Key.NumPad2 => PanelSection.Memory,
+            Key.D3 or Key.NumPad3 => PanelSection.Plans,
+            Key.D4 or Key.NumPad4 => PanelSection.Recordings,
+            Key.D5 or Key.NumPad5 => PanelSection.Skills,
+            _ => null,
+        };
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (AnyEditing) return; // Düzenleme kutusu Enter/Esc'i kendisi işler.
+        if (SectionForShortcut(e) is { } section)
+        {
+            if (_mode != Mode.Personal) NavigateTo(section);
+            e.Handled = true;
+            return;
+        }
+        // Panel içi Kayıtlar/Ayarlar görünümlerindeki metin kutuları (ör. başlık düzenleme) Esc'i kendileri işler.
+        if (_mode is Mode.Recordings or Mode.Settings && e.Key == Key.Escape && e.OriginalSource is TextBox)
+            return;
         if (e.Key == Key.Escape)
         {
+            if (OtherDayPopup.IsOpen) { OtherDayPopup.IsOpen = false; e.Handled = true; return; }
             if (SkillAddExpander.IsExpanded) { SkillAddExpander.IsExpanded = false; e.Handled = true; return; }
             if (MemoryAddExpander.IsExpanded) { MemoryAddExpander.IsExpanded = false; e.Handled = true; return; }
             if (PlanAddExpander.IsExpanded) { PlanAddExpander.IsExpanded = false; e.Handled = true; return; }
@@ -827,37 +934,25 @@ public partial class PanelWindow : Window
         Try(() => _appFlags.SetBool(AppFlags.KisiselMcpOkuma, KisiselOkumaCheckBox.IsChecked == true));
     }
 
+    /// <summary>📅 (Başka gün): bugüne kadar olan bir günü seçtiren takvimi açar; dışarı tıklama ya da Esc kapatır.</summary>
     private void OtherDayButton_Click(object sender, RoutedEventArgs e)
     {
-        OtherDayPicker.DisplayDateEnd = DateTime.Today;
-        OtherDayPicker.Visibility = Visibility.Visible;
-        OtherDayPicker.IsDropDownOpen = true;
-        OtherDayPicker.Focus();
+        OtherDayCalendar.SelectedDate = null;
+        OtherDayCalendar.DisplayDateEnd = DateTime.Today;
+        OtherDayCalendar.DisplayDate = DateTime.Today;
+        OtherDayPopup.IsOpen = true;
+        Dispatcher.InvokeAsync(() => OtherDayCalendar.Focus(), DispatcherPriority.Input);
     }
 
-    private void OtherDayPicker_SelectedDateChanged(object sender, SelectionChangedEventArgs e)
+    private void OtherDayCalendar_SelectedDatesChanged(object sender, SelectionChangedEventArgs e)
     {
-        OtherDayPicker.Visibility = Visibility.Collapsed;
-        if (OtherDayPicker.SelectedDate is not { } date) return;
+        if (OtherDayCalendar.SelectedDate is not { } date) return;
+        OtherDayPopup.IsOpen = false;
+        // Calendar tıklamadan sonra fareyi yakalı tutar; bırakılmazsa paneldeki ilk tıklama yutulur.
+        Mouse.Capture(null);
         CancelAllEdits();
         _selectedDay = DateOnly.FromDateTime(date);
-        OtherDayPicker.SelectedDate = null;
         Reload();
-    }
-
-    /// <summary>Takvim açılır penceresi dışarı tıklama ya da Esc ile kapandığında (tarih seçilmeden),
-    /// DatePicker alanının kendisi de gizlenir.</summary>
-    private void OtherDayPicker_CalendarClosed(object sender, RoutedEventArgs e)
-    {
-        if (OtherDayPicker.SelectedDate is null)
-            OtherDayPicker.Visibility = Visibility.Collapsed;
-    }
-
-    private void OtherDayClose_Click(object sender, RoutedEventArgs e)
-    {
-        OtherDayPicker.IsDropDownOpen = false;
-        OtherDayPicker.SelectedDate = null;
-        OtherDayPicker.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>"gün ay" biçimindeki ifadeye eklenecek -e hali eki ("'a" / "'e"), son sesli harfe göre
@@ -892,14 +987,27 @@ public partial class PanelWindow : Window
         Reload();
     }
 
-    private void TagChip_Click(object sender, RoutedEventArgs e)
+    /// <summary>"▾ #etiket": görünür notların etiketlerini (Tümü + her etiket) bir açılır menüde listeler; seçilen
+    /// etiket süzgeç olur (eski etiket çipi satırıyla aynı davranış).</summary>
+    private void TagFilterButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: TagChip chip })
+        var menu = new ContextMenu();
+        foreach (var chip in Tags)
         {
-            CancelAllEdits();
-            _tagFilter = chip.Tag;
-            Reload();
+            var item = new MenuItem { Header = chip.Label, IsCheckable = false, IsChecked = chip.IsSelected };
+            var tag = chip.Tag;
+            item.Click += (_, _) =>
+            {
+                CancelAllEdits();
+                _tagFilter = tag;
+                Reload();
+            };
+            menu.Items.Add(item);
         }
+        TagFilterButton.ContextMenu = menu;
+        menu.PlacementTarget = TagFilterButton;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
     }
 
     private void AuthorChip_Click(object sender, RoutedEventArgs e)
@@ -1416,7 +1524,7 @@ public partial class PanelWindow : Window
         SetSkillViewToggleStyle();
         InstalledSkillsPanel.Visibility = _skillShowDiscover ? Visibility.Collapsed : Visibility.Visible;
         DiscoverPanel.Visibility = _skillShowDiscover ? Visibility.Visible : Visibility.Collapsed;
-        SkillSortRow.Visibility = _skillShowDiscover ? Visibility.Collapsed : Visibility.Visible;
+        UpdateSkillSortButton();
 
         if (_skillShowDiscover)
         {
@@ -1539,18 +1647,7 @@ public partial class PanelWindow : Window
         { Installed = p.Installed };
     }
 
-    private void SetDiscoverSortStyle()
-    {
-        SetTabStyle(DiscoverSortPopularButton, _discoverSort == PluginSort.Popular);
-        SetTabStyle(DiscoverSortRecentButton, _discoverSort == PluginSort.RecentlyUpdated);
-        SetTabStyle(DiscoverSortNameButton, _discoverSort == PluginSort.Name);
-    }
-
-    private void DiscoverSortPopular_Click(object sender, RoutedEventArgs e) => SetDiscoverSort(PluginSort.Popular);
-
-    private void DiscoverSortRecent_Click(object sender, RoutedEventArgs e) => SetDiscoverSort(PluginSort.RecentlyUpdated);
-
-    private void DiscoverSortName_Click(object sender, RoutedEventArgs e) => SetDiscoverSort(PluginSort.Name);
+    private void SetDiscoverSortStyle() => UpdateSkillSortButton();
 
     private void SetDiscoverSort(PluginSort sort)
     {
@@ -1585,11 +1682,7 @@ public partial class PanelWindow : Window
         foreach (var n in ordered) SkillAiOptions.Add(n);
     }
 
-    private void SetSkillSortStyle()
-    {
-        SetTabStyle(SkillSortUsageButton, _skillSortByUsage);
-        SetTabStyle(SkillSortNameButton, !_skillSortByUsage);
-    }
+    private void SetSkillSortStyle() => UpdateSkillSortButton();
 
     private void SkillSearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
@@ -1599,16 +1692,47 @@ public partial class PanelWindow : Window
 
     private void SkillSearchClear_Click(object sender, RoutedEventArgs e) => SkillSearchBox.Clear();
 
-    private void SkillSortUsage_Click(object sender, RoutedEventArgs e)
+    /// <summary>Sıralama açılır menüsü: Kurulu görünümünde Kullanıma göre / Ada göre, Keşfet görünümünde
+    /// Popüler / Yeni güncellenen / Ada göre (eski sıralama düğmeleriyle aynı seçenekler ve davranış).</summary>
+    private void SkillSortButton_Click(object sender, RoutedEventArgs e)
     {
-        _skillSortByUsage = true;
-        RenderSkills();
+        var menu = new ContextMenu();
+        void Add(string header, bool selected, Action onPick)
+        {
+            var item = new MenuItem { Header = header, IsChecked = selected };
+            item.Click += (_, _) => onPick();
+            menu.Items.Add(item);
+        }
+
+        if (_skillShowDiscover)
+        {
+            Add("Popüler", _discoverSort == PluginSort.Popular, () => SetDiscoverSort(PluginSort.Popular));
+            Add("Yeni güncellenen", _discoverSort == PluginSort.RecentlyUpdated, () => SetDiscoverSort(PluginSort.RecentlyUpdated));
+            Add("Ada göre", _discoverSort == PluginSort.Name, () => SetDiscoverSort(PluginSort.Name));
+        }
+        else
+        {
+            Add("Kullanıma göre", _skillSortByUsage, () => { _skillSortByUsage = true; RenderSkills(); });
+            Add("Ada göre", !_skillSortByUsage, () => { _skillSortByUsage = false; RenderSkills(); });
+        }
+        SkillSortButton.ContextMenu = menu;
+        menu.PlacementTarget = SkillSortButton;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
     }
 
-    private void SkillSortName_Click(object sender, RoutedEventArgs e)
+    /// <summary>Sıralama düğmesinin etiketini geçerli görünümün (Kurulu/Keşfet) seçili sıralamasına göre günceller.</summary>
+    private void UpdateSkillSortButton()
     {
-        _skillSortByUsage = false;
-        RenderSkills();
+        var label = _skillShowDiscover
+            ? _discoverSort switch
+            {
+                PluginSort.RecentlyUpdated => "Yeni güncellenen",
+                PluginSort.Name => "Ada göre",
+                _ => "Popüler",
+            }
+            : _skillSortByUsage ? "Kullanıma göre" : "Ada göre";
+        SkillSortButton.Content = label + " ▾";
     }
 
     private void SkillRefresh_Click(object sender, RoutedEventArgs e) => EnsureSkillsLoaded(forceRescan: true);
@@ -2317,11 +2441,6 @@ public partial class PanelWindow : Window
     /// <summary>▶ Çalıştır: bkz. <see cref="PlanRunFlow"/> (PATH kontrolü → açık onay → başlat).</summary>
     private void RunPlan(long id) =>
         PlanRunFlow.Run(this, id, _planStore, _projectStore, ShowError, onPlanMissing: Reload);
-
-    /// <summary>"🎙 Kayıtlar" sekme düğmesi: Kayıtlar penceresini açar (App bağlar; panel içeriği değişmez).</summary>
-    public Action? OpenRecordings { get; set; }
-
-    private void RecordingsTab_Click(object sender, RoutedEventArgs e) => OpenRecordings?.Invoke();
 
     private void PlanTitleEditButton_Click(object sender, RoutedEventArgs e)
     {
