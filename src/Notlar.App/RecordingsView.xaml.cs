@@ -962,8 +962,8 @@ public partial class RecordingsView : UserControl
                 : summarizing || planning ? "Claude işi sürerken kayıt silinemez."
                 : "Kaydı, transkripti ve ses dosyalarını sil",
             Delete);
-        // ContextMenu sistem görünümünde (her temada açık zemin) açılır; açık zeminde okunur kırmızı "Danger"dır.
-        delete.SetResourceReference(ForegroundProperty, "Danger");
+        // Menü tema renklerinde açılır (ThemeControls.xaml); hem açık hem koyu zeminde okunur kırmızı "DangerText"tir.
+        delete.SetResourceReference(ForegroundProperty, "DangerText");
         menu.Items.Add(delete);
 
         menu.IsOpen = true;

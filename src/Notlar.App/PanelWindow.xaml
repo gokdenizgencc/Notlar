@@ -129,7 +129,11 @@
                                      IsVisibleChanged="EditBox_IsVisibleChanged"/>
                         </DockPanel>
                     </StackPanel>
-                    <StackPanel x:Name="NoteActionsPanel" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Top">
+                    <!-- Eylemler yalnızca üzerine gelince görünür; dar panelde metne yer bırakmak için kendi sütununu
+                         ayırmaz, metnin sağ ucunun üzerine (satırın vurgu zemini üzerinde) biner. Düzenlemede ✕ ile
+                         çakışmasın diye kendi sütununa döner. -->
+                    <StackPanel x:Name="NoteActionsPanel" Grid.Column="3" Grid.ColumnSpan="2" Orientation="Horizontal"
+                                VerticalAlignment="Top" HorizontalAlignment="Right" Background="Transparent">
                         <Button x:Name="AddToPlanButton" Content="📋" ToolTip="Plana adım olarak ekle"
                                 Style="{StaticResource FlatButton}" Visibility="Hidden"
                                 Click="AddNoteToPlanButton_Click"/>
@@ -145,6 +149,7 @@
             <DataTemplate.Triggers>
                 <Trigger SourceName="Row" Property="IsMouseOver" Value="True">
                     <Setter TargetName="Row" Property="Background" Value="{DynamicResource Surface}"/>
+                    <Setter TargetName="NoteActionsPanel" Property="Background" Value="{DynamicResource Surface}"/>
                     <Setter TargetName="AddToPlanButton" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="EditButton" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="DeleteButton" Property="Visibility" Value="Visible"/>
@@ -158,6 +163,11 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
                     <Setter TargetName="Row" Property="Background" Value="{DynamicResource TagBg}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                    <Setter TargetName="NoteActionsPanel" Property="Grid.Column" Value="4"/>
+                    <Setter TargetName="NoteActionsPanel" Property="Grid.ColumnSpan" Value="1"/>
+                    <Setter TargetName="NoteActionsPanel" Property="Background" Value="Transparent"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding SelectModeActive}" Value="True">
                     <Setter TargetName="NoteActionsPanel" Property="Visibility" Value="Collapsed"/>
@@ -293,13 +303,14 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                            <Border Background="{DynamicResource TagBg}" CornerRadius="8" Padding="6,0" Margin="6,0,0,0"
+                        <!-- Dar panelde uzun ad + kaynak rozeti sığmazsa rozet alt satıra geçer (kesilmez). -->
+                        <WrapPanel>
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,6,0"/>
+                            <Border Background="{DynamicResource TagBg}" CornerRadius="8" Padding="6,0" Margin="0,1"
                                     VerticalAlignment="Center">
                                 <TextBlock Text="{Binding SourceLabel}" FontSize="11" Foreground="{DynamicResource Muted}"/>
                             </Border>
-                        </StackPanel>
+                        </WrapPanel>
                         <Border MaxHeight="34" ClipToBounds="True" Margin="0,2,0,0" ToolTip="{Binding OriginalDescription}">
                             <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Muted}"/>
@@ -909,7 +920,7 @@
                         Style="{StaticResource FlatButton}" Padding="6,2"/>
                 <Popup x:Name="OtherDayPopup" PlacementTarget="{Binding ElementName=OtherDayButton}" Placement="Bottom"
                        StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
-                    <Calendar x:Name="OtherDayCalendar" SelectedDatesChanged="OtherDayCalendar_SelectedDatesChanged"/>
+                    <Calendar x:Name="OtherDayCalendar" Language="tr-TR" SelectedDatesChanged="OtherDayCalendar_SelectedDatesChanged"/>
                 </Popup>
             </Grid>
             <Button x:Name="FilterClearButton" DockPanel.Dock="Right" Content="✕" ToolTip="Filtreyi temizle"
@@ -984,7 +995,8 @@
                 </StackPanel>
 
                 <StackPanel x:Name="DayViewPanel" Visibility="Collapsed">
-                    <DockPanel Margin="2,0,2,6">
+                    <!-- Dar panelde düğmeler ve uzun tarih başlığı tek satıra sığmıyordu: başlık alt satırda. -->
+                    <DockPanel Margin="2,0,2,2" LastChildFill="False">
                         <Button DockPanel.Dock="Left" Content="‹ Geri" Click="BackButton_Click"
                                 Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
                         <Button DockPanel.Dock="Right" Content="⤢ Büyüt" ToolTip="Büyük pencerede aç" Click="ExpandButton_Click"
@@ -994,8 +1006,8 @@
                                 Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" Margin="0,0,6,0"/>
                         <Button x:Name="SelectModeToggleButton" DockPanel.Dock="Right" Content="Seç" ToolTip="Notları çoklu seç"
                                 Click="SelectModeToggle_Click" Style="{StaticResource FlatButton}" Margin="0,0,6,0"/>
-                        <TextBlock x:Name="DayViewHeader" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>
                     </DockPanel>
+                    <TextBlock x:Name="DayViewHeader" FontWeight="SemiBold" Margin="8,2,8,6" TextTrimming="CharacterEllipsis"/>
                     <TextBlock x:Name="DayViewEmptyText" Text="Bu günde not yok." Foreground="{DynamicResource Muted}"
                                HorizontalAlignment="Center" Margin="0,24,0,0" Visibility="Collapsed"/>
                     <ItemsControl ItemsSource="{Binding DayNotes}" ItemTemplate="{StaticResource NoteRowTemplate}"/>
@@ -1080,7 +1092,8 @@
                 </StackPanel>
 
                 <StackPanel x:Name="PlansPanel" Visibility="Collapsed">
-                    <DockPanel LastChildFill="False" Margin="0,0,0,6">
+                    <!-- Planlar/Projeler segmenti diğer sekmelerin üst satırıyla (10 px) hizalı. -->
+                    <DockPanel LastChildFill="False" Margin="6,10,6,6">
                         <WrapPanel DockPanel.Dock="Left">
                             <Button x:Name="PlansShowPlansButton" Content="📋 Planlar" Click="PlansShowPlans_Click"
                                     Style="{StaticResource FlatButton}" Padding="8,2" Margin="0,0,4,4"/>
@@ -1284,7 +1297,7 @@
 
         <!-- Sağ altta sabit kayıt düğmesi (Kayıtlar sekmesinde gizli; orada listenin üstündeki büyük düğme var). -->
         <local:RecordFab x:Name="RecordButton" Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                         Margin="0,0,12,12"/>
+                         Margin="0,0,18,12"/>
 
         <Border x:Name="SelectionBar" Grid.Row="3" Background="{DynamicResource Surface}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,8" Visibility="Collapsed">

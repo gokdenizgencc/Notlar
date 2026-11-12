@@ -27,7 +27,7 @@
             <Setter Property="Background" Value="{DynamicResource Border}"/>
             <Setter Property="Margin" Value="0,16,0,14"/>
         </Style>
-        <Style x:Key="SettingCheck" TargetType="CheckBox">
+        <Style x:Key="SettingCheck" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
             <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -120,7 +120,7 @@
 
     <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                   Focusable="False">
-        <StackPanel Margin="12,10,12,16" MaxWidth="560" HorizontalAlignment="Stretch">
+        <StackPanel Margin="12,10,12,64" MaxWidth="560" HorizontalAlignment="Stretch">
 
             <!-- Kaydetme hatası vb. (birkaç saniye görünür). -->
             <Border x:Name="StatusBar" Visibility="Collapsed" Margin="0,0,0,10" Padding="8,6" CornerRadius="6"
