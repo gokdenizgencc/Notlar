@@ -10,7 +10,8 @@ using Notlar.Core;
 
 namespace Notlar.App;
 
-/// <summary>Günün notlarını büyük, yeniden boyutlandırılabilir bir pencerede gösterir (yalnızca görüntüleme + tamamlandı işareti).</summary>
+/// <summary>Günün notlarını büyük, yeniden boyutlandırılabilir bir pencerede gösterir (görüntüleme + tamamlandı işareti).
+/// Düzenleme için "📝 Düzenle" ya da bir nota çift tık, günü not defteri gibi düzenlenen <see cref="NoteEditorWindow"/>'da açar.</summary>
 public partial class DayWindow : Window
 {
     private static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
@@ -225,6 +226,16 @@ public partial class DayWindow : Window
             }
             body.Children.Add(tagsPanel);
         }
+
+        // Çift tık: günü not defteri gibi düzenlenen editörde aç, imleç bu notun satırında.
+        MouseButtonEventHandler openEditor = (_, e) =>
+        {
+            if (e.ClickCount != 2) return;
+            e.Handled = true;
+            NoteEditorWindow.OpenDay(_store, Day, note.Id);
+        };
+        timePanel.PreviewMouseLeftButtonDown += openEditor;
+        body.PreviewMouseLeftButtonDown += openEditor;
 
         grid.Children.Add(body);
         container.Child = grid;

@@ -91,7 +91,7 @@
                         <Button x:Name="AddToPlanButton" Content="📋" ToolTip="Plana adım olarak ekle"
                                 Style="{StaticResource FlatButton}" Visibility="Hidden"
                                 Click="AddNoteToPlanButton_Click"/>
-                        <Button x:Name="EditButton" Content="✏️" ToolTip="Düzenle"
+                        <Button x:Name="EditButton" Content="✏️" ToolTip="Düzenle (çift tık: günü not defteri gibi editörde aç)"
                                 Style="{StaticResource FlatButton}" Visibility="Hidden"
                                 Click="EditNoteButton_Click"/>
                         <Button x:Name="DeleteButton" Content="🗑" ToolTip="Sil"
@@ -970,6 +970,9 @@
                                 Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
                         <Button DockPanel.Dock="Right" Content="⤢ Büyüt" ToolTip="Büyük pencerede aç" Click="ExpandButton_Click"
                                 Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
+                        <Button DockPanel.Dock="Right" Content="📝 Düzenle" Click="EditDayButton_Click"
+                                ToolTip="Günü not defteri gibi düzenle: Enter yeni satır, ↑/↓ satırlar arası, Ctrl+S kaydet"
+                                Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" Margin="0,0,6,0"/>
                         <Button x:Name="SelectModeToggleButton" DockPanel.Dock="Right" Content="Seç" ToolTip="Notları çoklu seç"
                                 Click="SelectModeToggle_Click" Style="{StaticResource FlatButton}" Margin="0,0,6,0"/>
                         <TextBlock x:Name="DayViewHeader" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>

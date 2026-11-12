@@ -935,7 +935,26 @@ public partial class PanelWindow : Window
         window.Show();
     }
 
-    private void Row_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => ((UIElement)sender).Focus();
+    /// <summary>Seçili günü not defteri gibi düzenlenen editörde açar (Enter yeni satır, ↑/↓, Ctrl+S).</summary>
+    private void EditDayButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedDay is not { } day) return;
+        CancelAllEdits();
+        NoteEditorWindow.OpenDay(_store, day);
+    }
+
+    /// <summary>Tek tık satırı seçer; çift tık notun gününü editörde açar, imleç o notun satırında.</summary>
+    private void Row_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2 && sender is FrameworkElement { DataContext: NoteItem item })
+        {
+            e.Handled = true;
+            CancelAllEdits();
+            NoteEditorWindow.OpenDay(_store, item.Note.Day, item.Id);
+            return;
+        }
+        ((UIElement)sender).Focus();
+    }
 
     private void OlderToggle_Click(object sender, RoutedEventArgs e)
     {

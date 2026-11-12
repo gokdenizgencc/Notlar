@@ -86,14 +86,14 @@
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="Yeniden yükle" Style="{StaticResource FlatButton}"
                         Foreground="{DynamicResource Accent}" Click="ReloadBar_Click"/>
-                <TextBlock Text="Bu gün dışarıda değişti — Yeniden yükle" VerticalAlignment="Center" Foreground="{DynamicResource Fg}"/>
+                <TextBlock Text="Bu gün dışarıda değişti. Ctrl+S düzenlemelerinizi dışarıdaki değişikliklerle birleştirerek kaydeder; Yeniden yükle düzenlemelerinizi atar." VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource Fg}"/>
             </DockPanel>
         </Border>
 
         <!-- Durum çubuğu -->
         <Border Grid.Row="3" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,4">
             <DockPanel>
-                <TextBlock x:Name="DirtyText" DockPanel.Dock="Right" Text="Kaydedilmemiş değişiklik var"
+                <TextBlock x:Name="DirtyText" DockPanel.Dock="Right" Text="Kaydedilmemiş değişiklik var — Ctrl+S ile kaydet"
                            Foreground="{DynamicResource Accent}" Margin="12,0,0,0" Visibility="Collapsed"/>
                 <TextBlock x:Name="StatusText" Foreground="{DynamicResource Muted}"/>
             </DockPanel>

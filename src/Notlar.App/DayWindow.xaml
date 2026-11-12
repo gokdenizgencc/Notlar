@@ -49,7 +49,8 @@
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <StackPanel x:Name="SummaryPillsPanel" Orientation="Horizontal" VerticalAlignment="Center"/>
-                    <Button x:Name="EditorButton" Content="📝 Editör" Style="{StaticResource FlatButton}"
+                    <Button x:Name="EditorButton" Content="📝 Düzenle" Style="{StaticResource FlatButton}"
+                            ToolTip="Günü not defteri gibi düzenle: Enter yeni satır, ↑/↓ satırlar arası, Ctrl+S kaydet (bir nota çift tık da açar)"
                             Margin="16,0,0,0" Click="EditorButton_Click"/>
                     <Button x:Name="AppearanceButton" Content="⚙ Görünüm" Style="{StaticResource FlatButton}"
                             Margin="8,0,0,0" Click="AppearanceButton_Click"/>

@@ -8,12 +8,15 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Notlar.Core;
 
 namespace Notlar.App;
 
-/// <summary>Bir günün notlarını Notepad++ tarzı tam ekran, satır satır düzenlenebilen bir pencerede
-/// gösterir. Her açık gün bir sekmedir; pencere tekildir (<see cref="OpenDay"/> yeniden kullanır).</summary>
+/// <summary>Bir günün notlarını Notepad++ tarzı tam ekran, tek parça metin olarak düzenlenebilen bir pencerede
+/// gösterir (her satır = bir not; Enter yeni satır, ↑/↓ satırlar arası, Backspace satır başında birleştirir).
+/// Ctrl+S kaydeder; satırlar <see cref="DayTextSync"/> ile notlara eşlenir. Her açık gün bir sekmedir;
+/// pencere tekildir (<see cref="OpenDay"/> yeniden kullanır).</summary>
 public partial class NoteEditorWindow : Window
 {
     private static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
@@ -38,8 +41,9 @@ public partial class NoteEditorWindow : Window
     }
 
     /// <summary>Tekil editör penceresini açar (yoksa oluşturur) ve verilen günü bir sekmede gösterir.
-    /// Gün zaten açıksa o sekmeyi etkinleştirir.</summary>
-    public static void OpenDay(NoteStore store, DateOnly day)
+    /// Gün zaten açıksa o sekmeyi etkinleştirir. <paramref name="noteId"/> verilirse imleç o notun
+    /// satırının sonuna konur; her durumda klavye odağı doğrudan metne verilir (hemen yazılabilir).</summary>
+    public static void OpenDay(NoteStore store, DateOnly day, long? noteId = null)
     {
         if (_instance is null)
         {
@@ -47,11 +51,15 @@ public partial class NoteEditorWindow : Window
             _instance.Show();
         }
 
-        _instance.OpenOrActivate(day);
+        var instance = _instance;
+        instance.OpenOrActivate(day);
+        if (noteId is { } id)
+            instance.MoveCaretToNote(id);
 
-        if (_instance.WindowState == WindowState.Minimized)
-            _instance.WindowState = WindowState.Maximized;
-        _instance.Activate();
+        if (instance.WindowState == WindowState.Minimized)
+            instance.WindowState = WindowState.Maximized;
+        instance.Activate();
+        instance.FocusEditor();
     }
 
     /// <summary>Not deposu dışarıdan (başka bir süreçten veya bu süreçte başka bir pencereden)
@@ -75,39 +83,134 @@ public partial class NoteEditorWindow : Window
         RebuildTabStrip();
     }
 
+    /// <summary>Değişiklik sinyalinde (başka süreç, panel ya da bu pencerenin kendi kaydı) çağrılır.
+    /// Günün notları sekmenin bildiğiyle aynıysa hiçbir şey yapılmaz (kendi kaydımızın yankısı yazmayı
+    /// kesmez). Kirli olmayan sekme sessizce tazelenir (imleç aynı notta kalır); kirli sekme için
+    /// "dışarıda değişti" çubuğu gösterilir.</summary>
     private void ReloadAllTabsInternal()
     {
         foreach (var tab in _tabs)
         {
+            List<Note> fresh;
+            try
+            {
+                fresh = ReadNotes(tab.Day);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write(ex);
+                continue;
+            }
+
+            if (fresh.SequenceEqual(tab.Notes)) continue;
+
             if (tab.Dirty)
             {
                 tab.ExternalChangeNotice = true;
                 continue;
             }
 
-            LoadTab(tab);
-            if (tab == _active)
-                RefreshActiveFromTab();
+            SetNotes(tab, fresh);
+            SyncTextToNotes(tab);
         }
 
+        RebuildGutter();
+        UpdateStatusBar();
         UpdateExternalChangeBar();
         RebuildTabStrip();
     }
 
-    /// <summary>Verilen sekmeyi depodaki güncel notlarla (yeniden) doldurur; var olan düzenlemeleri atar.
-    /// Yalnızca ilk açılışta, kayıttan sonra veya "yeniden yükle" ile çağrılmalıdır.</summary>
+    /// <summary>Verilen sekmeyi depodaki güncel notlarla ilk kez doldurur (yeni sekme).</summary>
     private void LoadTab(EditorTab tab)
     {
-        var notes = _store.List(new NoteFilter(From: tab.Day, To: tab.Day));
-        var ordered = DayGrouper.Group(notes).FirstOrDefault(g => g.Date == tab.Day)?.Notes ?? Array.Empty<Note>();
-        tab.Notes = ordered.ToList();
-        tab.OriginalText = string.Join("\n", tab.Notes.Select(n => n.Text));
+        SetNotes(tab, ReadNotes(tab.Day));
         tab.Text = tab.OriginalText;
+        tab.CaretIndex = 0;
+    }
+
+    private List<Note> ReadNotes(DateOnly day)
+    {
+        var notes = _store.List(new NoteFilter(From: day, To: day));
+        var ordered = DayGrouper.Group(notes).FirstOrDefault(g => g.Date == day)?.Notes ?? Array.Empty<Note>();
+        return ordered.ToList();
+    }
+
+    /// <summary>Sekmenin bildiği notları (kaydetme/eşleme tabanı) günceller; editör metnine dokunmaz.</summary>
+    private static void SetNotes(EditorTab tab, List<Note> notes)
+    {
+        tab.Notes = notes;
+        tab.OriginalText = DayTextSync.ToText(notes);
         tab.ExternalChangeNotice = false;
+    }
+
+    /// <summary>Editör metni notlarla zaten örtüşüyorsa (boş satırlar/kenar boşlukları hariç) metne
+    /// dokunmaz — imleç, kaydırma ve geri al (Ctrl+Z) geçmişi korunur. Örtüşmüyorsa metni notlardan
+    /// yeniden kurar ve imleci aynı nota taşır.</summary>
+    private void SyncTextToNotes(EditorTab tab)
+    {
+        if (!DayTextSync.HasChanges(tab.Notes, tab.Text)) return;
+        if (tab == _active)
+        {
+            ReplaceActiveText(tab.OriginalText);
+        }
+        else
+        {
+            var (line, col) = DayTextSync.LineColumnOf(tab.Text, tab.CaretIndex);
+            var newLine = DayTextSync.MapLine(tab.Text, tab.OriginalText, line);
+            tab.CaretIndex = DayTextSync.IndexOf(tab.OriginalText, newLine, col);
+            tab.Text = tab.OriginalText;
+        }
+    }
+
+    /// <summary>Etkin sekmenin metnini değiştirir; imleci aynı satıra/nota, kaydırmayı eski yerine koyar.</summary>
+    private void ReplaceActiveText(string newText)
+    {
+        if (_active is null) return;
+
+        var oldText = EditorBox.Text;
+        var (line, col) = DayTextSync.LineColumnOf(oldText, EditorBox.CaretIndex);
+        var newLine = DayTextSync.MapLine(oldText, newText, line);
+        var vertical = EditorBox.VerticalOffset;
+        var horizontal = EditorBox.HorizontalOffset;
+
+        _suppressTextChanged = true;
+        EditorBox.Text = newText;
+        EditorBox.CaretIndex = DayTextSync.IndexOf(newText, newLine, col);
+        _suppressTextChanged = false;
+        _active.Text = newText;
+
+        Dispatcher.InvokeAsync(() =>
+        {
+            EditorBox.ScrollToVerticalOffset(vertical);
+            EditorBox.ScrollToHorizontalOffset(horizontal);
+        }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>İmleci etkin sekmede verilen notun satırının sonuna koyar ve satırı görünür yapar.</summary>
+    private void MoveCaretToNote(long noteId)
+    {
+        if (_active is null) return;
+        var line = DayTextSync.LineOfNote(_active.Notes, _active.Text, noteId);
+        if (line < 0) return;
+
+        EditorBox.CaretIndex = DayTextSync.IndexOf(EditorBox.Text, line, int.MaxValue);
+        Dispatcher.InvokeAsync(() => EditorBox.ScrollToLine(line), DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Klavye odağını metin kutusuna verir (pencere ilk açılışta henüz yüklenmemiş olabilir).</summary>
+    private void FocusEditor()
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            EditorBox.Focus();
+            Keyboard.Focus(EditorBox);
+        }, DispatcherPriority.Loaded);
     }
 
     private void ActivateTab(EditorTab tab)
     {
+        if (_active is not null && _active != tab)
+            _active.CaretIndex = EditorBox.CaretIndex;
         _active = tab;
         Title = $"Notlar — Editör — {DayGrouper.FormatDate(tab.Day)}";
         RefreshActiveFromTab();
@@ -121,11 +224,12 @@ public partial class NoteEditorWindow : Window
 
         _suppressTextChanged = true;
         EditorBox.Text = _active.Text;
-        EditorBox.CaretIndex = 0;
+        EditorBox.CaretIndex = Math.Clamp(_active.CaretIndex, 0, _active.Text.Length);
         _suppressTextChanged = false;
 
         RebuildGutter();
         UpdateStatusBar();
+        FocusEditor();
     }
 
     private void RebuildGutter()
@@ -136,15 +240,18 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
-        var oldLines = SplitLines(_active.OriginalText);
-        var newLines = SplitLines(_active.Text);
+        var oldLines = DayTextSync.SplitLines(_active.OriginalText);
+        var newLines = DayTextSync.SplitLines(_active.Text);
         var ops = LineDiff.Map(oldLines, newLines);
 
         var timeByNewIndex = new Dictionary<int, string>();
         foreach (var op in ops)
         {
             if ((op.Kind == LineOpKind.Keep || op.Kind == LineOpKind.Update) && op.OldIndex >= 0 && op.OldIndex < _active.Notes.Count)
-                timeByNewIndex[op.NewIndex] = _active.Notes[op.OldIndex].CreatedAt.ToString("HH:mm", Tr);
+            {
+                var note = _active.Notes[op.OldIndex];
+                timeByNewIndex[op.NewIndex] = note.CreatedAt.ToString("HH:mm", Tr) + (note.Done ? " ✓" : "");
+            }
         }
 
         var width = Math.Max(2, newLines.Length.ToString(Tr).Length);
@@ -170,7 +277,7 @@ public partial class NoteEditorWindow : Window
         }
 
         var text = EditorBox.Text;
-        var lineCount = SplitLines(text).Length;
+        var lineCount = DayTextSync.SplitLines(text).Length;
         var line = EditorBox.GetLineIndexFromCharacterIndex(EditorBox.CaretIndex);
         var lineStart = EditorBox.GetCharacterIndexFromLineIndex(line);
         var col = EditorBox.CaretIndex - lineStart + 1;
@@ -247,11 +354,23 @@ public partial class NoteEditorWindow : Window
         OpenOrActivate(DateOnly.FromDateTime(date));
     }
 
+    /// <summary>"Yeniden yükle": etkin sekmedeki kaydedilmemiş düzenlemeleri atıp depodaki güncel hali gösterir.</summary>
     private void ReloadBar_Click(object sender, RoutedEventArgs e)
     {
         if (_active is null) return;
-        LoadTab(_active);
-        RefreshActiveFromTab();
+        try
+        {
+            SetNotes(_active, ReadNotes(_active.Day));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+            MessageBox.Show(this, $"Yeniden yükleme başarısız: {ex.Message}", "Notlar", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        ReplaceActiveText(_active.OriginalText);
+        RebuildGutter();
+        UpdateStatusBar();
         UpdateExternalChangeBar();
         RebuildTabStrip();
     }
@@ -306,94 +425,72 @@ public partial class NoteEditorWindow : Window
             "Notlar", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
 
         if (result == MessageBoxResult.Cancel) return false;
-        if (result == MessageBoxResult.Yes) SaveTab(tab);
+        // Kaydetme başarısız olursa sekme/pencere kapanmaz; düzenlemeler kaybolmasın.
+        if (result == MessageBoxResult.Yes) return SaveTab(tab);
         return true;
     }
 
-    private void SaveTab(EditorTab tab)
+    /// <summary>Sekmenin metnini depoya yazar. İşlemler sekmenin bildiği notlara göre hesaplanır ve
+    /// yalnızca kullanıcının değiştirdiği satırlar depoya dokunur; bu yüzden bu arada başka bir süreçten
+    /// (ör. MCP) eklenen/değişen notlar korunur ve kayıttan sonra metne katılır. Metin kaydedilen
+    /// hâlle örtüşüyorsa editöre dokunulmaz (imleç ve Ctrl+Z geçmişi kalır). Başarılıysa true döner.</summary>
+    private bool SaveTab(EditorTab tab)
     {
         try
         {
-            var oldLines = SplitLines(tab.OriginalText);
-            var newLines = SplitLines(tab.Text);
-            var ops = LineDiff.Map(oldLines, newLines);
+            var plan = DayTextSync.Plan(tab.Notes, tab.Text, tab.Day, DateTimeOffset.Now);
+            var byId = tab.Notes.ToDictionary(n => n.Id);
 
-            for (var k = 0; k < ops.Count; k++)
+            foreach (var edit in plan)
             {
-                var op = ops[k];
-                switch (op.Kind)
+                switch (edit.Kind)
                 {
-                    case LineOpKind.Update:
-                        _store.Update(tab.Notes[op.OldIndex].Id, newLines[op.NewIndex]);
+                    case DayEditKind.Update:
+                        try
+                        {
+                            _store.Update(edit.NoteId, edit.Text);
+                        }
+                        catch (NoteNotFoundException)
+                        {
+                            // Not bu arada dışarıda silinmiş: düzenleme kaybolmasın, aynı saat ve yazarla yeniden ekle.
+                            var original = byId[edit.NoteId];
+                            _store.AddAt(edit.Text, original.CreatedAt, original.Author);
+                        }
                         break;
-                    case LineOpKind.Delete:
-                        _store.Delete(tab.Notes[op.OldIndex].Id);
+                    case DayEditKind.Delete:
+                        try
+                        {
+                            _store.Delete(edit.NoteId);
+                        }
+                        catch (NoteNotFoundException)
+                        {
+                            // Zaten silinmiş; yapılacak bir şey yok.
+                        }
                         break;
-                    case LineOpKind.Insert:
-                        var prev = FindNeighborNote(ops, tab, k, backwards: true);
-                        var next = FindNeighborNote(ops, tab, k, backwards: false);
-                        var time = ComputeInsertTime(prev, next, tab.Day);
-                        _store.AddAt(newLines[op.NewIndex], time, NoteAuthor.Ben);
+                    case DayEditKind.Insert:
+                        _store.AddAt(edit.Text, edit.CreatedAt, NoteAuthor.Ben);
                         break;
                 }
             }
 
-            LoadTab(tab);
+            SetNotes(tab, ReadNotes(tab.Day));
+            SyncTextToNotes(tab);
             if (tab == _active)
-                RefreshActiveFromTab();
+            {
+                RebuildGutter();
+                UpdateStatusBar();
+                UpdateExternalChangeBar();
+            }
             RebuildTabStrip();
+            return true;
         }
         catch (Exception ex)
         {
             AppLog.Write(ex);
             MessageBox.Show(this, $"Kaydetme başarısız: {ex.Message}", "Notlar", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
         }
     }
-
-    private static Note? FindNeighborNote(IReadOnlyList<LineOp> ops, EditorTab tab, int index, bool backwards)
-    {
-        if (backwards)
-        {
-            for (var i = index - 1; i >= 0; i--)
-            {
-                if (ops[i].Kind is LineOpKind.Keep or LineOpKind.Update)
-                    return tab.Notes[ops[i].OldIndex];
-            }
-        }
-        else
-        {
-            for (var i = index + 1; i < ops.Count; i++)
-            {
-                if (ops[i].Kind is LineOpKind.Keep or LineOpKind.Update)
-                    return tab.Notes[ops[i].OldIndex];
-            }
-        }
-        return null;
-    }
-
-    private static DateTimeOffset ComputeInsertTime(Note? prev, Note? next, DateOnly day)
-    {
-        DateTimeOffset time;
-        if (prev is not null)
-        {
-            time = prev.CreatedAt.AddMinutes(1);
-        }
-        else
-        {
-            var now = DateTimeOffset.Now;
-            time = day == DateOnly.FromDateTime(now.DateTime)
-                ? now
-                : new DateTimeOffset(day.ToDateTime(TimeOnly.FromDateTime(now.DateTime)), now.Offset);
-        }
-
-        if (next is not null && time >= next.CreatedAt)
-            time = next.CreatedAt.AddMinutes(-1);
-
-        return time;
-    }
-
-    private static string[] SplitLines(string text) =>
-        text.Length == 0 ? Array.Empty<string>() : text.Replace("\r\n", "\n").Split('\n');
 
     private void OnSettingsChanged()
     {
@@ -497,8 +594,11 @@ public partial class NoteEditorWindow : Window
         public List<Note> Notes = new();
         public string OriginalText = "";
         public string Text = "";
+        public int CaretIndex;
         public bool ExternalChangeNotice;
 
-        public bool Dirty => Text != OriginalText;
+        /// <summary>Kaydedildiğinde notlarda değişiklik yaratacak bir düzenleme var mı? Boş satırlar ve
+        /// satır kenarındaki boşluklar sayılmaz (zaten kaydedilmezler).</summary>
+        public bool Dirty => DayTextSync.HasChanges(Notes, Text);
     }
 }

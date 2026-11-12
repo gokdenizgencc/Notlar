@@ -107,4 +107,73 @@ public sealed class LineDiffTests
             [new LineOp(LineOpKind.Delete, 0), new LineOp(LineOpKind.Delete, 1)],
             ops);
     }
+
+    [Fact]
+    public void Splitting_a_line_with_enter_keeps_the_note_on_the_first_part()
+    {
+        // Notepad'de satır ortasında Enter: ilk parça mevcut notu güncellemeli, ikinci parça yeni not olmalı.
+        var ops = LineDiff.Map(["toplantı notları", "b"], ["toplantı", "notları", "b"]);
+
+        Assert.Equal(
+            [
+                new LineOp(LineOpKind.Update, 0, 0),
+                new LineOp(LineOpKind.Insert, NewIndex: 1),
+                new LineOp(LineOpKind.Keep, 1, 2),
+            ],
+            ops);
+    }
+
+    [Fact]
+    public void Merging_lines_with_backspace_updates_the_first_and_deletes_the_second()
+    {
+        var ops = LineDiff.Map(["a", "bir", "iki", "z"], ["a", "biriki", "z"]);
+
+        Assert.Equal(
+            [
+                new LineOp(LineOpKind.Keep, 0, 0),
+                new LineOp(LineOpKind.Update, 1, 1),
+                new LineOp(LineOpKind.Delete, 2),
+                new LineOp(LineOpKind.Keep, 3, 2),
+            ],
+            ops);
+    }
+
+    [Fact]
+    public void New_line_typed_above_an_edited_line_does_not_steal_its_note()
+    {
+        // "rapor" düzenlenip "rapor hazır" olurken üstüne yepyeni bir satır yazıldı: eski not
+        // benzer olan satırla eşleşmeli (yazar/saat korunur), yeni satır ekleme olmalı.
+        var ops = LineDiff.Map(["a", "rapor", "c"], ["a", "yeni iş", "rapor hazır", "c"]);
+
+        Assert.Equal(
+            [
+                new LineOp(LineOpKind.Keep, 0, 0),
+                new LineOp(LineOpKind.Insert, NewIndex: 1),
+                new LineOp(LineOpKind.Update, 1, 2),
+                new LineOp(LineOpKind.Keep, 2, 3),
+            ],
+            ops);
+    }
+
+    [Fact]
+    public void Edited_line_deleted_next_to_another_edit_pairs_by_similarity()
+    {
+        // İki satırdan ilki silinip ikincisi düzenlendi: silinen, benzemeyen ilk satır olmalı.
+        var ops = LineDiff.Map(["süt al", "ekmek al"], ["ekmek al!"]);
+
+        Assert.Equal(
+            [new LineOp(LineOpKind.Delete, 0), new LineOp(LineOpKind.Update, 1, 0)],
+            ops);
+    }
+
+    [Fact]
+    public void Gap_ops_are_emitted_in_line_order()
+    {
+        var ops = LineDiff.Map(["x1", "y1"], ["n1", "x2", "n2", "y2", "n3"]);
+
+        var newIndices = ops.Where(o => o.NewIndex >= 0).Select(o => o.NewIndex).ToList();
+        Assert.Equal(newIndices.OrderBy(i => i), newIndices);
+        Assert.Equal(2, ops.Count(o => o.Kind == LineOpKind.Update));
+        Assert.Equal(3, ops.Count(o => o.Kind == LineOpKind.Insert));
+    }
 }
