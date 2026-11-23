@@ -116,6 +116,7 @@ public sealed class RecordingTools(RecordingStore store)
     private static string StatusText(RecordingStatus status) => status switch
     {
         RecordingStatus.Kaydediliyor => "kaydediliyor",
+        RecordingStatus.Kaydedildi => "kaydedildi (transkript bekliyor)",
         RecordingStatus.Bekliyor => "çeviri bekliyor",
         RecordingStatus.Cevriliyor => "metne çevriliyor",
         RecordingStatus.Hazir => "hazır",

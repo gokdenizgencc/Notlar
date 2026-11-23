@@ -33,9 +33,12 @@ public sealed class WhisperTranscriber
     public static int Threads => Math.Max(1, Environment.ProcessorCount / 2);
 
     /// <summary><paramref name="language"/>: "tr", "en" gibi iki harfli kod ya da "auto" (Whisper dili kendisi bulur).
-    /// <paramref name="progress"/>: 0–1 arası oran. Konuşma yoksa boş liste döner.</summary>
+    /// <paramref name="progress"/>: 0–1 arası oran. Konuşma yoksa boş liste döner.
+    /// <paramref name="ranges"/>: yalnızca bu zaman aralıklarındaki konuşma çevrilir (segment zamanları yine kaydın
+    /// başına göredir); null ya da boşsa tüm kayıt çevrilir.</summary>
     public async Task<IReadOnlyList<TranscriptSegment>> TranscribeAsync(string wavPath, Speaker speaker, string language,
-        string modelPath, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        string modelPath, IProgress<double>? progress = null, CancellationToken cancellationToken = default,
+        IReadOnlyList<TimeRange>? ranges = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(wavPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(language);
@@ -44,6 +47,7 @@ public sealed class WhisperTranscriber
 
         var samples = await Task.Run(() => ReadMono16k(wavPath), cancellationToken).ConfigureAwait(false);
         var regions = SpeechSegmenter.Detect(samples, SampleRate);
+        if (ranges is { Count: > 0 }) regions = TimeRanges.ClipRegions(regions, ranges, SampleRate);
         var windows = PadWindows(GroupRegions(regions, MaxWindowSamples, MaxGroupGapSamples), samples.Length, ContextPadSamples);
         if (windows.Count == 0)
         {

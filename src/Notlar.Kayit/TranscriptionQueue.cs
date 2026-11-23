@@ -4,8 +4,9 @@ using Notlar.Core;
 namespace Notlar.Kayit;
 
 /// <summary>Kayıtları arka planda tek tek metne çeviren iş kuyruğu (tek işçi thread, BelowNormal öncelik, arka plan).
-/// İş akışı: ses dosyalarını bul → MarkTranscribing → (gerekirse) modeli indir → ben.wav ve karsi.wav'ı (var olanları)
-/// çevir → TranscriptMerger.Merge → SaveTranscript (durum Hazir). Hiç konuşma yoksa boş transkriptle Hazir.
+/// İş akışı: ses dosyalarını bul → MarkTranscribing → (gerekirse) modeli indir → ben.wav ve karsi.wav'ı (var olanları;
+/// kullanıcı aralık seçtiyse yalnızca RecordingStore.GetRanges aralıklarını) çevir → TranscriptMerger.Merge →
+/// SaveTranscript (durum Hazir). Hiç konuşma yoksa boş transkriptle Hazir.
 /// Hata → MarkFailed(Türkçe mesaj) + <see cref="Failed"/>. <see cref="Dispose"/> ile iptal edilen iş Cevriliyor
 /// durumunda kalır; bir sonraki açılışta RecordingStore.RecoverInterrupted onu yeniden Bekliyor yapar.
 /// Olaylar işçi thread'inden tetiklenir (UI'ye aktarmak çağıranın işi); olay işleyicisindeki hata kuyruğu durdurmaz.</summary>
@@ -137,6 +138,7 @@ public sealed class TranscriptionQueue : IDisposable
                 return;
             }
 
+            var ranges = _store.GetRanges(id);
             _store.MarkTranscribing(id);
 
             string modelPath;
@@ -157,13 +159,13 @@ public sealed class TranscriptionQueue : IDisposable
             {
                 Report(id, PhaseMicrophone, 0);
                 mine = _transcriber.TranscribeAsync(micPath, Speaker.Ben, recording.Language, modelPath,
-                    Progress(id, PhaseMicrophone), ct).GetAwaiter().GetResult();
+                    Progress(id, PhaseMicrophone), ct, ranges).GetAwaiter().GetResult();
             }
             if (hasLoopback)
             {
                 Report(id, PhaseLoopback, 0);
                 theirs = _transcriber.TranscribeAsync(loopbackPath, Speaker.KarsiTaraf, recording.Language, modelPath,
-                    Progress(id, PhaseLoopback), ct).GetAwaiter().GetResult();
+                    Progress(id, PhaseLoopback), ct, ranges).GetAwaiter().GetResult();
             }
 
             ct.ThrowIfCancellationRequested();
