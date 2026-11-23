@@ -82,7 +82,7 @@ public class RecordingStoreTests
     }
 
     [Fact]
-    public void Finish_sets_end_time_and_waiting_status()
+    public void Finish_sets_end_time_and_recorded_status()
     {
         using var f = new RecordingFixture();
         var r = f.Store.Start("tr");
@@ -90,7 +90,7 @@ public class RecordingStoreTests
 
         var done = f.Store.Finish(r.Id);
 
-        Assert.Equal(RecordingStatus.Bekliyor, done.Status);
+        Assert.Equal(RecordingStatus.Kaydedildi, done.Status);
         Assert.Equal(new DateTimeOffset(2026, 11, 11, 15, 14, 0, Tr), done.EndedAt);
         Assert.Equal(TimeSpan.FromMinutes(42), done.Duration);
         Assert.Equal(2, f.Signal.Count);
@@ -275,7 +275,7 @@ public class RecordingStoreTests
     }
 
     [Fact]
-    public void RecoverInterrupted_moves_recording_and_transcribing_to_waiting()
+    public void RecoverInterrupted_requeues_only_transcriptions_the_user_started()
     {
         using var f = new RecordingFixture();
         var recording = f.Store.Start("tr").Id;                // Kaydediliyor, ended_at yok
@@ -283,7 +283,10 @@ public class RecordingStoreTests
         f.Store.Finish(transcribing);
         f.Store.MarkTranscribing(transcribing);                // Cevriliyor
         var waiting = f.Store.Start("tr").Id;
-        f.Store.Finish(waiting);                               // Bekliyor
+        f.Store.Finish(waiting);
+        f.Store.Requeue(waiting);                              // Bekliyor (kullanıcı çeviriyi başlattı)
+        var recorded = f.Store.Start("tr").Id;
+        f.Store.Finish(recorded);                              // Kaydedildi (kullanıcıyı bekliyor)
         var ready = f.Store.Start("tr").Id;
         f.Store.SaveTranscript(ready, TwoSegments);            // Hazir
         var failed = f.Store.Start("tr").Id;
@@ -294,13 +297,40 @@ public class RecordingStoreTests
 
         var ids = f.Reopen().RecoverInterrupted();
 
-        Assert.Equal([recording, transcribing, waiting], ids);
+        Assert.Equal([transcribing, waiting], ids);
         var r = f.Store.Get(recording);
-        Assert.Equal(RecordingStatus.Bekliyor, r.Status);
+        Assert.Equal(RecordingStatus.Kaydedildi, r.Status);
         Assert.Equal(f.Time.GetLocalNow(), r.EndedAt);
+        Assert.Equal(RecordingStatus.Kaydedildi, f.Store.Get(recorded).Status);
+        Assert.Equal(RecordingStatus.Bekliyor, f.Store.Get(waiting).Status);
         Assert.Equal(RecordingStatus.Bekliyor, f.Store.Get(transcribing).Status);
         Assert.Equal(RecordingStatus.Hazir, f.Store.Get(ready).Status);
         Assert.Equal(RecordingStatus.Hata, f.Store.Get(failed).Status);
+    }
+
+    [Fact]
+    public void Ranges_are_normalized_stored_and_replaced()
+    {
+        using var f = new RecordingFixture();
+        var id = f.Store.Start("tr").Id;
+        Assert.Empty(f.Store.GetRanges(id));
+
+        var saved = f.Store.SetRanges(id, [new(60_000, 90_000), new(0, 10_000), new(80_000, 120_000), new(5, 5)]);
+
+        TimeRange[] expected = [new(0, 10_000), new(60_000, 120_000)];
+        Assert.Equal(expected, saved);
+        Assert.Equal(expected, f.Reopen().GetRanges(id));
+
+        f.Store.SetRanges(id, []);
+        Assert.Empty(f.Store.GetRanges(id));
+    }
+
+    [Fact]
+    public void Ranges_unknown_recording_throws()
+    {
+        using var f = new RecordingFixture();
+        Assert.Throws<RecordingNotFoundException>(() => f.Store.SetRanges(99, [new(0, 1000)]));
+        Assert.Throws<RecordingNotFoundException>(() => f.Store.GetRanges(99));
     }
 
     [Fact]

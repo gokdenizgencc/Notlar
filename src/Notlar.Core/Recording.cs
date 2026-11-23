@@ -1,6 +1,8 @@
 namespace Notlar.Core;
 
-public enum RecordingStatus { Kaydediliyor, Bekliyor, Cevriliyor, Hazir, Hata }
+/// <summary>Kaydediliyor → Kaydedildi (kullanıcı "Transkript et" diyene kadar bekler) → Bekliyor (çeviri kuyruğunda)
+/// → Cevriliyor → Hazir | Hata.</summary>
+public enum RecordingStatus { Kaydediliyor, Kaydedildi, Bekliyor, Cevriliyor, Hazir, Hata }
 
 /// <summary>Transkript satırının konuşmacısı: mikrofon kanalı "Ben", sistem sesi (loopback) kanalı "Karşı taraf".</summary>
 public enum Speaker { Ben, KarsiTaraf }

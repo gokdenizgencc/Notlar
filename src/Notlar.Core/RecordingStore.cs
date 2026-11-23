@@ -53,6 +53,13 @@ public sealed class RecordingStore
                 text         TEXT    NOT NULL
             );
             CREATE INDEX IF NOT EXISTS ix_recseg ON recording_segments(recording_id, start_ms);
+            CREATE TABLE IF NOT EXISTS recording_ranges (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                recording_id INTEGER NOT NULL,
+                start_ms     INTEGER NOT NULL,
+                end_ms       INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_recrange ON recording_ranges(recording_id, start_ms);
             """;
         cmd.ExecuteNonQuery();
     }
@@ -80,10 +87,11 @@ public sealed class RecordingStore
         return Get(id);
     }
 
-    /// <summary>Kaydı bitirir: ended_at = şimdi, durum Bekliyor (çeviri kuyruğuna alınmaya hazır).</summary>
+    /// <summary>Kaydı bitirir: ended_at = şimdi, durum Kaydedildi. Kayıt kendiliğinden çevrilmez; kullanıcı
+    /// "Transkript et" deyince <see cref="Requeue"/> ile kuyruğa alınır.</summary>
     public Recording Finish(long id)
     {
-        Update(id, "ended_at = $now, status = $value", nameof(RecordingStatus.Bekliyor));
+        Update(id, "ended_at = $now, status = $value", nameof(RecordingStatus.Kaydedildi));
         return Get(id);
     }
 
@@ -146,7 +154,7 @@ public sealed class RecordingStore
         return Get(id);
     }
 
-    /// <summary>Kaydı yeniden çevrilmek üzere Bekliyor durumuna alır.</summary>
+    /// <summary>Kaydı metne çevrilmek üzere Bekliyor durumuna alır (ilk çeviri ya da yeniden çeviri).</summary>
     public Recording Requeue(long id)
     {
         Update(id, "status = $value, error = NULL", nameof(RecordingStatus.Bekliyor));
@@ -237,9 +245,68 @@ public sealed class RecordingStore
         return segments;
     }
 
-    /// <summary>Uygulama başlangıcında çağrılır: yarım kalmış kayıtları (Kaydediliyor → Bekliyor; ended_at boşsa
-    /// şimdi) ve yarım kalmış çevirileri (Cevriliyor → Bekliyor) kurtarır. Kuyruğa alınması gereken tüm Bekliyor
-    /// kayıtların id'lerini (eskiden yeniye) döndürür.</summary>
+    /// <summary>Metne çevrilecek aralıkları verilenlerle değiştirir (<see cref="TimeRanges.Normalize"/> ile
+    /// temizlenmiş olarak). Boş liste "tüm kayıt" demektir.</summary>
+    public IReadOnlyList<TimeRange> SetRanges(long id, IEnumerable<TimeRange> ranges)
+    {
+        var normalized = TimeRanges.Normalize(ranges);
+        using (var conn = Open())
+        using (var tx = conn.BeginTransaction())
+        {
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "SELECT 1 FROM recordings WHERE id = $id AND deleted_at IS NULL";
+                cmd.Parameters.AddWithValue("$id", id);
+                if (cmd.ExecuteScalar() is null)
+                    throw new RecordingNotFoundException(id);
+            }
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "DELETE FROM recording_ranges WHERE recording_id = $id";
+                cmd.Parameters.AddWithValue("$id", id);
+                cmd.ExecuteNonQuery();
+            }
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "INSERT INTO recording_ranges(recording_id, start_ms, end_ms) VALUES($id, $start, $end)";
+                cmd.Parameters.AddWithValue("$id", id);
+                var start = cmd.Parameters.Add("$start", SqliteType.Integer);
+                var end = cmd.Parameters.Add("$end", SqliteType.Integer);
+                foreach (var r in normalized)
+                {
+                    start.Value = r.StartMs;
+                    end.Value = r.EndMs;
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            tx.Commit();
+        }
+        _signal.Notify();
+        return normalized;
+    }
+
+    /// <summary>Metne çevrilecek aralıklar (başlangıca göre sıralı); boşsa tüm kayıt çevrilir.</summary>
+    public IReadOnlyList<TimeRange> GetRanges(long id)
+    {
+        Get(id); // yoksa / silinmişse RecordingNotFoundException
+
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT start_ms, end_ms FROM recording_ranges WHERE recording_id = $id ORDER BY start_ms, id";
+        cmd.Parameters.AddWithValue("$id", id);
+        var ranges = new List<TimeRange>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            ranges.Add(new TimeRange(reader.GetInt64(0), reader.GetInt64(1)));
+        return ranges;
+    }
+
+    /// <summary>Uygulama başlangıcında çağrılır: yarım kalmış kayıtları (Kaydediliyor → Kaydedildi; ended_at boşsa
+    /// şimdi; kullanıcı istemeden çevrilmez) ve yarım kalmış çevirileri (Cevriliyor → Bekliyor) kurtarır. Kuyruğa
+    /// alınması gereken (kullanıcının çeviriyi başlattığı) tüm Bekliyor kayıtların id'lerini (eskiden yeniye) döndürür.</summary>
     public IReadOnlyList<long> RecoverInterrupted()
     {
         var ids = new List<long>();
@@ -251,7 +318,7 @@ public sealed class RecordingStore
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = """
-                    UPDATE recordings SET status = 'Bekliyor', ended_at = COALESCE(ended_at, $now)
+                    UPDATE recordings SET status = 'Kaydedildi', ended_at = COALESCE(ended_at, $now)
                     WHERE deleted_at IS NULL AND status = 'Kaydediliyor';
                     """;
                 cmd.Parameters.AddWithValue("$now", Now());
