@@ -33,6 +33,7 @@ public sealed class RecordingController : IDisposable
     private readonly HashSet<long> _summarizing = [];
     private readonly HashSet<long> _planning = [];
     private long? _currentId;
+    private bool _currentIsAutomatic;
     private bool _disposed;
 
     // İlerleme olayları işçi thread'inde çok sık gelebilir (ör. model indirirken her okunan blokta); yalnızca
@@ -54,7 +55,8 @@ public sealed class RecordingController : IDisposable
         _recorder.Error += ex => Post(() => OnRecorderError(ex));
         WhisperRuntime.Diagnostic += AppLog.Info;
 
-        // Önceki oturumda yarım kalan kayıt / çeviriler (uygulama kapandı, çöktü…) yeniden kuyruğa alınır.
+        // Önceki oturumda yarım kalan çeviriler (uygulama kapandı, çöktü…) yeniden kuyruğa alınır. Yarım kalan kayıt
+        // Kaydedildi durumuna geçer ve kullanıcının "Transkript et" demesini bekler.
         try
         {
             foreach (var id in _store.RecoverInterrupted())
@@ -87,6 +89,12 @@ public sealed class RecordingController : IDisposable
     public long? CurrentRecordingId => _currentId;
 
     public TimeSpan Elapsed => _recorder.Elapsed;
+
+    /// <summary>Süren kayıt zamanlayıcı tarafından (otomatik) başlatıldı mı?</summary>
+    public bool IsCurrentAutomatic => _currentId is not null && _currentIsAutomatic;
+
+    /// <summary>Tek seferlik KVKK uyarısı onaylanmış mı? Onaysız otomatik kayıt başlatılmaz.</summary>
+    public static bool ConsentGiven => AppSettings.Load().RecordingConsentShown;
 
     /// <summary>Kayıt başladı / durdu.</summary>
     public event Action? RecordingStateChanged;
@@ -123,6 +131,27 @@ public sealed class RecordingController : IDisposable
     {
         if (_disposed || _recorder.IsRecording) return false;
         if (!EnsureConsent(owner)) return false;
+        return StartCore(owner, automatic: false, out _);
+    }
+
+    /// <summary>Zamanlayıcının başlattığı kayıt: hiçbir mesaj kutusu göstermez. KVKK uyarısı henüz onaylanmadıysa ya
+    /// da ses aygıtları açılamazsa false döner (<paramref name="error"/>: Türkçe neden). Kanallardan yalnızca biri
+    /// açılabildiyse kayıt başlar ve <see cref="Warning"/> ile bildirilir.</summary>
+    public bool StartAutomatic(out string? error)
+    {
+        error = null;
+        if (_disposed || _recorder.IsRecording) return false;
+        if (!ConsentGiven)
+        {
+            error = "Kayıt uyarısı henüz onaylanmadı.";
+            return false;
+        }
+        return StartCore(owner: null, automatic: true, out error);
+    }
+
+    private bool StartCore(Window? owner, bool automatic, out string? error)
+    {
+        error = null;
 
         string language;
         try
@@ -142,7 +171,8 @@ public sealed class RecordingController : IDisposable
         catch (Exception ex)
         {
             AppLog.Write(ex);
-            ShowMessage(owner, $"Kayıt başlatılamadı.\n\n{ex.Message}", MessageBoxImage.Error);
+            error = $"Kayıt başlatılamadı. {ex.Message}";
+            if (!automatic) ShowMessage(owner, $"Kayıt başlatılamadı.\n\n{ex.Message}", MessageBoxImage.Error);
             return false;
         }
 
@@ -156,37 +186,48 @@ public sealed class RecordingController : IDisposable
             AppLog.Write(ex);
             TryLog(() => _store.MarkFailed(recording.Id, "Kayıt başlatılamadı: " + ex.Message));
             TryLog(() => AudioRetention.DeleteRecordingAudio(AppPaths.RecordingsDir, recording.Id));
-            ShowMessage(owner, ex is InvalidOperationException
-                ? ex.Message
-                : $"Ses kaydı başlatılamadı.\n\n{ex.Message}", MessageBoxImage.Error);
+            error = ex is InvalidOperationException ? ex.Message : $"Ses kaydı başlatılamadı. {ex.Message}";
+            if (!automatic)
+            {
+                ShowMessage(owner, ex is InvalidOperationException
+                    ? ex.Message
+                    : $"Ses kaydı başlatılamadı.\n\n{ex.Message}", MessageBoxImage.Error);
+            }
             return false;
         }
 
         _currentId = recording.Id;
+        _currentIsAutomatic = automatic;
         RecordingStateChanged?.Invoke();
 
         // Kanallardan biri açılamadıysa kullanıcı bir kez bilgilendirilir; kayıt diğer kanalla sürer.
+        string? notice = null;
         if (!_recorder.MicrophoneAvailable)
         {
-            ShowMessage(owner,
-                "Mikrofon açılamadı; yalnızca karşı tarafın sesi (bilgisayardan gelen ses) kaydediliyor." +
-                Detail(_recorder.MicrophoneError), MessageBoxImage.Information);
+            notice = "Mikrofon açılamadı; yalnızca karşı tarafın sesi (bilgisayardan gelen ses) kaydediliyor." +
+                Detail(_recorder.MicrophoneError);
         }
         else if (!_recorder.LoopbackAvailable)
         {
-            ShowMessage(owner,
-                "Bilgisayardan gelen ses kaydedilemiyor; yalnızca mikrofon (sizin sesiniz) kaydediliyor." +
-                Detail(_recorder.LoopbackError), MessageBoxImage.Information);
+            notice = "Bilgisayardan gelen ses kaydedilemiyor; yalnızca mikrofon (sizin sesiniz) kaydediliyor." +
+                Detail(_recorder.LoopbackError);
+        }
+        if (notice is not null)
+        {
+            if (automatic) Warning?.Invoke(notice);
+            else ShowMessage(owner, notice, MessageBoxImage.Information);
         }
         return true;
     }
 
-    /// <summary>Kaydı durdurur, bitirir ve çeviri kuyruğuna alır.</summary>
+    /// <summary>Kaydı durdurur ve bitirir (durum Kaydedildi). Kayıt kendiliğinden metne çevrilmez; kullanıcı
+    /// dinleyip (isterse aralık seçip) "Transkript et" deyince <see cref="Requeue"/> ile kuyruğa alınır.</summary>
     public void Stop()
     {
         if (!_recorder.IsRecording && _currentId is null) return;
         var id = _currentId;
         _currentId = null;
+        _currentIsAutomatic = false;
         TryLog(_recorder.Stop);
 
         if (id is { } recordingId)
@@ -194,7 +235,6 @@ public sealed class RecordingController : IDisposable
             try
             {
                 _store.Finish(recordingId);
-                _queue.Enqueue(recordingId);
             }
             catch (RecordingNotFoundException ex)
             {
@@ -209,7 +249,8 @@ public sealed class RecordingController : IDisposable
         RecordingStateChanged?.Invoke();
     }
 
-    /// <summary>Kaydı yeniden çevrilmek üzere kuyruğa alır (durum Bekliyor).</summary>
+    /// <summary>Kaydı metne çevrilmek üzere kuyruğa alır (durum Bekliyor): "Transkript et" ve "Yeniden çevir".
+    /// Kullanıcı aralık seçtiyse (RecordingStore.GetRanges) yalnızca o aralıklar çevrilir.</summary>
     public void Requeue(long id)
     {
         _store.Requeue(id);
@@ -287,8 +328,8 @@ public sealed class RecordingController : IDisposable
         }
     }
 
-    /// <summary>Uygulama kapanırken çağrılır: kayıt sürüyorsa düzgün durdurulup bitirilir (kuyruğa alınmaz; bir
-    /// sonraki açılışta RecoverInterrupted onu kuyruğa alır), çeviri kuyruğu ve Claude işleri durdurulur.</summary>
+    /// <summary>Uygulama kapanırken çağrılır: kayıt sürüyorsa düzgün durdurulup bitirilir (durum Kaydedildi;
+    /// kullanıcıyı bekler), çeviri kuyruğu ve Claude işleri durdurulur.</summary>
     public void Dispose()
     {
         if (_disposed) return;

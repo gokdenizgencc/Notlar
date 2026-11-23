@@ -81,6 +81,7 @@ public partial class SettingsView : UserControl
 
             SyncPanelToggles(settings);
             SyncLanguage(settings);
+            SyncAutoRecord(settings);
             SyncAutoStart();
             SyncKisiselOkuma();
             SyncBackend();
@@ -102,6 +103,7 @@ public partial class SettingsView : UserControl
             {
                 SyncPanelToggles(settings);
                 SyncLanguage(settings);
+                SyncAutoRecord(settings);
             }
             finally
             {
@@ -253,6 +255,66 @@ public partial class SettingsView : UserControl
     {
         if (_syncing || sender is not RadioButton { Tag: string code }) return;
         SaveSetting(s => s.RecordingLanguage = code);
+    }
+
+    private void SyncAutoRecord(AppSettings settings)
+    {
+        AutoRecordCheck.IsChecked = settings.AutoRecordEnabled;
+        // Kullanıcı saat yazarken (başka bir ayar kaydedilince gelen eşitleme) kutunun metni ezilmez.
+        if (!AutoRecordStartBox.IsKeyboardFocusWithin) AutoRecordStartBox.Text = settings.AutoRecordStart;
+        if (!AutoRecordEndBox.IsKeyboardFocusWithin) AutoRecordEndBox.Text = settings.AutoRecordEnd;
+    }
+
+    private void AutoRecordCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_syncing) return;
+        var enabled = AutoRecordCheck.IsChecked == true;
+        SaveSetting(s => s.AutoRecordEnabled = enabled);
+    }
+
+    private void AutoRecordTime_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || sender is not TextBox box) return;
+        e.Handled = true;
+        CommitAutoRecordTime(box);
+    }
+
+    private void AutoRecordTime_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox box) CommitAutoRecordTime(box);
+    }
+
+    /// <summary>Saat kutusunu doğrulayıp kaydeder; geçersizse eski değere döner. Saat değişince "bugün başlatıldı"
+    /// işareti silinir (yeni pencere bugün de geçerli olsun).</summary>
+    private void CommitAutoRecordTime(TextBox box)
+    {
+        if (_syncing) return;
+        var isStart = ReferenceEquals(box, AutoRecordStartBox);
+        var current = AppSettings.Load();
+        var previous = isStart ? current.AutoRecordStart : current.AutoRecordEnd;
+
+        if (!RecordingSchedule.TryParseTime(box.Text, out var time))
+        {
+            box.Text = previous;
+            ShowError("Saat SS:dd biçiminde olmalı (ör. 09:30).");
+            return;
+        }
+
+        var text = RecordingSchedule.FormatTime(time);
+        box.Text = text;
+        if (text == previous) return;
+
+        SaveSetting(s =>
+        {
+            if (isStart) s.AutoRecordStart = text;
+            else s.AutoRecordEnd = text;
+            s.AutoRecordLastDate = null;
+        });
+
+        var saved = AppSettings.Load();
+        if (RecordingSchedule.TryParseTime(saved.AutoRecordStart, out var start)
+            && RecordingSchedule.TryParseTime(saved.AutoRecordEnd, out var end) && end <= start)
+            ShowError("Bitiş saati başlangıçtan sonra olmalı; bu hâliyle otomatik kayıt başlamaz.");
     }
 
     private void SyncBackend()

@@ -61,6 +61,21 @@ public sealed class AppSettings
     /// ⚙ Ayarlar'dan güncellenir.</summary>
     public string RecordingLanguage { get; set; } = "tr";
 
+    public const string DefaultAutoRecordStart = "09:30";
+    public const string DefaultAutoRecordEnd = "10:30";
+
+    /// <summary>Hafta içi otomatik toplantı kaydı açık mı? Kayıt <see cref="AutoRecordStart"/>'ta kendiliğinden başlar,
+    /// <see cref="AutoRecordEnd"/>'de kendiliğinden durur (yalnızca Notlar açıkken; bkz. RecordingSchedule).</summary>
+    public bool AutoRecordEnabled { get; set; } = true;
+
+    /// <summary>Otomatik kaydın başlangıç ve bitiş saati, "HH:mm".</summary>
+    public string AutoRecordStart { get; set; } = DefaultAutoRecordStart;
+    public string AutoRecordEnd { get; set; } = DefaultAutoRecordEnd;
+
+    /// <summary>Otomatik kaydın en son başlatıldığı (ya da denendiği) gün, "yyyy-MM-dd". Günde bir kez kuralı
+    /// uygulama yeniden başlatılsa da geçerli olsun diye saklanır.</summary>
+    public string? AutoRecordLastDate { get; set; }
+
     public static event Action? Changed;
 
     private static string SettingsPath => Path.Combine(AppPaths.DataDir, "ayarlar.json");
@@ -103,6 +118,11 @@ public sealed class AppSettings
 
             if (settings.EditorFontSize is double.NaN || settings.EditorFontSize < MinEditorFontSize || settings.EditorFontSize > MaxEditorFontSize)
                 settings.EditorFontSize = DefaultEditorFontSize;
+
+            if (!RecordingSchedule.TryParseTime(settings.AutoRecordStart, out _))
+                settings.AutoRecordStart = DefaultAutoRecordStart;
+            if (!RecordingSchedule.TryParseTime(settings.AutoRecordEnd, out _))
+                settings.AutoRecordEnd = DefaultAutoRecordEnd;
 
             return settings;
         }

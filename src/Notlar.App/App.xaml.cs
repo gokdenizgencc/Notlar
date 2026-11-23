@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
@@ -6,6 +7,7 @@ using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Notlar.Core;
 using Forms = System.Windows.Forms;
@@ -31,6 +33,10 @@ public partial class App : Application
     private TrayIcon? _tray;
     private PanelWindow? _panel;
     private RecordingController? _recordings;
+
+    // Hafta içi otomatik kayıt: 20 sn'de bir RecordingSchedule.Decide'a sorulur.
+    private readonly DispatcherTimer _scheduleTimer = new() { Interval = TimeSpan.FromSeconds(20) };
+    private DateOnly? _consentHintDate;
 
     [DllImport("user32.dll")]
     private static extern bool AllowSetForegroundWindow(int dwProcessId);
@@ -153,6 +159,10 @@ public partial class App : Application
                 _closeEvent, (_, _) => Dispatcher.InvokeAsync(Shutdown), null, Timeout.Infinite, executeOnlyOnce: false);
         }
 
+        _scheduleTimer.Tick += (_, _) => TryLog(CheckRecordingSchedule);
+        _scheduleTimer.Start();
+        TryLog(CheckRecordingSchedule);
+
         // Yedekleme ve temizlik I/O ağırlıklıdır; tepsi/panel zaten kurulduktan sonra arka planda çalıştır
         // ki UI iş parçacığı başlangıçta bloklanmasın.
         Task.Run(() =>
@@ -216,6 +226,60 @@ public partial class App : Application
         else recordings.Start(owner: null);
     }
 
+    /// <summary>Hafta içi otomatik kayıt (⚙ Ayarlar → Kayıt): pencere içinde kaydı başlatır, pencere bitince otomatik
+    /// başlatılmış kaydı durdurur. Elle başlatılan kayda dokunmaz; kayıt günde en çok bir kez otomatik başlar.</summary>
+    private void CheckRecordingSchedule()
+    {
+        if (_recordings is not { } recordings) return;
+        var settings = AppSettings.Load();
+        if (!settings.AutoRecordEnabled
+            || !RecordingSchedule.TryParseTime(settings.AutoRecordStart, out var start)
+            || !RecordingSchedule.TryParseTime(settings.AutoRecordEnd, out var end))
+            return;
+
+        var now = DateTime.Now;
+        var today = DateOnly.FromDateTime(now);
+        DateOnly? last = DateOnly.TryParseExact(settings.AutoRecordLastDate, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out var parsed) ? parsed : null;
+
+        switch (RecordingSchedule.Decide(now, start, end, recordings.IsRecording, recordings.IsCurrentAutomatic, last))
+        {
+            case ScheduleAction.Start:
+                if (!RecordingController.ConsentGiven)
+                {
+                    // Onay verilince aynı gün başlayabilsin diye "bugün denendi" işaretlenmez; balon günde bir kez.
+                    if (_consentHintDate == today) return;
+                    _consentHintDate = today;
+                    _tray?.ShowBalloon("Otomatik kayıt başlatılamadı",
+                        "Önce bir kez elle kayıt başlatıp katılımcı bilgilendirme uyarısını onaylayın.",
+                        () => OpenRecordings(null), isError: true);
+                    return;
+                }
+
+                // Başarısız olsa da bugün yeniden denenmez (ör. ses aygıtı yok: 20 sn'de bir hata balonu çıkmasın).
+                AppSettings.Update(s => s.AutoRecordLastDate = today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+                if (recordings.StartAutomatic(out var error))
+                {
+                    var id = recordings.CurrentRecordingId;
+                    _tray?.ShowBalloon("Toplantı kaydı otomatik başladı",
+                        $"{RecordingSchedule.FormatTime(end)}'da kendiliğinden duracak.", () => OpenRecordings(id));
+                }
+                else
+                {
+                    _tray?.ShowBalloon("Otomatik kayıt başlatılamadı", error ?? "Bilinmeyen hata.",
+                        () => OpenRecordings(null), isError: true);
+                }
+                break;
+
+            case ScheduleAction.Stop:
+                var stoppedId = recordings.CurrentRecordingId;
+                recordings.Stop();
+                _tray?.ShowBalloon("Toplantı kaydı durdu", "Dinleyip 📝 Transkript et ile metne çevirebilirsiniz.",
+                    () => OpenRecordings(stoppedId));
+                break;
+        }
+    }
+
     /// <summary>Paneli Kayıtlar bölümünde açar; <paramref name="selectId"/> verilirse o kaydı seçer.</summary>
     private void OpenRecordings(long? selectId) => _panel?.ShowRecordings(selectId);
 
@@ -247,9 +311,10 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        _scheduleTimer.Stop();
         _showWait?.Unregister(null);
         _closeWait?.Unregister(null);
-        // Kayıt sürüyorsa düzgün durdurulup bitirilir; bir sonraki açılışta çeviri kuyruğuna alınır.
+        // Kayıt sürüyorsa düzgün durdurulup bitirilir; kullanıcı "Transkript et" diyene kadar bekler.
         _recordings?.Dispose();
         _listener?.Dispose();
         _tray?.Dispose();

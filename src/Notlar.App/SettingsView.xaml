@@ -190,6 +190,24 @@
             <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,12"
                        Text="Var olan bir kaydın dili Kayıtlar'da, kaydın ⋯ menüsünden değiştirilir."/>
 
+            <CheckBox x:Name="AutoRecordCheck" Content="Hafta içi otomatik kayıt" Style="{StaticResource SettingCheck}"
+                      Checked="AutoRecordCheck_Changed" Unchecked="AutoRecordCheck_Changed"/>
+            <StackPanel Orientation="Horizontal" Margin="20,4,0,0">
+                <TextBox x:Name="AutoRecordStartBox" Width="54" MaxLength="5" TextAlignment="Center" Padding="2,3"
+                         Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                         CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Border}"
+                         ToolTip="Başlangıç saati (SS:dd)"
+                         LostKeyboardFocus="AutoRecordTime_LostKeyboardFocus" KeyDown="AutoRecordTime_KeyDown"/>
+                <TextBlock Text="–" Margin="8,0" VerticalAlignment="Center" Foreground="{DynamicResource Muted}"/>
+                <TextBox x:Name="AutoRecordEndBox" Width="54" MaxLength="5" TextAlignment="Center" Padding="2,3"
+                         Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                         CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Border}"
+                         ToolTip="Bitiş saati (SS:dd)"
+                         LostKeyboardFocus="AutoRecordTime_LostKeyboardFocus" KeyDown="AutoRecordTime_KeyDown"/>
+            </StackPanel>
+            <TextBlock Style="{StaticResource CheckHint}" Margin="20,4,0,12"
+                       Text="Pazartesi–Cuma bu saatler arasında kayıt kendiliğinden başlar ve durur (Notlar açıkken). Kayıt metne kendiliğinden çevrilmez; Kayıtlar'da 📝 Transkript et'e basmanız beklenir. Elle başlattığınız kayda dokunulmaz."/>
+
             <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,8" Foreground="{DynamicResource Fg}"
                        Text="Ses dosyaları 14 gün sonra silinir; transkript ve özetler kalır."/>
 

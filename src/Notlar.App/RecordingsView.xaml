@@ -224,7 +224,7 @@
 
             <Button x:Name="RecordButton" Grid.Row="0" Style="{StaticResource RecordButtonStyle}"
                     Margin="10,10,10,6" Padding="10,9" Content="⏺ Kaydı başlat"
-                    ToolTip="Mikrofon (Ben) ve bilgisayardan gelen ses (Karşı taraf) kaydedilir; metne çeviri bu bilgisayarda yapılır."
+                    ToolTip="Mikrofon (Ben) ve bilgisayardan gelen ses (Karşı taraf) kaydedilir; kayıt, siz 📝 Transkript et'e basınca bu bilgisayarda metne çevrilir."
                     Click="RecordButton_Click"/>
 
             <ListBox x:Name="RecordingsList" Grid.Row="1" Background="Transparent" BorderThickness="0" Padding="0"
@@ -313,13 +313,52 @@
                                      Visibility="Collapsed"/>
                         <TextBlock x:Name="ErrorText" Foreground="{DynamicResource DangerText}" TextWrapping="Wrap" FontSize="12"
                                    Margin="0,4,0,0" Visibility="Collapsed"/>
+
+                        <!-- Oynatıcı + metne çevrilecek aralıklar (ses dosyası durduğu sürece). -->
+                        <StackPanel x:Name="PlayerPanel" Margin="0,8,0,0" Visibility="Collapsed">
+                            <DockPanel LastChildFill="True">
+                                <Button x:Name="PlayButton" DockPanel.Dock="Left" Content="▶" Width="34"
+                                        Style="{StaticResource ActionButton}" Padding="0,5"
+                                        ToolTip="Kaydı dinle / duraklat" Click="PlayButton_Click"/>
+                                <TextBlock x:Name="PlayerTimeText" DockPanel.Dock="Right" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Muted}" FontSize="11.5" Text="00:00 / 00:00"/>
+                                <Grid Margin="6,0,8,0" VerticalAlignment="Center">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="4"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <!-- Seçili aralıklar (Accent) ve bekleyen başlangıç işareti (Warning). -->
+                                    <Canvas x:Name="RangeStrip" Grid.Row="0" Margin="5,0" IsHitTestVisible="False"
+                                            ClipToBounds="True" SizeChanged="RangeStrip_SizeChanged"/>
+                                    <Slider x:Name="PositionSlider" Grid.Row="1" Minimum="0" Maximum="1"
+                                            IsMoveToPointEnabled="True" Focusable="False"
+                                            ToolTip="Kayıtta ileri / geri gidin"
+                                            ValueChanged="PositionSlider_ValueChanged"/>
+                                </Grid>
+                            </DockPanel>
+                            <WrapPanel Margin="0,6,0,0">
+                                <Button x:Name="MarkStartButton" Content="[ Başlangıç" Style="{StaticResource ActionButton}"
+                                        Padding="8,3" FontSize="11.5" Margin="0,0,5,0"
+                                        ToolTip="Şu anki konumu, metne çevrilecek aralığın başı olarak işaretle"
+                                        Click="MarkStartButton_Click"/>
+                                <Button x:Name="MarkEndButton" Content="Bitiş ]" Style="{StaticResource ActionButton}"
+                                        Padding="8,3" FontSize="11.5" Margin="0,0,8,0"
+                                        ToolTip="İşaretli başlangıçtan şu anki konuma kadar olan aralığı ekle"
+                                        Click="MarkEndButton_Click"/>
+                                <TextBlock x:Name="RangeHintText" VerticalAlignment="Center" FontSize="11.5"
+                                           Foreground="{DynamicResource Muted}" TextWrapping="Wrap"/>
+                            </WrapPanel>
+                            <WrapPanel x:Name="RangeChips" Margin="0,5,0,0"/>
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- 3 ana eylem + ⋯ -->
                     <local:ActionStrip Grid.Row="4" Margin="10,10,10,0" Spacing="5">
+                        <Button x:Name="TranscribeButton" Content="📝 Transkript et" Visibility="Collapsed"
+                                Style="{StaticResource PrimaryActionButton}" Click="TranscribeButton_Click"/>
                         <Button x:Name="SummarizeButton" Content="✨ Özetle" Style="{StaticResource PrimaryActionButton}"
                                 ToolTip="Transkripti Claude'a özetlet" Click="SummarizeButton_Click"/>
-                        <Button x:Name="PlanButton" Content="🗂 Plan" Style="{StaticResource ActionButton}"
+                        <Button x:Name="PlanButton" Content="🗂 Görev çıkart" Style="{StaticResource ActionButton}"
                                 Click="PlanButton_Click"/>
                         <Button x:Name="ClaudeButton" Content="💬 Claude" Style="{StaticResource ActionButton}"
                                 Click="ClaudeButton_Click"/>

@@ -155,8 +155,10 @@ public sealed class ActionStrip : Panel
 /// <summary>Paneldeki 🎙 Kayıtlar görünümü. Liste: üstte geniş kayıt düğmesi, kayıt satırları (başlık, zaman · süre,
 /// durum rozeti). Dar panelde (<see cref="Wide"/> = false) satıra tıklayınca detay açılır, "‹ Kayıtlar" ile listeye
 /// dönülür; büyük modda liste solda (≈210 px), detay sağdadır. Detay: yerinde düzenlenen başlık, zaman · süre · dil,
-/// durum/hata, 3 ana eylem (✨ Özetle, 🗂 Plan ya da ▶ Planı başlat, 💬 Claude) ve ⋯ menüsü (🗂 Yeniden planla,
-/// 🔁 Yeniden çevir, 📋 Kopyala, 🌐 Dil, 📁 Proje, 🗑 Sil); Transkript / Özet sekmeleri. Claude işleri
+/// durum/hata, oynatıcı (dinleme + metne çevrilecek aralıkların seçimi), eylemler ve ⋯ menüsü (🗂 Görevleri yeniden
+/// çıkart, 🔁 Yeniden çevir, 📋 Kopyala, 🌐 Dil, 📁 Proje, 🗑 Sil); Transkript / Özet sekmeleri. Akış: kayıt durunca
+/// Kaydedildi durumunda bekler → kullanıcı dinler, isterse aralık seçer → 📝 Transkript et → ✨ Özetle /
+/// 🗂 Görev çıkart → ▶ Görevleri başlat (Claude Code terminalde açılır) / 💬 Claude. Claude işleri
 /// <see cref="RecordingController"/>'da yürür; görünüm gizlense de tamamlanıp kaydedilir. Veri değişiklik
 /// sinyaliyle (<see cref="Reload"/>) yenilenir; seçim ve dar moddaki detay ekranı korunur.</summary>
 public partial class RecordingsView : UserControl
@@ -180,6 +182,19 @@ public partial class RecordingsView : UserControl
     private readonly RecordingListItem _detailStatus = new(0);
     private readonly DispatcherTimer _elapsedTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _messageTimer = new() { Interval = TimeSpan.FromSeconds(8) };
+    private readonly DispatcherTimer _playerTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
+
+    /// <summary>Açık oynatıcı; ilk ▶ ile açılır (ses dosyaları o ana kadar kilitlenmez).</summary>
+    private RecordingPlayer? _player;
+
+    /// <summary>Seçili kaydın metne çevrilecek aralıkları; boşsa tüm kayıt çevrilir.</summary>
+    private IReadOnlyList<TimeRange> _ranges = [];
+
+    /// <summary>"[ Başlangıç" ile işaretlenmiş, "Bitiş ]" bekleyen aralık başı.</summary>
+    private long? _pendingStartMs;
+
+    /// <summary>true: zaman çubuğu koddan güncelleniyor (kullanıcı sarması değil).</summary>
+    private bool _updatingSlider;
     private long? _selectedId;
     private Recording? _current;
     private bool _hasTranscript;
@@ -207,9 +222,12 @@ public partial class RecordingsView : UserControl
         DetailBadge.DataContext = _detailStatus;
         _elapsedTimer.Tick += (_, _) => UpdateElapsed();
         _messageTimer.Tick += (_, _) => { _messageTimer.Stop(); MessageBar.Visibility = Visibility.Collapsed; };
+        _playerTimer.Tick += (_, _) => OnPlayerTick();
         IsVisibleChanged += (_, _) =>
         {
-            if (!IsVisible) CommitTitle();
+            if (IsVisible) return;
+            CommitTitle();
+            ClosePlayer();
         };
         ApplyLayout();
     }
@@ -333,6 +351,7 @@ public partial class RecordingsView : UserControl
         if (!_attached || _controller is null) return;
         _attached = false;
         _elapsedTimer.Stop();
+        ClosePlayer();
         _controller.RecordingStateChanged -= OnRecordingStateChanged;
         _controller.ProgressChanged -= OnProgressChanged;
         _controller.Completed -= OnTranscriptionFinished;
@@ -445,6 +464,7 @@ public partial class RecordingsView : UserControl
 
         UpdateMeta(r);
         UpdateStatus(r);
+        UpdatePlayer(r, otherRecording);
 
         // Metin değişmediyse yeniden oluşturulmaz (kaydırma konumu ve seçim korunur).
         var transcript = TranscriptFormatter.Format(segments);
@@ -470,6 +490,9 @@ public partial class RecordingsView : UserControl
 
     private void HideDetail()
     {
+        ClosePlayer();
+        _ranges = [];
+        _pendingStartMs = null;
         _current = null;
         _hasTranscript = false;
         _transcriptText = "";
@@ -554,7 +577,10 @@ public partial class RecordingsView : UserControl
         {
             StatusText.Text = r.Status switch
             {
-                RecordingStatus.Kaydediliyor => "Kayıt sürüyor; durdurulunca metne çevrilecek.",
+                RecordingStatus.Kaydediliyor => "Kayıt sürüyor; durunca transkript için sizi bekleyecek.",
+                RecordingStatus.Kaydedildi => r.AudioDeleted
+                    ? "Ses dosyaları silinmiş; bu kayıt artık metne çevrilemez."
+                    : "Kayıt hazır. Dinleyin, isterseniz aralık seçin, sonra 📝 Transkript et'e basın.",
                 RecordingStatus.Bekliyor => "Metne çevrilmek için sırada bekliyor.",
                 RecordingStatus.Cevriliyor => "Metne çevriliyor…",
                 RecordingStatus.Hazir => _hasTranscript ? "Metne çevrildi." : "Metne çevrildi; kayıtta konuşma bulunamadı.",
@@ -578,6 +604,20 @@ public partial class RecordingsView : UserControl
         var planning = _controller.IsPlanning(id);
         var hasPlan = r.PlanId is not null && !_planMissing;
 
+        // Kaydedildi: tek eylem 📝 Transkript et; transkript gerektiren eylemler çeviriden sonra görünür.
+        var recorded = r.Status == RecordingStatus.Kaydedildi;
+        TranscribeButton.Visibility = recorded ? Visibility.Visible : Visibility.Collapsed;
+        SummarizeButton.Visibility = recorded ? Visibility.Collapsed : Visibility.Visible;
+        PlanButton.Visibility = SummarizeButton.Visibility;
+        ClaudeButton.Visibility = SummarizeButton.Visibility;
+        TranscribeButton.Content = _ranges.Count > 0
+            ? $"📝 Seçilenleri transkript et ({_ranges.Count} aralık)"
+            : "📝 Tümünü transkript et";
+        TranscribeButton.IsEnabled = !r.AudioDeleted;
+        TranscribeButton.ToolTip = r.AudioDeleted ? "Ses dosyaları silinmiş; kayıt metne çevrilemez."
+            : _ranges.Count > 0 ? "Yalnızca seçili aralıkları bu bilgisayarda metne çevir"
+            : "Kaydın tamamını bu bilgisayarda metne çevir (yalnızca bir kısmını çevirmek için yukarıdan aralık seçin)";
+
         SummarizeButton.Content = summarizing ? "✨ Özetleniyor…" : "✨ Özetle";
         SummarizeButton.IsEnabled = ready && _hasTranscript && !summarizing;
         SummarizeButton.ToolTip = summarizing ? "Claude özet çıkarıyor…"
@@ -586,23 +626,23 @@ public partial class RecordingsView : UserControl
 
         if (planning)
         {
-            PlanButton.Content = "🗂 Planlanıyor…";
+            PlanButton.Content = "🗂 Görevler çıkarılıyor…";
             PlanButton.IsEnabled = false;
             PlanButton.ToolTip = "Claude transkriptten görev planı çıkarıyor…";
         }
         else if (hasPlan)
         {
-            PlanButton.Content = "▶ Planı başlat";
+            PlanButton.Content = "▶ Görevleri başlat";
             PlanButton.IsEnabled = true;
-            PlanButton.ToolTip = $"Bu kayıttan oluşturulan Plan #{r.PlanId}'i Claude Code ile çalıştır (yeni plan için ⋯ → Yeniden planla)";
+            PlanButton.ToolTip = $"Bu kayıttan çıkarılan görevleri (Plan #{r.PlanId}) terminalde Claude Code ile başlat (yeniden çıkarmak için ⋯ → Görevleri yeniden çıkart)";
         }
         else
         {
-            PlanButton.Content = "🗂 Plan";
+            PlanButton.Content = "🗂 Görev çıkart";
             PlanButton.IsEnabled = ready && _hasTranscript;
             PlanButton.ToolTip = ready && !_hasTranscript
-                ? "Transkript boş; görev planı çıkarılamaz."
-                : "Transkriptten Claude'a görev planı çıkart" + ProjectHint();
+                ? "Transkript boş; görev çıkarılamaz."
+                : "Transkriptten Claude'a görevleri (planı) çıkart" + ProjectHint();
         }
 
         ClaudeButton.IsEnabled = ready;
@@ -634,6 +674,8 @@ public partial class RecordingsView : UserControl
 
     private void OnRecordingStateChanged()
     {
+        // Kayıt sürerken dinleme kapalıdır: çalan ses bilgisayar sesi (Karşı taraf) kanalına karışırdı.
+        if (_controller?.IsRecording == true) ClosePlayer();
         UpdateRecordState();
         if (_controller?.CurrentRecordingId is { } id) _selectedId = id;
         Reload();
@@ -648,7 +690,7 @@ public partial class RecordingsView : UserControl
             RecordButton.SetResourceReference(ForegroundProperty, "Record");
             MiniRecordButton.SetResourceReference(BackgroundProperty, "Surface");
             MiniRecordButton.SetResourceReference(ForegroundProperty, "Record");
-            RecordButton.ToolTip = "Kaydı durdur; kayıt bu bilgisayarda metne çevrilecek.";
+            RecordButton.ToolTip = "Kaydı durdur; kayıt, siz 📝 Transkript et'e basana kadar bekler.";
             MiniRecordButton.ToolTip = RecordButton.ToolTip;
             UpdateElapsed();
             if (_attached) _elapsedTimer.Start();
@@ -661,7 +703,7 @@ public partial class RecordingsView : UserControl
             RecordButton.ClearValue(ForegroundProperty);
             MiniRecordButton.ClearValue(BackgroundProperty);
             MiniRecordButton.ClearValue(ForegroundProperty);
-            RecordButton.ToolTip = "Mikrofon (Ben) ve bilgisayardan gelen ses (Karşı taraf) kaydedilir; metne çeviri bu bilgisayarda yapılır.";
+            RecordButton.ToolTip = "Mikrofon (Ben) ve bilgisayardan gelen ses (Karşı taraf) kaydedilir; kayıt, siz 📝 Transkript et'e basınca bu bilgisayarda metne çevrilir.";
             MiniRecordButton.ToolTip = "Yeni kayıt başlat";
             _elapsedTimer.Stop();
         }
@@ -703,6 +745,351 @@ public partial class RecordingsView : UserControl
     private void OnTranscriptionFinished(long id) => Reload();
 
     private void OnTranscriptionFailed(long id, string message) => Reload();
+
+    // ---------------------------------------------------------------- Oynatıcı ve aralıklar
+
+    /// <summary>Kayıt dinlenebilir / aralık seçilebilir mi? Ses dosyaları durmalı ve kayıt ne kaydediliyor ne de
+    /// çevriliyor olmalı.</summary>
+    private static bool CanListen(Recording r) =>
+        !r.AudioDeleted && r.Status is RecordingStatus.Kaydedildi or RecordingStatus.Hazir or RecordingStatus.Hata;
+
+    private long SliderMs => (long)Math.Round(PositionSlider.Value * 1000);
+
+    /// <summary>Detay her yüklendiğinde çağrılır: oynatıcı bölümünü gösterir/gizler ve aralıkları tazeler. Açık
+    /// oynatıcı (aynı kayıt için) korunur.</summary>
+    private void UpdatePlayer(Recording r, bool otherRecording)
+    {
+        if (otherRecording)
+        {
+            ClosePlayer();
+            _pendingStartMs = null;
+            SetSlider(0);
+        }
+
+        if (!CanListen(r))
+        {
+            ClosePlayer();
+            _ranges = [];
+            _pendingStartMs = null;
+            PlayerPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        try
+        {
+            _ranges = _store!.GetRanges(r.Id);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+            _ranges = [];
+        }
+
+        // Oynatıcı açılana kadar süre kayıt zamanlarından tahmin edilir; açılınca dosyanın gerçek süresi kullanılır.
+        if (_player is null) SetSliderMaximum((r.Duration ?? TimeSpan.Zero).TotalSeconds);
+        PlayerPanel.Visibility = Visibility.Visible;
+        RefreshPlayer();
+    }
+
+    private void RefreshPlayer()
+    {
+        var recording = _controller?.IsRecording == true;
+        PlayButton.IsEnabled = !recording;
+        PlayButton.ToolTip = recording
+            ? "Kayıt sürerken dinlenemez (çalan ses yeni kayda karışırdı)."
+            : "Kaydı dinle / duraklat";
+        UpdatePlayState();
+
+        RangeHintText.Text = _pendingStartMs is { } start
+            ? $"Başlangıç {StampFor(start)} · bitiş noktasına gidip Bitiş ]'e basın"
+            : _ranges.Count == 0 ? "Aralık yok: tüm kayıt çevrilir." : "";
+        BuildRangeChips();
+        DrawRanges();
+    }
+
+    private void UpdatePlayState()
+    {
+        PlayButton.Content = _player is { IsPlaying: true } ? "⏸" : "▶";
+        PlayerTimeText.Text =
+            $"{FormatDuration(TimeSpan.FromSeconds(PositionSlider.Value))} / {FormatDuration(TimeSpan.FromSeconds(PositionSlider.Maximum))}";
+    }
+
+    private void SetSlider(double seconds)
+    {
+        _updatingSlider = true;
+        try
+        {
+            PositionSlider.Value = Math.Clamp(seconds, 0, PositionSlider.Maximum);
+        }
+        finally
+        {
+            _updatingSlider = false;
+        }
+    }
+
+    private void SetSliderMaximum(double seconds)
+    {
+        _updatingSlider = true;
+        try
+        {
+            PositionSlider.Maximum = Math.Max(1, seconds);
+        }
+        finally
+        {
+            _updatingSlider = false;
+        }
+    }
+
+    /// <summary>Zaman çubuğunu ve (açıksa) oynatıcıyı verilen konuma sarar.</summary>
+    private void Seek(double seconds)
+    {
+        SetSlider(seconds);
+        if (_player is not null) _player.Position = TimeSpan.FromSeconds(PositionSlider.Value);
+        UpdatePlayState();
+    }
+
+    private bool EnsurePlayer(Recording r)
+    {
+        if (_player is not null) return true;
+        try
+        {
+            var player = RecordingPlayer.Open(RecordingFiles.FolderFor(AppPaths.RecordingsDir, r.Id));
+            player.Ended += () => Dispatcher.InvokeAsync(OnPlayerEnded);
+            _player = player;
+            SetSliderMaximum(player.Duration.TotalSeconds);
+            SetSlider(PositionSlider.Value);
+            player.Position = TimeSpan.FromSeconds(PositionSlider.Value);
+            DrawRanges();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+            ShowMessage(ex is System.IO.IOException or UnauthorizedAccessException
+                ? "Ses dosyası açılamadı: " + ex.Message
+                : Describe(ex), isError: true);
+            return false;
+        }
+    }
+
+    /// <summary>Oynatıcıyı durdurur ve ses dosyalarını bırakır (silme / yeniden çeviri öncesi, kayıt değişince,
+    /// görünüm gizlenince).</summary>
+    private void ClosePlayer()
+    {
+        _playerTimer.Stop();
+        if (_player is null) return;
+        try
+        {
+            _player.Dispose();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+        }
+        _player = null;
+        UpdatePlayState();
+    }
+
+    private void PlayButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_controller is null || _current is not { } r || _controller.IsRecording) return;
+        if (!EnsurePlayer(r) || _player is not { } player) return;
+
+        try
+        {
+            if (player.IsPlaying)
+            {
+                player.Pause();
+                _playerTimer.Stop();
+            }
+            else
+            {
+                player.Play();
+                _playerTimer.Start();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+            ClosePlayer();
+            ShowMessage("Ses çalınamadı: " + ex.Message, isError: true);
+        }
+        UpdatePlayState();
+    }
+
+    private void OnPlayerTick()
+    {
+        if (_player is not { } player)
+        {
+            _playerTimer.Stop();
+            return;
+        }
+        // Kullanıcı çubuğu sürüklerken konum ezilmez.
+        if (!PositionSlider.IsMouseCaptureWithin) SetSlider(player.Position.TotalSeconds);
+        UpdatePlayState();
+    }
+
+    private void OnPlayerEnded()
+    {
+        _playerTimer.Stop();
+        if (_player is null) return;
+        SetSlider(0);
+        UpdatePlayState();
+    }
+
+    private void PositionSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_updatingSlider || PlayerTimeText is null) return;
+        if (_player is not null) _player.Position = TimeSpan.FromSeconds(e.NewValue);
+        UpdatePlayState();
+    }
+
+    private void RangeStrip_SizeChanged(object sender, SizeChangedEventArgs e) => DrawRanges();
+
+    private void MarkStartButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_current is null) return;
+        _pendingStartMs = SliderMs;
+        RefreshPlayer();
+    }
+
+    private void MarkEndButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_current is not { } r) return;
+        if (_pendingStartMs is not { } start)
+        {
+            ShowMessage("Önce [ Başlangıç ile aralığın başını işaretleyin, sonra bitiş noktasına gidip Bitiş ]'e basın.", isError: true);
+            return;
+        }
+
+        var end = SliderMs;
+        if (end <= start)
+        {
+            ShowMessage("Bitiş, başlangıçtan sonra olmalı. Zaman çubuğunda ileri gidip yeniden deneyin.", isError: true);
+            return;
+        }
+
+        _pendingStartMs = null;
+        SaveRanges(r.Id, [.. _ranges, new TimeRange(start, end)]);
+    }
+
+    private void RemoveRange(TimeRange range)
+    {
+        if (_current is not { } r) return;
+        SaveRanges(r.Id, _ranges.Where(x => x != range).ToList());
+    }
+
+    /// <summary>Aralıkları kaydeder (store birleştirip sıralar) ve arayüzü tazeler.</summary>
+    private void SaveRanges(long id, IReadOnlyList<TimeRange> ranges)
+    {
+        if (_store is null) return;
+        try
+        {
+            _ranges = _store.SetRanges(id, ranges);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+            ShowMessage(Describe(ex), isError: true);
+        }
+        RefreshPlayer();
+        UpdateButtons();
+    }
+
+    private string StampFor(long ms) => Stamp(ms, PositionSlider.Maximum >= HourMs / 1000.0);
+
+    /// <summary>Aralık çipleri: metne tıklamak aralığın başına sarar, ✕ aralığı kaldırır.</summary>
+    private void BuildRangeChips()
+    {
+        RangeChips.Children.Clear();
+        var flat = (Style)FindResource("FlatButton");
+        foreach (var range in _ranges)
+        {
+            var captured = range;
+
+            var seek = new Button
+            {
+                Content = $"{StampFor(range.StartMs)} – {StampFor(range.EndMs)}",
+                Style = flat,
+                Padding = new Thickness(7, 2, 2, 2),
+                FontSize = 11.5,
+                ToolTip = "Bu aralığın başına git",
+            };
+            seek.SetResourceReference(ForegroundProperty, "Fg");
+            seek.Click += (_, _) => Seek(captured.StartMs / 1000.0);
+
+            var remove = new Button
+            {
+                Content = "✕",
+                Style = flat,
+                Padding = new Thickness(4, 2, 6, 2),
+                FontSize = 10.5,
+                ToolTip = "Aralığı kaldır",
+            };
+            remove.Click += (_, _) => RemoveRange(captured);
+
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(seek);
+            row.Children.Add(remove);
+
+            var chip = new Border
+            {
+                CornerRadius = new CornerRadius(9),
+                BorderThickness = new Thickness(1),
+                Margin = new Thickness(0, 0, 5, 4),
+                Child = row,
+            };
+            chip.SetResourceReference(Border.BorderBrushProperty, "Border");
+            chip.SetResourceReference(Border.BackgroundProperty, "Surface");
+            RangeChips.Children.Add(chip);
+        }
+    }
+
+    /// <summary>Zaman çubuğunun üstündeki şerit: seçili aralıklar (Accent) ve bekleyen başlangıç işareti (Warning).</summary>
+    private void DrawRanges()
+    {
+        RangeStrip.Children.Clear();
+        var width = RangeStrip.ActualWidth;
+        var totalMs = PositionSlider.Maximum * 1000;
+        if (width <= 0 || totalMs <= 0) return;
+
+        foreach (var range in _ranges)
+        {
+            var left = Math.Clamp(range.StartMs / totalMs, 0, 1) * width;
+            var right = Math.Clamp(range.EndMs / totalMs, 0, 1) * width;
+            AddStripMark(left, Math.Max(2, right - left), "Accent");
+        }
+        if (_pendingStartMs is { } pending)
+            AddStripMark(Math.Clamp(pending / totalMs, 0, 1) * width, 2, "Warning");
+    }
+
+    private void AddStripMark(double left, double width, string brushKey)
+    {
+        var mark = new System.Windows.Shapes.Rectangle { Width = width, Height = 4, RadiusX = 1, RadiusY = 1 };
+        mark.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, brushKey);
+        Canvas.SetLeft(mark, left);
+        RangeStrip.Children.Add(mark);
+    }
+
+    /// <summary>📝 Transkript et: kaydı (seçili aralıklar varsa yalnızca onları) çeviri kuyruğuna alır.</summary>
+    private void TranscribeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_controller is null || _current is not { } r) return;
+        ClosePlayer();
+        try
+        {
+            _controller.Requeue(r.Id);
+            ShowMessage(_ranges.Count > 0
+                ? $"Seçili {_ranges.Count} aralık metne çevrilmek üzere sıraya alındı."
+                : "Kayıt metne çevrilmek üzere sıraya alındı.");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+            ShowMessage(Describe(ex), isError: true);
+        }
+        Reload();
+    }
 
     // ---------------------------------------------------------------- Seçim, başlık
 
@@ -826,12 +1213,12 @@ public partial class RecordingsView : UserControl
         else CreatePlan();
     }
 
-    /// <summary>🗂 Görev planla (ya da ⋯ → Yeniden planla): transkriptten Claude'a görev planı çıkartır.</summary>
+    /// <summary>🗂 Görev çıkart (ya da ⋯ → Görevleri yeniden çıkart): transkriptten Claude'a görev planı çıkartır.</summary>
     private async void CreatePlan()
     {
         if (_controller is null || _current is not { } r) return;
         if (r.PlanId is { } existing && !_planMissing
-            && !Confirm($"Bu kayıttan zaten Plan #{existing} oluşturuldu. Yeni bir plan oluşturulsun mu?"))
+            && !Confirm($"Bu kayıttan zaten görevler çıkarıldı (Plan #{existing}). Görevler yeniden çıkarılsın mı?"))
             return;
 
         var id = r.Id;
@@ -840,11 +1227,11 @@ public partial class RecordingsView : UserControl
         {
             var plan = await _controller.CreatePlanAsync(id, projectId);
             if (plan is null) return;
-            var message = $"Plan #{plan.Id} oluşturuldu: {plan.Title}";
+            var message = $"Görevler çıkarıldı (Plan #{plan.Id}): {plan.Title}";
             if (!IsVisible)
                 MessageBox.Show(message, "Notlar", MessageBoxButton.OK, MessageBoxImage.Information);
             else
-                ShowMessage(message + " (📋 Planlar sekmesinde görebilirsiniz.)");
+                ShowMessage(message + " — ▶ Görevleri başlat ile Claude Code'u başlatabilirsiniz.");
             Reload();
         }
         catch (OperationCanceledException)
@@ -854,7 +1241,7 @@ public partial class RecordingsView : UserControl
         catch (Exception ex)
         {
             AppLog.Write(ex);
-            ReportError("Görev planı oluşturulamadı: " + Describe(ex));
+            ReportError("Görevler çıkarılamadı: " + Describe(ex));
         }
     }
 
@@ -897,16 +1284,17 @@ public partial class RecordingsView : UserControl
 
         if (r.PlanId is not null && !_planMissing)
         {
-            var replan = MenuEntry(planning ? "🗂 Planlanıyor…" : "🗂 Yeniden planla", ready && _hasTranscript && !planning,
-                ready && !_hasTranscript ? "Transkript boş; görev planı çıkarılamaz."
-                    : "Transkriptten Claude'a yeni bir görev planı çıkart" + ProjectHint(),
+            var replan = MenuEntry(planning ? "🗂 Görevler çıkarılıyor…" : "🗂 Görevleri yeniden çıkart", ready && _hasTranscript && !planning,
+                ready && !_hasTranscript ? "Transkript boş; görev çıkarılamaz."
+                    : "Transkriptten Claude'a görevleri (yeni bir plan olarak) yeniden çıkart" + ProjectHint(),
                 CreatePlan);
             menu.Items.Add(replan);
         }
 
         menu.Items.Add(MenuEntry("🔁 Yeniden çevir",
             (r.Status is RecordingStatus.Hata or RecordingStatus.Hazir) && !r.AudioDeleted && !busyAudio,
-            r.AudioDeleted ? "Ses dosyaları silinmiş; kayıt yeniden çevrilemez." : "Kaydı yeniden metne çevir (ör. dili değiştirdikten sonra)",
+            r.AudioDeleted ? "Ses dosyaları silinmiş; kayıt yeniden çevrilemez."
+                : "Kaydı yeniden metne çevir (ör. dili ya da seçili aralıkları değiştirdikten sonra)",
             Requeue));
 
         menu.Items.Add(MenuEntry("📋 Kopyala", _hasTranscript || !string.IsNullOrWhiteSpace(r.Summary),
@@ -1030,8 +1418,10 @@ public partial class RecordingsView : UserControl
         var question = r.Status == RecordingStatus.Hazir
             ? "Kayıt yeniden metne çevrilecek; mevcut transkript yenisiyle değiştirilecek (özet korunur). Devam edilsin mi?"
             : "Kayıt yeniden metne çevrilmek üzere sıraya alınsın mı?";
+        if (_ranges.Count > 0) question += $"\n\nYalnızca seçili {_ranges.Count} aralık çevrilecek.";
         if (!Confirm(question)) return;
 
+        ClosePlayer();
         try
         {
             _controller.Requeue(r.Id);
@@ -1076,6 +1466,7 @@ public partial class RecordingsView : UserControl
         if (!Confirm($"\"{r.Title}\" kaydı silinsin mi?\n\nTranskript, özet ve ses dosyaları silinir; bu işlem geri alınamaz."))
             return;
 
+        ClosePlayer(); // açık ses dosyası klasörün silinmesini engellerdi
         try
         {
             _controller.Delete(r.Id);
@@ -1143,6 +1534,7 @@ public partial class RecordingsView : UserControl
     private static string StatusName(RecordingStatus status) => status switch
     {
         RecordingStatus.Kaydediliyor => "Kaydediliyor",
+        RecordingStatus.Kaydedildi => "Kaydedildi",
         RecordingStatus.Bekliyor => "Bekliyor",
         RecordingStatus.Cevriliyor => "Çevriliyor",
         RecordingStatus.Hazir => "Hazır",
@@ -1189,7 +1581,8 @@ public partial class RecordingsView : UserControl
 
     private static string TranscriptPlaceholderText(Recording r) => r.Status switch
     {
-        RecordingStatus.Kaydediliyor => "Kayıt sürüyor. Durdurduğunuzda ses bu bilgisayarda metne çevrilecek.",
+        RecordingStatus.Kaydediliyor => "Kayıt sürüyor. Durdurduğunuzda kayıt, siz 📝 Transkript et'e basana kadar bekler.",
+        RecordingStatus.Kaydedildi => "Henüz transkript yok. Kaydı dinleyip isterseniz aralık seçin, sonra 📝 Transkript et'e basın.",
         RecordingStatus.Bekliyor => "Metne çevrilmek için sırada bekliyor…",
         RecordingStatus.Cevriliyor => "Metne çevriliyor… (ilk çeviride Whisper modeli indirilir, ~550 MB)",
         RecordingStatus.Hata => "Transkript yok.",
