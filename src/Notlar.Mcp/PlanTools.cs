@@ -37,7 +37,10 @@ public sealed class PlanTools(PlanStore store, ProjectStore projects, NoteStore 
             var (_, steps) = store.GetPlan(plan.Id);
             var done = steps.Count(s => s.Status is StepStatus.Bitti or StepStatus.Atlandi);
             var folder = PlanFolder.Resolve(plan, projects) ?? "klasör yok";
-            sb.Append($"[#{plan.Id} · {StatusText(plan.Status)}] {TextSafety.Flatten(plan.Title)} ({folder}) — {done}/{steps.Count} adım\n");
+            sb.Append($"[#{plan.Id} · {StatusText(plan.Status)}] {TextSafety.Flatten(plan.Title)} ({folder}) — {done}/{steps.Count} adım");
+            if (PlanAssignees.Order(steps) is { Count: > 0 } assignees)
+                sb.Append(" — sorumlular: ").Append(string.Join(", ", assignees));
+            sb.Append('\n');
         }
         return sb.ToString().TrimEnd();
     });
@@ -86,11 +89,28 @@ public sealed class PlanTools(PlanStore store, ProjectStore projects, NoteStore 
                 sb.Append($"[{TextSafety.Flatten(stepProjectName)}] ");
             }
             sb.Append(TextSafety.Flatten(step.Text));
+            if (step.Assignee is { } assignee)
+            {
+                sb.Append($" [sorumlu: {TextSafety.Flatten(assignee)}");
+                if (step.DueText is { } due)
+                    sb.Append($" · son tarih: {TextSafety.Flatten(due)}");
+                sb.Append(']');
+            }
+            else if (step.DueText is { } dueOnly)
+            {
+                sb.Append($" [son tarih: {TextSafety.Flatten(dueOnly)}]");
+            }
             if (!string.IsNullOrWhiteSpace(step.Result))
                 sb.Append($" — {TextSafety.Flatten(step.Result)}");
             if (step.Author != NoteAuthor.Ben)
                 sb.Append($" (ekleyen: {TextSafety.Flatten(step.Author)})");
             sb.Append('\n');
+        }
+        if (PlanAssignees.AnyAssigned(steps))
+        {
+            sb.Append("Kime ne verildi: ").Append(PlanAssignees.BuildSummary(steps)).Append('\n');
+            sb.Append("Not: sorumlusu \"Ben\" dışında biri olan adımlar başkasına verilmiş işlerdir; bunları " +
+                      "uygulamadan önce kullanıcıya sor.\n");
         }
         sb.Append("\nAdımları sırayla uygula; her adıma başlarken plan_adim_durum ile 'yapiliyor', " +
                    "bitince 'bitti' ve kısa sonuç notuyla işaretle; takılırsan 'hata' ile nedenini yaz ve kullanıcıya sor.");
@@ -205,14 +225,17 @@ public sealed class PlanTools(PlanStore store, ProjectStore projects, NoteStore 
         Var olan bir plana yeni bir adım ekler; sira verilmezse sona eklenir, verilirse o konuma eklenip
         sonrakiler kaydırılır. metin veya not_id'den biri verilmeli; not_id verilirse adımın metni o notun
         metni olur. proje verilirse (ad veya id) adım o projeye bağlanır; proje planda henüz yoksa otomatik
-        olarak plana eklenir.
+        olarak plana eklenir. sorumlu (işin verildiği kişi; kullanıcının kendisi için "Ben") ve son_tarih
+        isteğe bağlıdır; bilinmiyorsa boş bırak, uydurma.
         """)]
     public string PlanAdimEkle(
         [Description("Planın id'si.")] long plan_id,
         [Description("Yeni adımın metni; not_id verilmişse atlanabilir.")] string? metin = null,
         [Description("Eklenecek konum (1 tabanlı); boşsa sona eklenir.")] int? sira = null,
         [Description("Adımın bağlı olacağı proje adı veya id'si (opsiyonel).")] string? proje = null,
-        [Description("Metin yerine bu notun metnini adım olarak kullan (opsiyonel).")] long? not_id = null) =>
+        [Description("Metin yerine bu notun metnini adım olarak kullan (opsiyonel).")] long? not_id = null,
+        [Description("İşin verildiği kişi (opsiyonel); kullanıcının kendisi için \"Ben\".")] string? sorumlu = null,
+        [Description("Son tarih, söylendiği gibi (opsiyonel), ör. \"Cuma\".")] string? son_tarih = null) =>
         Run(() =>
         {
             var (plan, _) = store.GetPlan(plan_id);
@@ -237,8 +260,9 @@ public sealed class PlanTools(PlanStore store, ProjectStore projects, NoteStore 
             }
 
             long? projectId = string.IsNullOrWhiteSpace(proje) ? null : ResolveProjectRefs(proje, null)[0];
-            var step = store.AddStep(plan_id, text, sira, AuthorName, projectId);
-            return $"Adım eklendi: {step.Order}. {TextSafety.Flatten(step.Text)} (id: {step.Id}).";
+            var step = store.AddStep(plan_id, text, sira, AuthorName, projectId, sorumlu, son_tarih);
+            var owner = step.Assignee is { } a ? $", sorumlu: {TextSafety.Flatten(a)}" : "";
+            return $"Adım eklendi: {step.Order}. {TextSafety.Flatten(step.Text)} (id: {step.Id}{owner}).";
         });
 
     private static string StatusText(PlanStatus status) => status switch

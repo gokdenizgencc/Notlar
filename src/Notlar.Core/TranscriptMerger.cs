@@ -12,7 +12,8 @@ public static class TranscriptMerger
 
     /// <summary>Segmentleri StartMs'e (eşitse mikrofon önce) göre sıralar; metni boş olanları atar. Ardışık, aynı
     /// kanala ait segmentler yalnızca aradaki boşluk 600 ms'den kısaysa ve birleşik süre 20 sn'yi aşmıyorsa tek
-    /// segmentte birleştirilir (metinler tek boşlukla); aksi halde her biri ayrı konuşma olarak kalır.</summary>
+    /// segmentte birleştirilir (metinler tek boşlukla); aksi halde her biri ayrı konuşma olarak kalır. Cümle sonu
+    /// işaretiyle (. ? ! …) biten segmentin ardına ekleme yapılmaz.</summary>
     public static IReadOnlyList<TranscriptSegment> Merge(IEnumerable<TranscriptSegment> a, IEnumerable<TranscriptSegment> b)
     {
         var ordered = a.Concat(b)
@@ -28,8 +29,9 @@ public static class TranscriptMerger
             {
                 var last = result[^1];
                 var end = Math.Max(last.EndMs, seg.EndMs);
+                // Cümle bittiyse (nokta, soru/ünlem işareti) satır da biter: kesintisiz konuşma cümle cümle ayrılır.
                 if (last.Speaker == seg.Speaker && seg.StartMs - last.EndMs < SameUtteranceGapMs
-                    && end - last.StartMs <= MaxUtteranceMs)
+                    && end - last.StartMs <= MaxUtteranceMs && !EndsSentence(last.Text))
                 {
                     result[^1] = last with { EndMs = end, Text = last.Text + " " + seg.Text };
                     continue;
@@ -39,4 +41,6 @@ public static class TranscriptMerger
         }
         return result;
     }
+
+    private static bool EndsSentence(string text) => text.Length > 0 && text[^1] is '.' or '?' or '!' or '…';
 }

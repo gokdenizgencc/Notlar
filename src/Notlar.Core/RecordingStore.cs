@@ -61,6 +61,17 @@ public sealed class RecordingStore
                 end_ms       INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS ix_recrange ON recording_ranges(recording_id, start_ms);
+            CREATE TABLE IF NOT EXISTS recording_persons (
+                recording_id INTEGER NOT NULL,
+                person       INTEGER NOT NULL,
+                auto_name    TEXT    NOT NULL,
+                gender       TEXT    NULL,
+                median_f0    REAL    NULL,
+                user_name    TEXT    NULL,
+                voiceprint   BLOB    NULL,
+                address_name TEXT    NULL,
+                PRIMARY KEY (recording_id, person)
+            );
             """;
         cmd.ExecuteNonQuery();
 
@@ -69,6 +80,14 @@ public sealed class RecordingStore
         {
             using var alter = conn.CreateCommand();
             alter.CommandText = "ALTER TABLE recording_segments ADD COLUMN person INTEGER NULL";
+            alter.ExecuteNonQuery();
+        }
+
+        // Hitaptan ad çıkarmadan önceki recording_persons tablosuna address_name kolonu.
+        if (!HasColumn(conn, "recording_persons", "address_name"))
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE recording_persons ADD COLUMN address_name TEXT NULL";
             alter.ExecuteNonQuery();
         }
     }
@@ -126,9 +145,12 @@ public sealed class RecordingStore
         Update(id, "status = 'Hata', error = $value", clean);
     }
 
-    /// <summary>Kaydın segmentlerini verilenlerle değiştirir (tek işlemde), durumu Hazir yapar ve hatayı temizler.
-    /// Boş liste geçerlidir (hiç konuşma bulunamadı).</summary>
-    public Recording SaveTranscript(long id, IReadOnlyList<TranscriptSegment> segments)
+    /// <summary>Kaydın segmentlerini ve kişilerini (adlar, bkz. <see cref="RecordingPerson"/>) verilenlerle değiştirir
+    /// (tek işlemde), durumu Hazir yapar ve hatayı temizler. Boş liste geçerlidir (hiç konuşma bulunamadı).
+    /// Segmentlerdeki <see cref="TranscriptSegment.PersonName"/> yok sayılır; adlar <paramref name="persons"/>'tan
+    /// gelir (verilmezse kaydın eski kişi adları silinir, satırlar "Kişi N" görünür).</summary>
+    public Recording SaveTranscript(long id, IReadOnlyList<TranscriptSegment> segments,
+        IReadOnlyList<RecordingPerson>? persons = null)
     {
         using (var conn = Open())
         using (var tx = conn.BeginTransaction())
@@ -172,6 +194,7 @@ public sealed class RecordingStore
                     cmd.ExecuteNonQuery();
                 }
             }
+            ReplacePersons(conn, tx, id, persons ?? []);
             tx.Commit();
         }
         _signal.Notify();
@@ -252,23 +275,165 @@ public sealed class RecordingStore
         using var conn = Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT start_ms, end_ms, speaker, text, person FROM recording_segments
-            WHERE recording_id = $id ORDER BY start_ms, id
+            SELECT s.start_ms, s.end_ms, s.speaker, s.text, s.person, COALESCE(p.user_name, p.address_name, p.auto_name),
+                   CASE WHEN p.user_name IS NOT NULL THEN 2 WHEN p.address_name IS NOT NULL THEN 1 ELSE 0 END
+            FROM recording_segments s
+            LEFT JOIN recording_persons p ON p.recording_id = s.recording_id AND p.person = s.person
+            WHERE s.recording_id = $id ORDER BY s.start_ms, s.id
             """;
         cmd.Parameters.AddWithValue("$id", id);
         var segments = new List<TranscriptSegment>();
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
+            var person = reader.IsDBNull(4) ? (int?)null : reader.GetInt32(4);
+            var name = person is null || reader.IsDBNull(5) ? null : reader.GetString(5);
             segments.Add(new TranscriptSegment(
                 reader.GetInt64(0),
                 reader.GetInt64(1),
                 Enum.Parse<Speaker>(reader.GetString(2)),
                 reader.GetString(3),
-                reader.IsDBNull(4) ? null : reader.GetInt32(4)));
+                person,
+                name,
+                name is null ? PersonNameSource.Tahmin : (PersonNameSource)reader.GetInt32(6)));
         }
         return segments;
     }
+
+    /// <summary>Kaydın kişileri (numara sırasıyla). Kişi ayrımı yapılmamış ya da adlandırmadan önceki sürümle çevrilmiş
+    /// kayıtlarda boştur (kullanıcı ad verdiyse yalnızca o kişiler).</summary>
+    public IReadOnlyList<RecordingPerson> GetPersons(long id)
+    {
+        Get(id); // yoksa / silinmişse RecordingNotFoundException
+
+        using var conn = Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT person, auto_name, gender, median_f0, user_name, voiceprint, address_name FROM recording_persons
+            WHERE recording_id = $id ORDER BY person
+            """;
+        cmd.Parameters.AddWithValue("$id", id);
+        var persons = new List<RecordingPerson>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            persons.Add(new RecordingPerson(
+                reader.GetInt32(0),
+                reader.GetString(1),
+                !reader.IsDBNull(2) && Enum.TryParse<VoiceGender>(reader.GetString(2), out var g) ? g : VoiceGender.Belirsiz,
+                reader.IsDBNull(3) ? null : reader.GetDouble(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : FromBlob((byte[])reader[5]),
+                reader.IsDBNull(6) ? null : reader.GetString(6)));
+        }
+        return persons;
+    }
+
+    /// <summary>Bir kişiye kullanıcının verdiği gerçek adı koyar (kayıttaki o kişinin tüm satırları bu adla görünür);
+    /// <paramref name="name"/> boş/null ise takma ada döner. Ad <see cref="SpeakerNaming.CleanUserName"/> ile temizlenir
+    /// (geçersizse <see cref="ArgumentException"/>). Kişi bu kaydın transkriptinde yoksa <see cref="ArgumentException"/>.
+    /// Kişinin kaydı yoksa (eski kayıt) takma adı "Kişi N" olarak oluşturulur.</summary>
+    public RecordingPerson RenamePerson(long id, int person, string? name)
+    {
+        var clean = SpeakerNaming.CleanUserName(name);
+        using (var conn = Open())
+        using (var tx = conn.BeginTransaction())
+        {
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "SELECT 1 FROM recordings WHERE id = $id AND deleted_at IS NULL";
+                cmd.Parameters.AddWithValue("$id", id);
+                if (cmd.ExecuteScalar() is null)
+                    throw new RecordingNotFoundException(id);
+            }
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "SELECT 1 FROM recording_segments WHERE recording_id = $id AND person = $person LIMIT 1";
+                cmd.Parameters.AddWithValue("$id", id);
+                cmd.Parameters.AddWithValue("$person", person);
+                if (cmd.ExecuteScalar() is null)
+                    throw new ArgumentException($"Bu kayıtta {TranscriptFormatter.PersonLabel(person)} yok.");
+            }
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = """
+                    INSERT INTO recording_persons(recording_id, person, auto_name, user_name)
+                    VALUES($id, $person, $auto, $name)
+                    ON CONFLICT(recording_id, person) DO UPDATE SET user_name = excluded.user_name
+                    """;
+                cmd.Parameters.AddWithValue("$id", id);
+                cmd.Parameters.AddWithValue("$person", person);
+                cmd.Parameters.AddWithValue("$auto", TranscriptFormatter.PersonLabel(person));
+                cmd.Parameters.AddWithValue("$name", (object?)clean ?? DBNull.Value);
+                cmd.ExecuteNonQuery();
+            }
+            tx.Commit();
+        }
+        _signal.Notify();
+        return GetPersons(id).First(p => p.Person == person);
+    }
+
+    private static void ReplacePersons(SqliteConnection conn, SqliteTransaction tx, long id, IReadOnlyList<RecordingPerson> persons)
+    {
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = "DELETE FROM recording_persons WHERE recording_id = $id";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
+        }
+        if (persons.Count == 0) return;
+
+        using var insert = conn.CreateCommand();
+        insert.Transaction = tx;
+        insert.CommandText = """
+            INSERT INTO recording_persons(recording_id, person, auto_name, gender, median_f0, user_name, voiceprint, address_name)
+            VALUES($id, $person, $auto, $gender, $f0, $user, $voice, $address)
+            """;
+        insert.Parameters.AddWithValue("$id", id);
+        var person = insert.Parameters.Add("$person", SqliteType.Integer);
+        var auto = insert.Parameters.Add("$auto", SqliteType.Text);
+        var gender = insert.Parameters.Add("$gender", SqliteType.Text);
+        var f0 = insert.Parameters.Add("$f0", SqliteType.Real);
+        var user = insert.Parameters.Add("$user", SqliteType.Text);
+        var voice = insert.Parameters.Add("$voice", SqliteType.Blob);
+        var address = insert.Parameters.Add("$address", SqliteType.Text);
+        foreach (var p in persons.DistinctBy(p => p.Person))
+        {
+            person.Value = p.Person;
+            auto.Value = TextSafety.Flatten(p.AutoName) is { Length: > 0 } a ? a : TranscriptFormatter.PersonLabel(p.Person);
+            gender.Value = p.Gender.ToString();
+            f0.Value = p.MedianF0Hz is { } hz && double.IsFinite(hz) ? hz : DBNull.Value;
+            user.Value = SafeUserName(p.UserName) is { } u ? u : DBNull.Value;
+            voice.Value = p.Voiceprint is { Length: > 0 } v ? ToBlob(v) : DBNull.Value;
+            address.Value = SafeUserName(p.AddressName) is { } an ? an : DBNull.Value;
+            insert.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>Kaydederken geçersiz bir kullanıcı adı transkripti düşürmesin: ad atılır (takma ad görünür).</summary>
+    private static string? SafeUserName(string? name)
+    {
+        try
+        {
+            return SpeakerNaming.CleanUserName(name);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private static byte[] ToBlob(float[] values) =>
+        System.Runtime.InteropServices.MemoryMarshal.AsBytes(values.AsSpan()).ToArray();
+
+    private static float[]? FromBlob(byte[] bytes) =>
+        bytes.Length == 0 || bytes.Length % sizeof(float) != 0
+            ? null
+            : System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(bytes).ToArray();
 
     /// <summary>Metne çevrilecek aralıkları verilenlerle değiştirir (<see cref="TimeRanges.Normalize"/> ile
     /// temizlenmiş olarak). Boş liste "tüm kayıt" demektir.</summary>

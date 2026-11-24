@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Notlar.Core;
 using Whisper.net.LibraryLoader;
 using Whisper.net.Logger;
 
@@ -18,7 +19,10 @@ namespace Notlar.Kayit;
 /// durur. Süreç GPU işi sırasında ölürse (sürücü çökmesi gibi yönetilen kodla yakalanamayan hatalar) bir sonraki
 /// açılışta işaret bulunur: o oturum yalnızca Cpu kütüphanesiyle çalışır ve <c>whisper-gpu.cokme</c> sayacı artar;
 /// sayaç 2'ye ulaşırsa GPU kalıcı kapanır (dosya silinince yeniden denenir). Başarılı bir GPU çevirisi sayacı sıfırlar.
-/// <c>NOTLAR_WHISPER_CPU=1</c> ortam değişkeni GPU'yu her zaman kapatır.</para></summary>
+/// <c>NOTLAR_WHISPER_CPU=1</c> ortam değişkeni GPU'yu her zaman kapatır.</para>
+/// <para>Kullanıcı tercihi (<see cref="Processor"/>, ⚙ Ayarlar): Otomatik = yukarıdaki davranış; GPU = ayrık GPU yoksa
+/// tümleşik GPU da kullanılır; CPU = GPU hiç denenmez. Kütüphane sırası tercihten etkilenmez (Vulkan kütüphanesinin
+/// CPU arka ucu kullanılır), böylece tercih yeniden başlatmadan bir sonraki çeviride geçerli olur.</para></summary>
 public static partial class WhisperRuntime
 {
     internal const string RunningMarkerFileName = "whisper-gpu.calisiyor";
@@ -32,6 +36,26 @@ public static partial class WhisperRuntime
     private static string? _gpuOffReason;
     private static string? _lastGpuBackend;
     private static bool _gpuInitFailed;
+    private static TranscriptionProcessor _processor = TranscriptionProcessor.Auto;
+
+    /// <summary>Kullanıcının işlemci tercihi; bir sonraki çeviride geçerli olur. Çökme koruması ve GPU hatası sonrası
+    /// kapatma tercihten önce gelir.</summary>
+    public static TranscriptionProcessor Processor
+    {
+        get
+        {
+            lock (Gate) return _processor;
+        }
+        set
+        {
+            lock (Gate)
+            {
+                if (_processor == value) return;
+                _processor = value;
+            }
+            Raise("Whisper işlemci tercihi: " + value + ".");
+        }
+    }
 
     /// <summary>Teşhis iletileri (hangi kütüphane yüklendi, hangi GPU seçildi, CPU'ya neden düşüldü…). Çeviri
     /// thread'inden tetiklenir; işleyicideki hata yutulur.</summary>
@@ -81,17 +105,17 @@ public static partial class WhisperRuntime
             : "Whisper GPU kapalı (" + _gpuOffReason + "); yalnızca CPU kullanılacak.");
     }
 
-    /// <summary>Bu çeviride GPU denenmeli mi? (Kapalı değilse ve ayrık GPU yok diye bilinmiyorsa.)</summary>
+    /// <summary>Bu çeviride GPU denenmeli mi? (Kapalı değilse ve kullanıcı yalnızca CPU seçmediyse.)</summary>
     internal static bool ShouldTryGpu
     {
         get
         {
-            lock (Gate) return _gpuOffReason is null;
+            lock (Gate) return _gpuOffReason is null && _processor != TranscriptionProcessor.Cpu;
         }
     }
 
     /// <summary>Kullanılacak GPU dizini: aygıt listesi biliniyorsa ilk ayrık aygıt, bilinmiyorsa 0. Liste var ama ayrık
-    /// aygıt yoksa null (GPU kullanılmamalı).</summary>
+    /// aygıt yoksa null (GPU kullanılmamalı) — tercih GPU ise o zaman ilk (tümleşik) aygıt.</summary>
     internal static int? PreferredGpuDevice
     {
         get
@@ -101,7 +125,7 @@ public static partial class WhisperRuntime
                 if (Devices.Count == 0) return 0;
                 foreach (var d in Devices)
                     if (d.Discrete) return d.Index;
-                return null;
+                return _processor == TranscriptionProcessor.Gpu ? Devices[0].Index : null;
             }
         }
     }

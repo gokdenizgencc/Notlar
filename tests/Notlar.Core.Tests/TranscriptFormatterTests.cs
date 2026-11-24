@@ -48,6 +48,32 @@ public class TranscriptFormatterTests
     }
 
     [Fact]
+    public void Uses_person_names_and_falls_back_to_numbers()
+    {
+        TranscriptSegment[] segments =
+        [
+            new(5_000, 6_000, Speaker.Ben, "Merhaba", 1, "Ahmet"),
+            new(7_000, 9_000, Speaker.KarsiTaraf, "Selam", 2, "Zeynep‮ Kaya", PersonNameSource.Kullanici),
+            new(9_500, 9_900, Speaker.KarsiTaraf, "Buyrun", 4, "Mehmet Bey", PersonNameSource.Hitap),
+            new(10_000, 11_000, Speaker.KarsiTaraf, "Evet", 3),
+            new(12_000, 13_000, Speaker.Ben, "etiketsiz"),
+        ];
+
+        Assert.Equal("[00:05] Ahmet: Merhaba\n[00:07] Zeynep Kaya: Selam\n[00:09] Mehmet Bey: Buyrun\n[00:10] Kişi 3: Evet\n[00:12] etiketsiz",
+            TranscriptFormatter.Format(segments));
+
+        var persons = TranscriptFormatter.DescribePersons(segments);
+        Assert.Equal(
+            "Konuşmacılar:\n"
+            + "- Ahmet: sesin tonundan tahmin edilmiş TAKMA ad (gerçek kimlik değil; kişinin gerçek adı bilinmiyor)\n"
+            + "- Zeynep Kaya: kullanıcının verdiği GERÇEK ad (bu kişi gerçekten bu addadır)\n"
+            + "- Mehmet Bey: toplantıda bu kişiye bu adla hitap edildiği için konuşmadan çıkarılan ad (büyük olasılıkla gerçek adı, ama kesin değil)\n"
+            + "- Kişi 3: yalnızca numara (adı bilinmiyor)",
+            persons);
+        Assert.Equal("", TranscriptFormatter.DescribePersons([new(0, 1, Speaker.Ben, "x")]));
+    }
+
+    [Fact]
     public void Uses_hours_when_recording_is_an_hour_or_longer()
     {
         var text = TranscriptFormatter.Format(

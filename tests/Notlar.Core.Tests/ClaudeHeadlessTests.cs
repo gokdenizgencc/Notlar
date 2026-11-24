@@ -124,8 +124,12 @@ public class ClaudeHeadlessTests
 
         foreach (var input in new[] { ClaudeHeadless.BuildSummaryInput(Rec, labelled), ClaudeHeadless.BuildPlanInput(Rec, labelled) })
         {
-            Assert.Contains("\"Kişi N:\" etiketi konuşanı sesine göre ayırır", input);
+            Assert.Contains("konuşanı sesine göre ayırır", input);
             Assert.Contains("gerçek adını vermez", input);
+            Assert.Contains("TAKMA ad diye işaretlenenleri", input);
+            Assert.Contains("Hitaptan çıkarılan adlar", input);
+            // Adsız (eski) kayıtta kişiler yalnızca numaradır.
+            Assert.Contains("- Kişi 1: yalnızca numara", input);
             Assert.DoesNotContain("etiketli değildir", input);
             Assert.Contains("[00:05] Kişi 1: Merhaba, başlayalım.\n[00:08] Kişi 2: Tamam.", input);
         }
@@ -136,7 +140,7 @@ public class ClaudeHeadlessTests
     {
         var input = ClaudeHeadless.BuildPlanInput(Rec, Segs);
 
-        Assert.Contains("{\"baslik\":\"...\",\"adimlar\":[\"...\"]}", input);
+        Assert.Contains("{\"baslik\":\"...\",\"adimlar\":[{\"is\":\"...\",\"sorumlu\":\"...\",\"son_tarih\":null}]}", input);
         Assert.Contains("YALNIZCA", input);
         Assert.Contains("15", input);
         Assert.Contains("<transkript_verisi>\n" + TranscriptFormatter.Format(Segs) + "\n</transkript_verisi>", input);
@@ -151,7 +155,86 @@ public class ClaudeHeadlessTests
         // Yalnızca "Ben"in işleri istenirse, kullanıcının konuşmadığı toplantılarda plan boş döner.
         Assert.DoesNotContain("kullanıcının (\"Ben\") yapması gereken işlerden", input);
         Assert.Contains("tüm aksiyon", input);
-        Assert.Contains("Sorumlu: iş", input);
+        // Sorumlu ayrı, yapısal bir alandır; adım metnine gömülmez.
+        Assert.Contains("KİME", input);
+        Assert.Contains("\"sorumlu\"", input);
+        Assert.Contains("Sorumlunun adını buraya yazma", input);
+        Assert.DoesNotContain("\"Sorumlu: iş\"", input);
+    }
+
+    [Fact]
+    public void Plan_input_forbids_inventing_owner_or_due_date_and_marks_user_as_Ben()
+    {
+        var input = ClaudeHeadless.BuildPlanInput(Rec, Segs);
+
+        Assert.Contains("adıyla geçiyorsa", input);
+        Assert.Contains("etiketteki adı olduğu gibi", input);
+        Assert.Contains("\"Ben\" yaz", input);
+        Assert.Contains("null yaz", input);
+        Assert.Contains("Asla ad uydurma", input);
+        Assert.Contains("\"son_tarih\"", input);
+        Assert.Contains("Tarih uydurma", input);
+    }
+
+    // --- ParsePlanItems (sorumlu / son tarih) ---
+
+    [Fact]
+    public void ParsePlanItems_reads_structured_steps_with_owner_and_due()
+    {
+        const string output = """
+            {"baslik":"Sürüm","adimlar":[
+              {"is":"Sunumu hazırla","sorumlu":"Ayşe","son_tarih":"Cuma"},
+              {"is":"Bütçeyi gönder","sorumlu":"ben","son_tarih":null},
+              {"is":"Notları paylaş","sorumlu":null},
+              {"is":"Müşteriyi ara","sorumlu":"belirsiz","son_tarih":"  "}
+            ]}
+            """;
+
+        var (title, steps) = ClaudeHeadless.ParsePlanItems(output, "yedek");
+
+        Assert.Equal("Sürüm", title);
+        Assert.Equal(
+            [
+                new PlanDraftStep("Sunumu hazırla", "Ayşe", "Cuma"),
+                new PlanDraftStep("Bütçeyi gönder", "Ben"),
+                new PlanDraftStep("Notları paylaş"),
+                new PlanDraftStep("Müşteriyi ara"),
+            ],
+            steps);
+    }
+
+    [Fact]
+    public void ParsePlanItems_accepts_legacy_string_steps_and_mixed_arrays()
+    {
+        var (_, legacy) = ClaudeHeadless.ParsePlanItems("""{"baslik":"x","adimlar":["Testleri yaz","Ali: Sürümü yayınla"]}""", "y");
+        Assert.Equal([new PlanDraftStep("Testleri yaz"), new PlanDraftStep("Ali: Sürümü yayınla")], legacy);
+
+        var (_, mixed) = ClaudeHeadless.ParsePlanItems("""{"baslik":"x","adimlar":["a",{"is":"b","sorumlu":"Can"},{"sorumlu":"Boş"},{"is":"  "},3]}""", "y");
+        Assert.Equal([new PlanDraftStep("a"), new PlanDraftStep("b", "Can")], mixed);
+    }
+
+    [Fact]
+    public void ParsePlan_returns_only_texts_for_structured_steps()
+    {
+        var (_, steps) = ClaudeHeadless.ParsePlan("""{"baslik":"x","adimlar":[{"is":"çok\nsatırlı","sorumlu":"Ayşe\n"}]}""", "y");
+        Assert.Equal(["çok satırlı"], steps);
+    }
+
+    [Fact]
+    public void ParsePlanItems_flattens_owner_and_caps_at_15()
+    {
+        var items = string.Join(",", Enumerable.Range(1, 20).Select(i => $$"""{"is":"adım {{i}}","sorumlu":"Kişi\n{{i}}:"}"""));
+        var (_, steps) = ClaudeHeadless.ParsePlanItems($$"""{"baslik":"x","adimlar":[{{items}}]}""", "y");
+
+        Assert.Equal(15, steps.Count);
+        Assert.Equal("Kişi 1", steps[0].Assignee);
+    }
+
+    [Fact]
+    public void ParsePlanItems_only_empty_structured_steps_explains_no_action_items_found()
+    {
+        var ex = Assert.Throws<FormatException>(() => ClaudeHeadless.ParsePlanItems("""{"baslik":"x","adimlar":[{"is":"","sorumlu":"Ayşe"}]}""", "y"));
+        Assert.Equal("Toplantıda plana dönüştürülecek bir iş bulunamadı.", ex.Message);
     }
 
     [Theory]

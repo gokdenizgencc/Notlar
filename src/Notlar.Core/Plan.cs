@@ -15,10 +15,11 @@ public sealed record Plan(
 
 /// <summary><paramref name="Author"/>: adımı ekleyen ("Ben" = kullanıcı, aksi halde MCP yazarı, ör. "Claude").
 /// <paramref name="ProjectId"/>: adımın isteğe bağlı olarak bağlı olduğu proje (planın bağlı olduğu
-/// projelerden biri olmalı).</summary>
+/// projelerden biri olmalı). <paramref name="Assignee"/>: işin verildiği kişi ("Ben" = kullanıcı; null =
+/// sorumlusu belirsiz). <paramref name="DueText"/>: toplantıda söylendiği hâliyle son tarih (ör. "Cuma").</summary>
 public sealed record PlanStep(
     long Id, long PlanId, int Order, string Text, StepStatus Status, string? Result, DateTimeOffset UpdatedAt,
-    string Author = NoteAuthor.Ben, long? ProjectId = null);
+    string Author = NoteAuthor.Ben, long? ProjectId = null, string? Assignee = null, string? DueText = null);
 
 /// <summary>Bir planın çalıştırılacağı klasörü belirler: plan bir projeye bağlıysa ve o proje hâlâ canlıysa
 /// projenin güncel yolu, aksi halde planın kendi kayıtlı proje_klasoru'u, o da yoksa null (klasöre bağlı

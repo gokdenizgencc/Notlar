@@ -4,8 +4,8 @@ using NAudio.Wave;
 
 namespace Notlar.Kayit;
 
-/// <summary>Toplantı kaydı: varsayılan çıkış aygıtının sistem sesi (WASAPI loopback → <c>karsi.wav</c>) ve
-/// varsayılan mikrofon (WASAPI → <c>ben.wav</c>) iki ayrı dosyaya, ikisi de sessizlik dolgulu olarak kaydedilir.
+/// <summary>Toplantı kaydı: çıkış aygıtının sistem sesi (WASAPI loopback → <c>karsi.wav</c>) ve mikrofon
+/// (WASAPI → <c>ben.wav</c>; ikisi de seçilmediyse Windows varsayılanı, bkz. <see cref="MicrophoneDeviceId"/>) iki ayrı dosyaya, ikisi de sessizlik dolgulu olarak kaydedilir.
 /// Mikrofon yoksa ya da açılamazsa yalnızca sistem sesi kaydedilir (<see cref="MicrophoneAvailable"/> = false);
 /// sistem sesi açılamazsa yalnızca mikrofon. İkisi de açılamazsa <see cref="Start"/> Türkçe
 /// <see cref="InvalidOperationException"/> fırlatır ve hiçbir dosya bırakmaz.
@@ -32,6 +32,16 @@ public sealed class MeetingRecorder : IDisposable
     /// <summary>Sistem sesi açılamadıysa nedeni (yoksa null).</summary>
     public Exception? LoopbackError { get; private set; }
 
+    /// <summary>Kaydedilecek mikrofonun aygıt kimliği; null → Windows'un varsayılan mikrofonu. Seçili aygıt
+    /// bulunamazsa varsayılana düşülür ve <see cref="DeviceNotes"/>'a yazılır. Sonraki <see cref="Start"/>'ta geçerli olur.</summary>
+    public string? MicrophoneDeviceId { get; set; }
+
+    /// <summary>Sistem sesi (loopback) kaydedilecek çıkış aygıtının kimliği; null → varsayılan çıkış aygıtı.</summary>
+    public string? LoopbackDeviceId { get; set; }
+
+    /// <summary>Son <see cref="Start"/>'ta seçili aygıt yerine varsayılana düşüldüyse açıklamalar (günlük için).</summary>
+    public IReadOnlyList<string> DeviceNotes { get; private set; } = [];
+
     /// <summary>Son kaydın klasörü.</summary>
     public string? Folder { get; private set; }
 
@@ -54,10 +64,14 @@ public sealed class MeetingRecorder : IDisposable
             MicrophoneError = null;
             LoopbackError = null;
 
-            _loopback = TryStartChannel(CreateLoopbackCapture, Path.Combine(folder, RecordingFiles.LoopbackFileName),
-                out var loopbackError);
-            _microphone = TryStartChannel(CreateMicrophoneCapture, Path.Combine(folder, RecordingFiles.MicrophoneFileName),
-                out var microphoneError);
+            var notes = new List<string>();
+            var loopbackId = LoopbackDeviceId;
+            var microphoneId = MicrophoneDeviceId;
+            _loopback = TryStartChannel(() => CreateLoopbackCapture(loopbackId, notes),
+                Path.Combine(folder, RecordingFiles.LoopbackFileName), out var loopbackError);
+            _microphone = TryStartChannel(() => CreateMicrophoneCapture(microphoneId, notes),
+                Path.Combine(folder, RecordingFiles.MicrophoneFileName), out var microphoneError);
+            DeviceNotes = notes;
             LoopbackError = loopbackError;
             MicrophoneError = microphoneError;
             LoopbackAvailable = _loopback is not null;
@@ -136,18 +150,18 @@ public sealed class MeetingRecorder : IDisposable
     // WasapiRecorder IWaveIn uygulamıyor. ChannelRecorder IWaveIn üzerinden test edilebilir kaldığı için klasik
     // sınıflar bilinçli olarak kullanılıyor.
 #pragma warning disable CS0618
-    private static IWaveIn? CreateLoopbackCapture()
+    private static IWaveIn? CreateLoopbackCapture(string? deviceId, List<string> notes)
     {
-        using var enumerator = new MMDeviceEnumerator();
-        if (!enumerator.HasDefaultAudioEndpoint(DataFlow.Render, Role.Console)) return null;
-        return new WasapiLoopbackCapture(enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console));
+        var device = AudioDevices.Open(capture: false, deviceId, out var note);
+        if (note is not null) notes.Add(note);
+        return device is null ? null : new WasapiLoopbackCapture(device);
     }
 
-    private static IWaveIn? CreateMicrophoneCapture()
+    private static IWaveIn? CreateMicrophoneCapture(string? deviceId, List<string> notes)
     {
-        using var enumerator = new MMDeviceEnumerator();
-        if (!enumerator.HasDefaultAudioEndpoint(DataFlow.Capture, Role.Console)) return null;
-        return new WasapiCapture(enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console));
+        var device = AudioDevices.Open(capture: true, deviceId, out var note);
+        if (note is not null) notes.Add(note);
+        return device is null ? null : new WasapiCapture(device);
     }
 #pragma warning restore CS0618
 

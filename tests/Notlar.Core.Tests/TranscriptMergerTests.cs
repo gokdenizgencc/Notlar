@@ -40,6 +40,15 @@ public class TranscriptMergerTests
     }
 
     [Fact]
+    public void Starts_new_segment_after_a_finished_sentence_even_without_a_pause()
+    {
+        var result = TranscriptMerger.Merge(
+            [Karsi(0, 2000, "Adım adım"), Karsi(2000, 3000, "gideceğiz."), Karsi(3000, 5000, "Peki ne olacak?"), Karsi(5000, 6000, "Bilmiyorum")], []);
+
+        Assert.Equal(["Adım adım gideceğiz.", "Peki ne olacak?", "Bilmiyorum"], result.Select(s => s.Text));
+    }
+
+    [Fact]
     public void Starts_new_segment_after_a_pause()
     {
         var result = TranscriptMerger.Merge([Ben(0, 1000, "a"), Ben(1600, 4000, "b")], []);

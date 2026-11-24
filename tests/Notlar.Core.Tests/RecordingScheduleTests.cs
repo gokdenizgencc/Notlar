@@ -61,6 +61,51 @@ public class RecordingScheduleTests
         Assert.Equal(ScheduleAction.None, RecordingSchedule.Decide(Monday(9, 45), Start, Start, false, false, null));
     }
 
+    [Fact]
+    public void Default_days_are_monday_to_friday()
+    {
+        // 27 Kasım 2026 Cuma, 29 Kasım 2026 Pazar.
+        Assert.Equal(ScheduleAction.Start,
+            RecordingSchedule.Decide(new DateTime(2026, 11, 27, 9, 45, 0), Start, End, false, false, null));
+        Assert.Equal(ScheduleAction.None,
+            RecordingSchedule.Decide(new DateTime(2026, 11, 29, 9, 45, 0), Start, End, false, false, null));
+        Assert.Equal(ScheduleAction.Start,
+            RecordingSchedule.Decide(Monday(9, 45), Start, End, false, false, null, RecordingSchedule.DefaultDays));
+    }
+
+    [Fact]
+    public void Selected_days_control_start()
+    {
+        DayOfWeek[] saturdayOnly = [DayOfWeek.Saturday];
+        Assert.Equal(ScheduleAction.Start, RecordingSchedule.Decide(Saturday(9, 45), Start, End, false, false, null, saturdayOnly));
+        Assert.Equal(ScheduleAction.None, RecordingSchedule.Decide(Monday(9, 45), Start, End, false, false, null, saturdayOnly));
+        Assert.Equal(ScheduleAction.None, RecordingSchedule.Decide(Monday(9, 45), Start, End, false, false, null, []));
+    }
+
+    [Fact]
+    public void Stops_automatic_recording_when_day_is_deselected() =>
+        Assert.Equal(ScheduleAction.Stop,
+            RecordingSchedule.Decide(Monday(9, 45), Start, End, true, true, MondayDate, [DayOfWeek.Tuesday]));
+
+    [Fact]
+    public void NormalizeDays_defaults_dedupes_and_orders()
+    {
+        Assert.Equal(RecordingSchedule.DefaultDays, RecordingSchedule.NormalizeDays(null));
+        Assert.Empty(RecordingSchedule.NormalizeDays([]));
+        Assert.Equal([DayOfWeek.Monday, DayOfWeek.Friday, DayOfWeek.Sunday],
+            RecordingSchedule.NormalizeDays([DayOfWeek.Sunday, DayOfWeek.Friday, DayOfWeek.Monday, DayOfWeek.Friday, (DayOfWeek)9]));
+    }
+
+    [Fact]
+    public void DescribeDays_reads_naturally()
+    {
+        Assert.Equal("Pazartesi–Cuma", RecordingSchedule.DescribeDays(null));
+        Assert.Equal("her gün", RecordingSchedule.DescribeDays(RecordingSchedule.WeekOrder));
+        Assert.Equal("hiçbir gün", RecordingSchedule.DescribeDays([]));
+        Assert.Equal("hafta sonu", RecordingSchedule.DescribeDays([DayOfWeek.Sunday, DayOfWeek.Saturday]));
+        Assert.Equal("Pzt, Çar, Paz", RecordingSchedule.DescribeDays([DayOfWeek.Sunday, DayOfWeek.Wednesday, DayOfWeek.Monday]));
+    }
+
     [Theory]
     [InlineData("09:30", 9, 30)]
     [InlineData("9:05", 9, 5)]

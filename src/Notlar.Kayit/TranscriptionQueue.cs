@@ -67,6 +67,16 @@ public sealed class TranscriptionQueue : IDisposable
     /// <summary>(id, Türkçe hata mesajı). Kayıt MarkFailed ile Hata durumuna alınmıştır (kayıt silinmediyse).</summary>
     public event Action<long, string>? Failed;
 
+    private volatile bool _speakerLabelingEnabled = true;
+
+    /// <summary>Satırlar kişilere ayrılsın mı (Kişi 1/2 etiketleri)? Kapalıyken konuşmacı modeli indirilmez ve transkript
+    /// etiketsiz kaydedilir. Bir sonraki çeviride geçerli olur. Varsayılan: açık.</summary>
+    public bool SpeakerLabelingEnabled
+    {
+        get => _speakerLabelingEnabled;
+        set => _speakerLabelingEnabled = value;
+    }
+
     /// <summary>Şu an işlenen kaydın id'si; boştaysa null.</summary>
     public long? CurrentId
     {
@@ -166,8 +176,14 @@ public sealed class TranscriptionQueue : IDisposable
             }
 
             // Konuşmacı modeli (küçük, isteğe bağlı) çeviriyle aynı anda indirilir; yavaş ağ çeviriyi bekletmesin.
-            var speakerModel = _speakers.Models.EnsureModelAsync(null, ct);
-            _ = speakerModel.ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+            // Kişi ayırma kapalıysa hiç indirilmez.
+            var labelSpeakers = _speakerLabelingEnabled;
+            Task<string>? speakerModel = null;
+            if (labelSpeakers)
+            {
+                speakerModel = _speakers.Models.EnsureModelAsync(null, ct);
+                _ = speakerModel.ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+            }
 
             IReadOnlyList<TranscriptSegment> mine = [];
             IReadOnlyList<TranscriptSegment> theirs = [];
@@ -185,10 +201,12 @@ public sealed class TranscriptionQueue : IDisposable
             }
 
             ct.ThrowIfCancellationRequested();
-            var merged = LabelSpeakers(id, TranscriptMerger.Merge(mine, theirs), hasMic ? micPath : null,
-                hasLoopback ? loopbackPath : null, speakerModel, ct);
+            var merged = TranscriptMerger.Merge(mine, theirs);
+            IReadOnlyList<RecordingPerson> persons = [];
+            if (speakerModel is not null)
+                merged = LabelSpeakers(id, merged, hasMic ? micPath : null, hasLoopback ? loopbackPath : null, speakerModel, ct, out persons);
             ct.ThrowIfCancellationRequested();
-            _store.SaveTranscript(id, merged);
+            _store.SaveTranscript(id, merged, persons);
             Raise(() => Completed?.Invoke(id));
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -205,11 +223,16 @@ public sealed class TranscriptionQueue : IDisposable
         }
     }
 
-    /// <summary>Satırlara kişi numarası verir; yapılamazsa (model inmedi/indirilemedi, gömme hatası…) satırları
-    /// olduğu gibi (etiketsiz) döndürür. Yalnızca uygulama kapanırken iptal fırlatır.</summary>
+    /// <summary>Satırlara kişi numarası verir ve kişilere ad verir: konuşmadaki hitaplardan eminse gerçek adı, değilse
+    /// ses tonuna göre takma ad (<paramref name="persons"/>;
+    /// önceki çeviride kullanıcının verdiği gerçek adlar ses parmak izi eşleşen kişiye taşınır, bkz.
+    /// <see cref="SpeakerNaming.Build"/>). Yapılamazsa (model inmedi/indirilemedi, gömme hatası…) satırları olduğu
+    /// gibi (etiketsiz) döndürür. Yalnızca uygulama kapanırken iptal fırlatır.</summary>
     private IReadOnlyList<TranscriptSegment> LabelSpeakers(long id, IReadOnlyList<TranscriptSegment> segments,
-        string? micPath, string? loopbackPath, Task<string> speakerModel, CancellationToken ct)
+        string? micPath, string? loopbackPath, Task<string> speakerModel, CancellationToken ct,
+        out IReadOnlyList<RecordingPerson> persons)
     {
+        persons = [];
         if (segments.Count == 0) return segments;
         try
         {
@@ -223,7 +246,10 @@ public sealed class TranscriptionQueue : IDisposable
             {
                 throw new TimeoutException("konuşmacı modeli henüz indirilemedi (indirme arka planda sürüyor)");
             }
-            return _speakers.Label(segments, micPath, loopbackPath, modelPath, Progress(id, PhaseSpeakers), ct);
+            var result = _speakers.LabelVoices(segments, micPath, loopbackPath, modelPath, Progress(id, PhaseSpeakers), ct);
+            // Ad önceliği: kullanıcının verdiği > konuşmadaki hitaplardan emin çıkarılan > ses tonundan takma ad.
+            persons = SpeakerNaming.Build(id, result.Voices, _store.GetPersons(id), result.Segments);
+            return result.Segments;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

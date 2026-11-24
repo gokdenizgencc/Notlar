@@ -10,7 +10,7 @@ public sealed class PlanStore
 {
     private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:ss.fffzzz";
     private const string PlanColumns = "id, title, project_path, status, created_at, updated_at, project_id";
-    private const string StepColumns = "id, plan_id, step_order, text, status, result, updated_at, author, project_id";
+    private const string StepColumns = "id, plan_id, step_order, text, status, result, updated_at, author, project_id, assignee, due_text";
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     private readonly string _connectionString;
@@ -66,13 +66,15 @@ public sealed class PlanStore
         idx.ExecuteNonQuery();
     }
 
-    /// <summary>Eski veritabanlarında plan_steps.author (adımı kimin eklediği) veya project_id (adımın bağlı
-    /// olduğu proje) sütunu yoksa ekler; mevcut adımlar kullanıcıya ('Ben') ve projesiz (NULL) atanır.
-    /// İdempotenttir.</summary>
+    /// <summary>Eski veritabanlarında plan_steps.author (adımı kimin eklediği), project_id (adımın bağlı
+    /// olduğu proje), assignee (işin verildiği kişi) veya due_text (son tarih) sütunu yoksa ekler; mevcut
+    /// adımlar kullanıcıya ('Ben'), projesiz, sorumlusuz ve son tarihsiz (NULL) kalır. İdempotenttir.</summary>
     private static void MigrateStepsTable(SqliteConnection conn)
     {
         var hasAuthor = false;
         var hasProjectId = false;
+        var hasAssignee = false;
+        var hasDueText = false;
         using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = "PRAGMA table_info(plan_steps)";
@@ -82,7 +84,22 @@ public sealed class PlanStore
                 var name = reader.GetString(1);
                 hasAuthor |= string.Equals(name, "author", StringComparison.OrdinalIgnoreCase);
                 hasProjectId |= string.Equals(name, "project_id", StringComparison.OrdinalIgnoreCase);
+                hasAssignee |= string.Equals(name, "assignee", StringComparison.OrdinalIgnoreCase);
+                hasDueText |= string.Equals(name, "due_text", StringComparison.OrdinalIgnoreCase);
             }
+        }
+
+        if (!hasAssignee)
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE plan_steps ADD COLUMN assignee TEXT NULL";
+            alter.ExecuteNonQuery();
+        }
+        if (!hasDueText)
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE plan_steps ADD COLUMN due_text TEXT NULL";
+            alter.ExecuteNonQuery();
         }
 
         if (!hasAuthor)
@@ -330,12 +347,22 @@ public sealed class PlanStore
     /// projesiz (yalnızca <paramref name="projectPath"/> ile, varsa) oluşturulur.</summary>
     public Plan CreatePlan(
         string title, string? projectPath, IEnumerable<string> steps, long? projectId = null,
+        string author = NoteAuthor.Ben, IReadOnlyList<long>? projectIds = null) =>
+        CreatePlanFromItems(title, projectPath, steps.Select(s => new PlanDraftStep(s)), projectId, author, projectIds);
+
+    /// <summary><see cref="CreatePlan"/> gibi; ancak her adım sorumlusu ve son tarihiyle birlikte verilir
+    /// (bkz. <see cref="PlanDraftStep"/>; ikisi de <see cref="PlanAssignees"/> ile normalleştirilir).</summary>
+    public Plan CreatePlanFromItems(
+        string title, string? projectPath, IEnumerable<PlanDraftStep> items, long? projectId = null,
         string author = NoteAuthor.Ben, IReadOnlyList<long>? projectIds = null)
     {
         var stepAuthor = NoteAuthor.Normalize(author);
         var cleanTitle = ValidateTitle(title);
         var cleanPath = projectPath is null ? null : ValidateProjectPath(projectPath);
-        var stepTexts = steps.Select(ValidateStepText).ToList();
+        var stepItems = items
+            .Select(i => (Text: ValidateStepText(i.Text), Assignee: PlanAssignees.Normalize(i.Assignee),
+                Due: PlanAssignees.NormalizeDue(i.DueText)))
+            .ToList();
         var effectiveProjectIds = ResolveProjectIds(projectId, projectIds);
         var now = Now();
 
@@ -360,19 +387,21 @@ public sealed class PlanStore
             }
 
             var order = 1;
-            foreach (var text in stepTexts)
+            foreach (var item in stepItems)
             {
                 using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
                 cmd.CommandText = """
-                    INSERT INTO plan_steps(plan_id, step_order, text, status, updated_at, author)
-                    VALUES ($planId, $order, $text, 'bekliyor', $now, $author)
+                    INSERT INTO plan_steps(plan_id, step_order, text, status, updated_at, author, assignee, due_text)
+                    VALUES ($planId, $order, $text, 'bekliyor', $now, $author, $assignee, $due)
                     """;
                 cmd.Parameters.AddWithValue("$author", stepAuthor);
                 cmd.Parameters.AddWithValue("$planId", planId);
                 cmd.Parameters.AddWithValue("$order", order++);
-                cmd.Parameters.AddWithValue("$text", text);
+                cmd.Parameters.AddWithValue("$text", item.Text);
                 cmd.Parameters.AddWithValue("$now", now);
+                cmd.Parameters.AddWithValue("$assignee", (object?)item.Assignee ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$due", (object?)item.Due ?? DBNull.Value);
                 cmd.ExecuteNonQuery();
             }
 
@@ -474,11 +503,16 @@ public sealed class PlanStore
     }
 
     /// <summary><paramref name="projectId"/> verilirse adım o projeye bağlanır; proje planın proje
-    /// listesinde yoksa otomatik olarak sona eklenir (ilk proje ise ana proje olur).</summary>
-    public PlanStep AddStep(long planId, string text, int? position = null, string author = NoteAuthor.Ben, long? projectId = null)
+    /// listesinde yoksa otomatik olarak sona eklenir (ilk proje ise ana proje olur). <paramref name="assignee"/>
+    /// / <paramref name="dueText"/>: isteğe bağlı sorumlu ve son tarih (<see cref="PlanAssignees"/> ile
+    /// normalleştirilir).</summary>
+    public PlanStep AddStep(long planId, string text, int? position = null, string author = NoteAuthor.Ben, long? projectId = null,
+        string? assignee = null, string? dueText = null)
     {
         _ = GetPlanOnly(planId) ?? throw new PlanNotFoundException(planId);
         var clean = ValidateStepText(text);
+        var cleanAssignee = PlanAssignees.Normalize(assignee);
+        var cleanDue = PlanAssignees.NormalizeDue(dueText);
         var now = Now();
 
         long stepId;
@@ -508,9 +542,11 @@ public sealed class PlanStore
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = """
-                    INSERT INTO plan_steps(plan_id, step_order, text, status, updated_at, author, project_id)
-                    VALUES ($planId, $order, $text, 'bekliyor', $now, $author, $projectId) RETURNING id
+                    INSERT INTO plan_steps(plan_id, step_order, text, status, updated_at, author, project_id, assignee, due_text)
+                    VALUES ($planId, $order, $text, 'bekliyor', $now, $author, $projectId, $assignee, $due) RETURNING id
                     """;
+                cmd.Parameters.AddWithValue("$assignee", (object?)cleanAssignee ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$due", (object?)cleanDue ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$author", NoteAuthor.Normalize(author));
                 cmd.Parameters.AddWithValue("$planId", planId);
                 cmd.Parameters.AddWithValue("$order", insertAt);
@@ -570,6 +606,25 @@ public sealed class PlanStore
             }
 
             tx.Commit();
+        }
+        _signal.Notify();
+        return GetStep(stepId)!;
+    }
+
+    /// <summary>Bir adımın sorumlusunu ve son tarihini değiştirir; boş/null verilen alan temizlenir
+    /// (<see cref="PlanAssignees"/> ile normalleştirilir).</summary>
+    public PlanStep SetStepAssignee(long stepId, string? assignee, string? dueText = null)
+    {
+        using (var conn = Open())
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "UPDATE plan_steps SET assignee = $assignee, due_text = $due, updated_at = $now WHERE id = $id";
+            cmd.Parameters.AddWithValue("$id", stepId);
+            cmd.Parameters.AddWithValue("$assignee", (object?)PlanAssignees.Normalize(assignee) ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$due", (object?)PlanAssignees.NormalizeDue(dueText) ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$now", Now());
+            if (cmd.ExecuteNonQuery() == 0)
+                throw new PlanStepNotFoundException(stepId);
         }
         _signal.Notify();
         return GetStep(stepId)!;
@@ -906,5 +961,7 @@ public sealed class PlanStore
         r.IsDBNull(5) ? null : r.GetString(5),
         Parse(r.GetString(6)),
         r.GetString(7),
-        r.IsDBNull(8) ? null : r.GetInt64(8));
+        r.IsDBNull(8) ? null : r.GetInt64(8),
+        r.IsDBNull(9) ? null : r.GetString(9),
+        r.IsDBNull(10) ? null : r.GetString(10));
 }

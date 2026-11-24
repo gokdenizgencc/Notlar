@@ -130,6 +130,31 @@ public static class SpeakerClustering
         return result;
     }
 
+    /// <summary>Her kişinin ses parmak izi: o kişiye atanmış satırların birim gömmelerinin birim ortalaması.
+    /// Gömmesi olmayan kişi sonuçta yer almaz. <paramref name="embeddings"/> ve <paramref name="persons"/> aynı
+    /// uzunlukta olmalı.</summary>
+    public static IReadOnlyDictionary<int, float[]> Centroids(IReadOnlyList<float[]?> embeddings, IReadOnlyList<int?> persons)
+    {
+        ArgumentNullException.ThrowIfNull(embeddings);
+        ArgumentNullException.ThrowIfNull(persons);
+        if (embeddings.Count != persons.Count)
+            throw new ArgumentException("Gömme ve kişi sayıları farklı.");
+
+        var dim = embeddings.Where(v => v is { Length: > 0 }).GroupBy(v => v!.Length)
+            .OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault();
+        var sums = new Dictionary<int, float[]>();
+        for (var i = 0; i < embeddings.Count; i++)
+        {
+            if (persons[i] is not { } person || Normalize(embeddings[i]) is not { } v || v.Length != dim) continue;
+            if (!sums.TryGetValue(person, out var sum)) sums[person] = sum = new float[dim];
+            for (var d = 0; d < dim; d++) sum[d] += v[d];
+        }
+        var result = new Dictionary<int, float[]>();
+        foreach (var (person, sum) in sums)
+            if (Normalize(sum) is { } unit) result[person] = unit;
+        return result;
+    }
+
     /// <summary>İki gömmenin kosinüs benzerliği (−1…1); biri boş/sıfır/bozuksa ya da boyutlar farklıysa 0.</summary>
     public static double Cosine(float[]? a, float[]? b)
     {
