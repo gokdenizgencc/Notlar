@@ -1,0 +1,12 @@
+<Project>
+  <!-- org.k2fsa.sherpa.onnx (konuşmacı ayrımı) tüm platformların yerel kütüphanelerini (~330 MB: android, linux, osx,
+       win-arm64, win-x86) bağımlılık olarak getiriyor. Uygulama yalnızca Windows x64'te çalıştığından diğerleri çıktıya
+       ve publish'e alınmaz. Yerel dosyalar paketi kullanan her projede (Kayit'e başvuran App dahil) çözüldüğünden
+       hedef burada, tüm projeler için tanımlı. -->
+  <Target Name="RemoveForeignSherpaRuntimes" AfterTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems)"
+          Condition="$([System.String]::Copy('%(RuntimeTargetsCopyLocalItems.NuGetPackageId)').StartsWith('org.k2fsa.sherpa.onnx.runtime.')) And '%(RuntimeTargetsCopyLocalItems.NuGetPackageId)' != 'org.k2fsa.sherpa.onnx.runtime.win-x64'" />
+    </ItemGroup>
+  </Target>
+</Project>

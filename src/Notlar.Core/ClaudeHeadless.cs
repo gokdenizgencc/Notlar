@@ -66,13 +66,19 @@ public static class ClaudeHeadless
         throw new ArgumentException($"Claude yolu desteklenmeyen bir dosya türü: {path} (.exe, .cmd veya .bat bekleniyor).");
     }
 
+    /// <summary>İstemlerde transkript satırlarının nasıl okunacağını anlatan ortak cümle.</summary>
+    private const string SpeakerNote =
+        "Her satır ayrı bir konuşmadır. Satır başındaki \"Kişi N:\" etiketi konuşanı sesine göre ayırır "
+        + "(aynı numara = aynı ses); bu otomatik bir tahmindir, yanılabilir ve kişilerin gerçek adını vermez: "
+        + "adları ve rolleri bağlamdan çıkar. Etiketsiz satırlarda kimin konuştuğunu da bağlamdan çıkar. ";
+
     /// <summary>✨ Özetle için stdin metni: Türkçe talimat (başlıklar: Özet, Alınan kararlar, Aksiyonlar (kim / ne),
     /// Açık sorular, Yorum) + etiketli transkript. Transkript boşsa <see cref="ArgumentException"/>.</summary>
     public static string BuildSummaryInput(Recording r, IReadOnlyList<TranscriptSegment> segs)
     {
         var sb = new StringBuilder();
         sb.Append("Aşağıda bir toplantının otomatik metne çevrilmiş dökümü var. ")
-          .Append("\"Ben\" kaydı yapan kullanıcıdır, \"Karşı taraf\" diğer katılımcılardır (birden fazla kişi olabilir). ")
+          .Append(SpeakerNote)
           .Append("Metin otomatik çeviri olduğundan yazım hataları ve eksik kelimeler içerebilir.\n\n");
         AppendMeta(sb, r);
         sb.Append("Görev: Bu toplantının Türkçe özetini Markdown olarak yaz. Tam olarak şu başlıkları bu sırayla kullan:\n")
@@ -95,11 +101,11 @@ public static class ClaudeHeadless
     {
         var sb = new StringBuilder();
         sb.Append("Aşağıda bir toplantının otomatik metne çevrilmiş dökümü var. ")
-          .Append("\"Ben\" kaydı yapan kullanıcıdır, \"Karşı taraf\" diğer katılımcılardır. ")
+          .Append(SpeakerNote)
           .Append("Metin otomatik çeviri olduğundan yazım hataları içerebilir.\n\n");
         AppendMeta(sb, r);
         sb.Append("Görev: Toplantıda kararlaştırılan tüm aksiyon ve işlerden bir görev planı çıkar. ")
-          .Append("Kullanıcının (\"Ben\") kendi işlerini öne al; başka birine verilen işleri de dahil et ve adımın başına ")
+          .Append("Sorumlusu belli olan işlerde adımın başına ")
           .Append("\"Sorumlu: iş\" biçiminde kişiyi yaz (ör. \"Ayşe: Sunumu hazırla\"). ")
           .Append($"En çok {MaxPlanSteps} adım yaz; her adım tek başına anlaşılır, eyleme dönük, kısa bir Türkçe cümle olsun ")
           .Append("(fiille başlasın, ör. \"Bütçe tablosunu güncelle\"). Adımları yapılma sırasına göre diz. ")

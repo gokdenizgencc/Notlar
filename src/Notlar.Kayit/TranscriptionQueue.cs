@@ -6,7 +6,11 @@ namespace Notlar.Kayit;
 /// <summary>Kayıtları arka planda tek tek metne çeviren iş kuyruğu (tek işçi thread, BelowNormal öncelik, arka plan).
 /// İş akışı: ses dosyalarını bul → MarkTranscribing → (gerekirse) modeli indir → ben.wav ve karsi.wav'ı (var olanları;
 /// kullanıcı aralık seçtiyse yalnızca RecordingStore.GetRanges aralıklarını) çevir → TranscriptMerger.Merge →
-/// SaveTranscript (durum Hazir). Hiç konuşma yoksa boş transkriptle Hazir.
+/// satırları sesine göre kişilere ayır (<see cref="SpeakerLabeler"/>) → SaveTranscript (durum Hazir). Hiç konuşma
+/// yoksa boş transkriptle Hazir. Kişi ayrımı isteğe bağlı bir süslemedir: konuşmacı modeli çeviri sürerken arka
+/// planda indirilir; çeviri bittiğinde hâlâ inmemişse, indirilemezse ya da kişi ayrımı herhangi bir hata verirse
+/// transkript kişi etiketsiz kaydedilir (neden <see cref="WhisperRuntime.Diagnostic"/> ile günlüğe düşer), çeviri
+/// düşmez. Etiketsiz kalan kayıt, model indikten sonra yeniden çevrilirse etiketlenir.
 /// Hata → MarkFailed(Türkçe mesaj) + <see cref="Failed"/>. <see cref="Dispose"/> ile iptal edilen iş Cevriliyor
 /// durumunda kalır; bir sonraki açılışta RecordingStore.RecoverInterrupted onu yeniden Bekliyor yapar.
 /// Olaylar işçi thread'inden tetiklenir (UI'ye aktarmak çağıranın işi); olay işleyicisindeki hata kuyruğu durdurmaz.</summary>
@@ -15,10 +19,16 @@ public sealed class TranscriptionQueue : IDisposable
     public const string PhaseDownloadingModel = "Model indiriliyor";
     public const string PhaseMicrophone = "Ben çevriliyor";
     public const string PhaseLoopback = "Karşı taraf çevriliyor";
+    public const string PhaseSpeakers = "Kişiler ayrılıyor";
+
+    /// <summary>Çeviri bittiğinde konuşmacı modeli hâlâ iniyorsa en çok bu kadar beklenir; sonra transkript etiketsiz
+    /// kaydedilir (indirme arka planda sürer, sonraki çeviride hazır olur).</summary>
+    private static readonly TimeSpan SpeakerModelWait = TimeSpan.FromSeconds(30);
 
     private readonly RecordingStore _store;
     private readonly WhisperModelManager _models;
     private readonly WhisperTranscriber _transcriber;
+    private readonly SpeakerLabeler _speakers;
     private readonly Func<long, string> _folderForRecording;
     private readonly BlockingCollection<long> _queue = new();
     private readonly HashSet<long> _pending = [];
@@ -29,13 +39,15 @@ public sealed class TranscriptionQueue : IDisposable
 
     /// <param name="folderForRecording">Kayıt id'sinden ses klasörünü verir; App'te genelde
     /// <c>id =&gt; RecordingFiles.FolderFor(AppPaths.RecordingsDir, id)</c>.</param>
+    /// <param name="speakers">Kişi ayırıcı; verilmezse konuşmacı modeli Whisper modeliyle aynı klasörde tutulur.</param>
     public TranscriptionQueue(RecordingStore store, WhisperModelManager models, WhisperTranscriber transcriber,
-        Func<long, string> folderForRecording)
+        Func<long, string> folderForRecording, SpeakerLabeler? speakers = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _models = models ?? throw new ArgumentNullException(nameof(models));
         _transcriber = transcriber ?? throw new ArgumentNullException(nameof(transcriber));
         _folderForRecording = folderForRecording ?? throw new ArgumentNullException(nameof(folderForRecording));
+        _speakers = speakers ?? new SpeakerLabeler(new SpeakerModelManager(_models.ModelsDir));
         _worker = new Thread(WorkerLoop)
         {
             Name = "Notlar.TranscriptionQueue",
@@ -46,7 +58,7 @@ public sealed class TranscriptionQueue : IDisposable
     }
 
     /// <summary>(id, aşama, oran 0–1). Aşama: <see cref="PhaseDownloadingModel"/>, <see cref="PhaseMicrophone"/>,
-    /// <see cref="PhaseLoopback"/>.</summary>
+    /// <see cref="PhaseLoopback"/>, <see cref="PhaseSpeakers"/>.</summary>
     public event Action<long, string, double>? ProgressChanged;
 
     /// <summary>Transkript kaydedildi (durum Hazir).</summary>
@@ -153,6 +165,10 @@ public sealed class TranscriptionQueue : IDisposable
                 return;
             }
 
+            // Konuşmacı modeli (küçük, isteğe bağlı) çeviriyle aynı anda indirilir; yavaş ağ çeviriyi bekletmesin.
+            var speakerModel = _speakers.Models.EnsureModelAsync(null, ct);
+            _ = speakerModel.ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+
             IReadOnlyList<TranscriptSegment> mine = [];
             IReadOnlyList<TranscriptSegment> theirs = [];
             if (hasMic)
@@ -169,7 +185,10 @@ public sealed class TranscriptionQueue : IDisposable
             }
 
             ct.ThrowIfCancellationRequested();
-            _store.SaveTranscript(id, TranscriptMerger.Merge(mine, theirs));
+            var merged = LabelSpeakers(id, TranscriptMerger.Merge(mine, theirs), hasMic ? micPath : null,
+                hasLoopback ? loopbackPath : null, speakerModel, ct);
+            ct.ThrowIfCancellationRequested();
+            _store.SaveTranscript(id, merged);
             Raise(() => Completed?.Invoke(id));
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -183,6 +202,37 @@ public sealed class TranscriptionQueue : IDisposable
         catch (Exception ex)
         {
             Fail(id, "Metne çevrilemedi: " + ex.Message);
+        }
+    }
+
+    /// <summary>Satırlara kişi numarası verir; yapılamazsa (model inmedi/indirilemedi, gömme hatası…) satırları
+    /// olduğu gibi (etiketsiz) döndürür. Yalnızca uygulama kapanırken iptal fırlatır.</summary>
+    private IReadOnlyList<TranscriptSegment> LabelSpeakers(long id, IReadOnlyList<TranscriptSegment> segments,
+        string? micPath, string? loopbackPath, Task<string> speakerModel, CancellationToken ct)
+    {
+        if (segments.Count == 0) return segments;
+        try
+        {
+            Report(id, PhaseSpeakers, 0);
+            string modelPath;
+            try
+            {
+                modelPath = speakerModel.WaitAsync(SpeakerModelWait, ct).GetAwaiter().GetResult();
+            }
+            catch (TimeoutException) when (!speakerModel.IsCompleted)
+            {
+                throw new TimeoutException("konuşmacı modeli henüz indirilemedi (indirme arka planda sürüyor)");
+            }
+            return _speakers.Label(segments, micPath, loopbackPath, modelPath, Progress(id, PhaseSpeakers), ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            WhisperRuntime.Raise($"Kayıt #{id}: kişi ayrımı yapılamadı, transkript etiketsiz kaydediliyor: {ex.GetType().Name}: {ex.Message}");
+            return segments;
         }
     }
 

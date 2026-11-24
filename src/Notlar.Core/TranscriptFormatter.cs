@@ -4,11 +4,16 @@ using System.Text.RegularExpressions;
 
 namespace Notlar.Core;
 
-/// <summary>Transkripti "[mm:ss] Ben: metin" / "[mm:ss] Karşı taraf: metin" satırlarına çevirir.</summary>
+/// <summary>Transkripti "[mm:ss] Kişi N: metin" satırlarına çevirir: her satır ayrı bir konuşmadır; "Kişi N" sese göre
+/// bulunan konuşmacıdır (aynı ses = aynı numara). Kişi bilgisi olmayan satırlar (eski kayıtlar, kişi ayrımı
+/// yapılamayanlar) etiketsiz "[mm:ss] metin" olarak yazılır.</summary>
 public static partial class TranscriptFormatter
 {
     /// <summary>Transkriptin kullanıcı verisi olarak sarıldığı etiket adı (Claude istemleri ve MCP çıktısı).</summary>
     public const string DataTag = "transkript_verisi";
+
+    /// <summary>Kayıt özetinin kullanıcı verisi olarak sarıldığı etiket adı (MCP çıktısı).</summary>
+    public const string SummaryTag = "ozet_verisi";
 
     private const long HourMs = 3_600_000;
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -25,12 +30,15 @@ public static partial class TranscriptFormatter
         foreach (var s in segments)
         {
             if (sb.Length > 0) sb.Append('\n');
-            sb.Append('[').Append(Stamp(s.StartMs, withHours)).Append("] ")
-                .Append(Label(s.Speaker)).Append(": ")
-                .Append(TextSafety.Flatten(s.Text));
+            sb.Append('[').Append(Stamp(s.StartMs, withHours)).Append("] ");
+            if (s.Person is { } person) sb.Append(PersonLabel(person)).Append(": ");
+            sb.Append(TextSafety.Flatten(s.Text));
         }
         return sb.ToString();
     }
+
+    /// <summary>Kişi numarasının görünen adı: "Kişi 1", "Kişi 2"…</summary>
+    public static string PersonLabel(int person) => string.Create(Inv, $"Kişi {person}");
 
     /// <summary>Biçimli transkripti &lt;transkript_verisi&gt; … &lt;/transkript_verisi&gt; etiketleri arasına
     /// koyar. Metin içinde geçen etiket benzeri ifadeler ('&lt;' → '‹') etkisizleştirilir; böylece transkript
@@ -41,8 +49,15 @@ public static partial class TranscriptFormatter
         return $"<{DataTag}>\n{body}\n</{DataTag}>";
     }
 
-    /// <summary>Konuşmacının Türkçe etiketi: "Ben" / "Karşı taraf".</summary>
-    public static string Label(Speaker speaker) => speaker == Speaker.Ben ? "Ben" : "Karşı taraf";
+    /// <summary>Özeti (çok satırlı, Markdown olabilir) &lt;ozet_verisi&gt; etiketleri arasına koyar. Özet, transkriptten
+    /// üretildiği ya da MCP ile yazıldığı için güvenilmez veridir: veri etiketlerini taklit eden ifadeler
+    /// etkisizleştirilir, görünmez/bidi karakterler atılır; satır yapısı korunur.</summary>
+    public static string WrapSummaryAsData(string summary)
+    {
+        var lines = summary.ReplaceLineEndings("\n").Split('\n').Select(TextSafety.Flatten);
+        var body = TagLike().Replace(string.Join('\n', lines), m => "‹" + m.Value[1..]);
+        return $"<{SummaryTag}>\n{body}\n</{SummaryTag}>";
+    }
 
     private static string Stamp(long ms, bool withHours)
     {
@@ -52,6 +67,6 @@ public static partial class TranscriptFormatter
             : string.Create(Inv, $"{(int)t.TotalMinutes:00}:{t.Seconds:00}");
     }
 
-    [GeneratedRegex(@"<\s*/?\s*transkript_verisi", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"<\s*/?\s*(?:transkript_verisi|ozet_verisi)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TagLike();
 }

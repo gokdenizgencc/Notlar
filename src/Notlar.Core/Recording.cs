@@ -4,7 +4,8 @@ namespace Notlar.Core;
 /// → Cevriliyor → Hazir | Hata.</summary>
 public enum RecordingStatus { Kaydediliyor, Kaydedildi, Bekliyor, Cevriliyor, Hazir, Hata }
 
-/// <summary>Transkript satırının konuşmacısı: mikrofon kanalı "Ben", sistem sesi (loopback) kanalı "Karşı taraf".</summary>
+/// <summary>Transkript satırının ses kanalı: mikrofon "Ben", sistem sesi (loopback) "Karşı taraf". Kimin konuştuğunu
+/// bu değil, <see cref="TranscriptSegment.Person"/> söyler (bir kanalda birden çok kişi konuşabilir).</summary>
 public enum Speaker { Ben, KarsiTaraf }
 
 /// <summary>Bir toplantı kaydı. <paramref name="Language"/>: 'tr' | 'en' | 'auto'.</summary>
@@ -16,4 +17,6 @@ public sealed record Recording(
     public TimeSpan? Duration => EndedAt - StartedAt;
 }
 
-public sealed record TranscriptSegment(long StartMs, long EndMs, Speaker Speaker, string Text);
+/// <summary>Transkriptin bir satırı (konuşma). <paramref name="Person"/>: sesine göre bulunan kişi numarası
+/// (1'den başlar, ilk konuşma sırasına göre; "Kişi N"). Kişi ayrımı yapılmadıysa/yapılamadıysa null (etiketsiz satır).</summary>
+public sealed record TranscriptSegment(long StartMs, long EndMs, Speaker Speaker, string Text, int? Person = null);

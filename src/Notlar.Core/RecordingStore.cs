@@ -50,7 +50,8 @@ public sealed class RecordingStore
                 start_ms     INTEGER NOT NULL,
                 end_ms       INTEGER NOT NULL,
                 speaker      TEXT    NOT NULL,
-                text         TEXT    NOT NULL
+                text         TEXT    NOT NULL,
+                person       INTEGER NULL
             );
             CREATE INDEX IF NOT EXISTS ix_recseg ON recording_segments(recording_id, start_ms);
             CREATE TABLE IF NOT EXISTS recording_ranges (
@@ -62,6 +63,27 @@ public sealed class RecordingStore
             CREATE INDEX IF NOT EXISTS ix_recrange ON recording_ranges(recording_id, start_ms);
             """;
         cmd.ExecuteNonQuery();
+
+        // Eski şemadaki DB'lerde person kolonu yoksa ekle (eski transkriptler kişi etiketsiz kalır).
+        if (!HasColumn(conn, "recording_segments", "person"))
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE recording_segments ADD COLUMN person INTEGER NULL";
+            alter.ExecuteNonQuery();
+        }
+    }
+
+    private static bool HasColumn(SqliteConnection conn, string table, string column)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"PRAGMA table_info({table})";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), column, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>Yeni bir kayıt başlatır: başlık "Toplantı dd.MM.yyyy HH:mm", durum Kaydediliyor.</summary>
@@ -131,20 +153,22 @@ public sealed class RecordingStore
             {
                 cmd.Transaction = tx;
                 cmd.CommandText = """
-                    INSERT INTO recording_segments(recording_id, start_ms, end_ms, speaker, text)
-                    VALUES($id, $start, $end, $speaker, $text)
+                    INSERT INTO recording_segments(recording_id, start_ms, end_ms, speaker, text, person)
+                    VALUES($id, $start, $end, $speaker, $text, $person)
                     """;
                 cmd.Parameters.AddWithValue("$id", id);
                 var start = cmd.Parameters.Add("$start", SqliteType.Integer);
                 var end = cmd.Parameters.Add("$end", SqliteType.Integer);
                 var speaker = cmd.Parameters.Add("$speaker", SqliteType.Text);
                 var text = cmd.Parameters.Add("$text", SqliteType.Text);
+                var person = cmd.Parameters.Add("$person", SqliteType.Integer);
                 foreach (var s in segments)
                 {
                     start.Value = s.StartMs;
                     end.Value = s.EndMs;
                     speaker.Value = s.Speaker.ToString();
                     text.Value = s.Text ?? "";
+                    person.Value = s.Person is { } p ? p : DBNull.Value;
                     cmd.ExecuteNonQuery();
                 }
             }
@@ -228,7 +252,7 @@ public sealed class RecordingStore
         using var conn = Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT start_ms, end_ms, speaker, text FROM recording_segments
+            SELECT start_ms, end_ms, speaker, text, person FROM recording_segments
             WHERE recording_id = $id ORDER BY start_ms, id
             """;
         cmd.Parameters.AddWithValue("$id", id);
@@ -240,7 +264,8 @@ public sealed class RecordingStore
                 reader.GetInt64(0),
                 reader.GetInt64(1),
                 Enum.Parse<Speaker>(reader.GetString(2)),
-                reader.GetString(3)));
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetInt32(4)));
         }
         return segments;
     }

@@ -32,19 +32,28 @@ public class TranscriptMergerTests
     }
 
     [Fact]
-    public void Merges_consecutive_same_speaker_with_gap_under_two_seconds()
+    public void Merges_consecutive_same_channel_while_speech_continues()
     {
-        var result = TranscriptMerger.Merge([Ben(0, 1000, "Merhaba"), Ben(2500, 4000, "nasılsın?")], []);
+        var result = TranscriptMerger.Merge([Ben(0, 1000, "Merhaba"), Ben(1500, 4000, "nasılsın?")], []);
 
         Assert.Equal([Ben(0, 4000, "Merhaba nasılsın?")], result);
     }
 
     [Fact]
-    public void Does_not_merge_when_gap_is_two_seconds_or_more()
+    public void Starts_new_segment_after_a_pause()
     {
-        var result = TranscriptMerger.Merge([Ben(0, 1000, "a"), Ben(3000, 4000, "b")], []);
+        var result = TranscriptMerger.Merge([Ben(0, 1000, "a"), Ben(1600, 4000, "b")], []);
 
         Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
+    public void Splits_uninterrupted_speech_longer_than_twenty_seconds()
+    {
+        var result = TranscriptMerger.Merge(
+            [Karsi(0, 12000, "bir"), Karsi(12000, 19000, "iki"), Karsi(19000, 26000, "üç")], []);
+
+        Assert.Equal([Karsi(0, 19000, "bir iki"), Karsi(19000, 26000, "üç")], result);
     }
 
     [Fact]
@@ -60,7 +69,7 @@ public class TranscriptMergerTests
     [Fact]
     public void Merges_chains_and_keeps_latest_end()
     {
-        var result = TranscriptMerger.Merge([Karsi(0, 5000, "bir"), Karsi(1000, 2000, "iki"), Karsi(6000, 7000, "üç")], []);
+        var result = TranscriptMerger.Merge([Karsi(0, 5000, "bir"), Karsi(1000, 2000, "iki"), Karsi(5500, 7000, "üç")], []);
 
         Assert.Equal([Karsi(0, 7000, "bir iki üç")], result);
     }

@@ -102,7 +102,23 @@ public sealed class RecordingToolsTests : IDisposable
         Assert.Contains("Süre: 42 dk", result);
         Assert.Contains("## Özet\nBütçe konuşuldu.", result);
         Assert.Contains(TranscriptFormatter.WrapAsData(Segs), result);
-        Assert.Contains("[01:05] Karşı taraf: Bütçeyi cuma gönderelim.", result);
+        Assert.Contains("[01:05] Bütçeyi cuma gönderelim.", result);
+    }
+
+    [Fact]
+    public void KayitGetir_shows_person_labels_when_transcript_has_them()
+    {
+        var id = ReadyRecording("Toplantı");
+        _f.Store.SaveTranscript(id,
+        [
+            new(5_000, 6_000, Speaker.Ben, "Merhaba, başlayalım.", 1),
+            new(65_000, 70_000, Speaker.KarsiTaraf, "Bütçeyi cuma gönderelim.", 2),
+        ]);
+
+        var result = _tools.KayitGetir(id);
+
+        Assert.Contains("[00:05] Kişi 1: Merhaba, başlayalım.", result);
+        Assert.Contains("[01:05] Kişi 2: Bütçeyi cuma gönderelim.", result);
     }
 
     [Fact]

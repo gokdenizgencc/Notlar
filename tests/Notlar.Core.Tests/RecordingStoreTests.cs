@@ -136,6 +136,52 @@ public class RecordingStoreTests
     }
 
     [Fact]
+    public void SaveTranscript_keeps_person_numbers_and_unlabelled_lines()
+    {
+        using var f = new RecordingFixture();
+        var id = f.Store.Start("tr").Id;
+        TranscriptSegment[] segments =
+        [
+            new(0, 1500, Speaker.Ben, "Merhaba", 1),
+            new(2000, 4000, Speaker.KarsiTaraf, "Selam", 2),
+            new(5000, 5400, Speaker.KarsiTaraf, "Evet"),
+            new(6000, 9000, Speaker.KarsiTaraf, "Başlayalım", 1),
+        ];
+
+        f.Store.SaveTranscript(id, segments);
+
+        Assert.Equal(segments, f.Store.GetSegments(id));
+        Assert.Equal([1, 2, null, 1], f.Reopen().GetSegments(id).Select(s => s.Person));
+    }
+
+    [Fact]
+    public void Database_without_person_column_is_migrated_and_old_segments_stay_unlabelled()
+    {
+        using var f = new RecordingFixture();
+        var id = f.Store.Start("tr").Id;
+        f.Store.SaveTranscript(id, TwoSegments);
+        // Kişi ayrımından önceki şema: person kolonu yok.
+        SqliteConnection.ClearAllPools();
+        using (var conn = new SqliteConnection($"Data Source={f.DbPath}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "ALTER TABLE recording_segments DROP COLUMN person";
+            cmd.ExecuteNonQuery();
+        }
+        SqliteConnection.ClearAllPools();
+
+        var reopened = f.Reopen();
+
+        Assert.Equal(TwoSegments, reopened.GetSegments(id));
+        Assert.All(reopened.GetSegments(id), s => Assert.Null(s.Person));
+        reopened.SaveTranscript(id, [new(0, 1000, Speaker.Ben, "yeni", 3)]);
+        Assert.Equal(3, Assert.Single(reopened.GetSegments(id)).Person);
+        // Göç idempotent: yeniden açınca hata vermez.
+        Assert.Equal(3, Assert.Single(f.Reopen().GetSegments(id)).Person);
+    }
+
+    [Fact]
     public void SaveTranscript_with_no_segments_marks_ready_with_empty_transcript()
     {
         using var f = new RecordingFixture();
