@@ -5,7 +5,7 @@
         Title="Notlar" Width="1000" Height="700" MinWidth="500" MinHeight="350"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
-        FontFamily="Segoe UI"
+        FontFamily="{DynamicResource AppFont}"
         PreviewKeyDown="Window_PreviewKeyDown"
         PreviewMouseWheel="Window_PreviewMouseWheel"
         Closed="Window_Closed">

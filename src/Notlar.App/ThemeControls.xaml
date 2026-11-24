@@ -12,7 +12,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="3"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontFamily" Value="{DynamicResource AppFont}"/>
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="Grid.IsSharedSizeScope" Value="True"/>
         <Setter Property="Template">
@@ -106,7 +106,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Border}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="8,5"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontFamily" Value="{DynamicResource AppFont}"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="MaxWidth" Value="360"/>
         <Setter Property="Template">

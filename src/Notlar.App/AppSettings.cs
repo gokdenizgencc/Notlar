@@ -7,8 +7,10 @@ using Notlar.Core;
 
 namespace Notlar.App;
 
-/// <summary>Uygulama ayarları (görünüm, panel, kayıt). JSON olarak diske kaydedilir; panelin ⚙ Ayarlar görünümünden düzenlenir.</summary>
-public sealed class AppSettings
+/// <summary>Uygulama ayarları (görünüm, panel, kayıt). JSON olarak diske kaydedilir; panelin ⚙ Ayarlar görünümünden düzenlenir.
+/// Bölüm bazlı yeni ayarlar ayrı partial dosyalarda durur (AppSettings.&lt;Bölüm&gt;.cs); Load sonrası doğrulama için her bölüm
+/// <see cref="NormalizeSections"/> içindeki kendi partial metodunu doldurur.</summary>
+public sealed partial class AppSettings
 {
     public const double MinDayFontSize = 10;
     public const double MaxDayFontSize = 40;
@@ -128,6 +130,7 @@ public sealed class AppSettings
             if (!RecordingSchedule.TryParseTime(settings.AutoRecordEnd, out _))
                 settings.AutoRecordEnd = DefaultAutoRecordEnd;
 
+            settings.NormalizeSections();
             return settings;
         }
         catch (Exception ex)
@@ -136,6 +139,23 @@ public sealed class AppSettings
             return CreateDefault();
         }
     }
+
+    /// <summary>Bölüm partial'larının yüklenen değerleri doğrulaması (geçersizse varsayılana çekmesi) için kancalar.
+    /// Uygulanmayan partial metot derlemede yok sayılır.</summary>
+    private void NormalizeSections()
+    {
+        NormalizeGeneral();
+        NormalizeShortcuts();
+        NormalizeNotifications();
+        NormalizeData();
+        NormalizeAudio();
+    }
+
+    partial void NormalizeGeneral();
+    partial void NormalizeShortcuts();
+    partial void NormalizeNotifications();
+    partial void NormalizeData();
+    partial void NormalizeAudio();
 
     private static AppSettings CreateDefault() => new()
     {

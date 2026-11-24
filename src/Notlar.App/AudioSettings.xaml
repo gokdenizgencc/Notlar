@@ -1,0 +1,77 @@
+<UserControl x:Class="Notlar.App.AudioSettings"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- ⚙ Ayarlar → Kayıt → Ses ve metne çevirme: mikrofon ve sistem sesi aygıtı, mikrofon testi, işlemci (GPU/CPU),
+         kişi ayırma, kayıt bitince otomatik çeviri. SettingsView'deki "Kayıt" bölümünün sonuna yerleşir. Stiller
+         (SectionTitle, FieldTitle, Hint, Chip, SettingCheck, CheckHint, ActionButton) SettingsView.Resources'tan gelir;
+         bu denetim kendi InitializeComponent'inde henüz ağaca bağlı olmadığından DynamicResource ile başvurulur.
+         Değişiklikler anında kaydedilir (AppSettings.Update). -->
+    <StackPanel Margin="0,16,0,0">
+        <TextBlock Text="Ses ve metne çevirme" Style="{DynamicResource FieldTitle}" FontSize="13" Margin="0,0,0,10"/>
+
+        <!-- ── Aygıtlar ── -->
+        <TextBlock Text="Mikrofon (sizin sesiniz)" Style="{DynamicResource FieldTitle}"/>
+        <ComboBox x:Name="MicrophoneCombo" HorizontalAlignment="Stretch" MaxWidth="360" HorizontalContentAlignment="Left"
+                  DisplayMemberPath="Name" SelectionChanged="MicrophoneCombo_SelectionChanged"
+                  AutomationProperties.Name="Mikrofon aygıtı"/>
+
+        <TextBlock Text="Sistem sesi (karşı taraf)" Style="{DynamicResource FieldTitle}" Margin="0,10,0,6"/>
+        <ComboBox x:Name="OutputCombo" HorizontalAlignment="Stretch" MaxWidth="360" HorizontalContentAlignment="Left"
+                  DisplayMemberPath="Name" SelectionChanged="OutputCombo_SelectionChanged"
+                  AutomationProperties.Name="Sistem sesi çıkış aygıtı"/>
+        <TextBlock Style="{DynamicResource Hint}" Margin="0,4,0,6"
+                   Text="Toplantı sesinin çaldığı hoparlör/kulaklık. Seçili aygıt kayıt başlarken bağlı değilse Windows'un varsayılanı kullanılır. Değişiklik bir sonraki kayıtta geçerli olur."/>
+        <Button Content="↻ Aygıt listesini yenile" Style="{DynamicResource LinkButton}" Margin="0,0,0,12"
+                Click="RefreshDevices_Click"/>
+
+        <!-- ── Mikrofon testi ── -->
+        <TextBlock Text="Mikrofon testi" Style="{DynamicResource FieldTitle}"/>
+        <Grid Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="MicTestButton" Content="🎤 Test et" Style="{DynamicResource ActionButton}"
+                    Click="MicTestButton_Click" AutomationProperties.Name="Mikrofon testini başlat ya da durdur"/>
+            <Border Grid.Column="1" Height="10" Margin="10,0,0,0" VerticalAlignment="Center" CornerRadius="5"
+                    Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                    ClipToBounds="True" AutomationProperties.Name="Mikrofon seviyesi">
+                <Border x:Name="LevelFill" HorizontalAlignment="Left" Width="0" CornerRadius="4"
+                        Background="{DynamicResource Accent}"/>
+            </Border>
+        </Grid>
+        <TextBlock x:Name="MicTestHint" Style="{DynamicResource Hint}" Margin="0,0,0,12"
+                   Text="Seçili mikrofonu dinler; hiçbir şey kaydedilmez. Ayarlardan çıkınca kendiliğinden durur."/>
+
+        <!-- ── İşlemci ── -->
+        <TextBlock Text="Metne çevirme işlemcisi" Style="{DynamicResource FieldTitle}"/>
+        <WrapPanel>
+            <RadioButton x:Name="ProcessorAuto" Content="Otomatik" GroupName="TranscriptionProcessor"
+                         Style="{DynamicResource Chip}" Checked="Processor_Checked"
+                         ToolTip="Ayrık ekran kartı varsa GPU, yoksa CPU."/>
+            <RadioButton x:Name="ProcessorGpu" Content="GPU" GroupName="TranscriptionProcessor"
+                         Style="{DynamicResource Chip}" Checked="Processor_Checked"
+                         ToolTip="Ayrık ekran kartı yoksa tümleşik GPU da denenir (genelde CPU'dan yavaştır)."/>
+            <RadioButton x:Name="ProcessorCpu" Content="Yalnızca CPU" GroupName="TranscriptionProcessor"
+                         Style="{DynamicResource Chip}" Checked="Processor_Checked"
+                         ToolTip="Ekran kartı hiç kullanılmaz (daha yavaş, sürücü sorunlarında güvenli)."/>
+        </WrapPanel>
+        <TextBlock x:Name="ProcessorHint" Style="{DynamicResource Hint}" Margin="0,0,0,12"/>
+
+        <!-- ── Çeviri seçenekleri ── -->
+        <CheckBox x:Name="SpeakerLabelingCheck" Content="Konuşanları ayır (Kişi 1, Kişi 2…)"
+                  Style="{DynamicResource SettingCheck}"
+                  Checked="SpeakerLabelingCheck_Changed" Unchecked="SpeakerLabelingCheck_Changed"/>
+        <TextBlock Style="{DynamicResource CheckHint}"
+                   Text="Transkript satırları sesine göre kişilere ayrılır (ilk kullanımda küçük bir model indirilir). Kapalıyken yalnızca Ben / Karşı taraf ayrımı kalır."/>
+
+        <CheckBox x:Name="AutoTranscribeCheck" Content="Kayıt bitince otomatik metne çevir"
+                  Style="{DynamicResource SettingCheck}"
+                  Checked="AutoTranscribeCheck_Changed" Unchecked="AutoTranscribeCheck_Changed"/>
+        <TextBlock Style="{DynamicResource CheckHint}"
+                   Text="Kapalıyken kayıt durunca bekler; dinleyip (isterseniz aralık seçip) Kayıtlar'da 📝 Transkript et'e basarsınız."/>
+
+        <TextBlock x:Name="ErrorText" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,0,0,8"
+                   Foreground="{DynamicResource DangerText}"/>
+    </StackPanel>
+</UserControl>

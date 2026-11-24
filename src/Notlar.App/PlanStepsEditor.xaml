@@ -4,7 +4,7 @@
              xmlns:local="clr-namespace:Notlar.App"
              Background="Transparent"
              Foreground="{DynamicResource Fg}"
-             FontFamily="Segoe UI" FontSize="13">
+             FontFamily="{DynamicResource AppFont}" FontSize="13">
     <UserControl.Resources>
         <Style x:Key="PlanFlatButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>

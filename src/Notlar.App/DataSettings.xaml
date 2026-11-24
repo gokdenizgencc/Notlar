@@ -1,0 +1,140 @@
+<UserControl x:Class="Notlar.App.DataSettings"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Foreground="{DynamicResource Fg}">
+    <!-- ⚙ Ayarlar → Veri ve yedekleme. Stiller (SectionTitle, FieldTitle, Hint, ActionButton, LinkButton, Chip)
+         SettingsView'in kaynaklarından gelir; ayrı derlenen denetimde StaticResource bulunamayacağı için
+         DynamicResource ile başvurulur. Değişiklikler anında kaydedilir. -->
+    <UserControl.Resources>
+        <Style x:Key="BackupItem" TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource Fg}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" Padding="8,4" CornerRadius="4">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Border}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Accent}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <StackPanel>
+        <TextBlock Text="Veri ve yedekleme" Style="{DynamicResource SectionTitle}"/>
+
+        <!-- Bu bölümün işlem sonucu / hata satırı (birkaç saniye görünür). -->
+        <Border x:Name="StatusBar" Visibility="Collapsed" Margin="0,0,0,10" Padding="8,6" CornerRadius="6"
+                Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
+            <TextBlock x:Name="StatusText" TextWrapping="Wrap"/>
+        </Border>
+
+        <!-- ── Ses dosyaları ── -->
+        <TextBlock Text="Kayıt seslerini sakla" Style="{DynamicResource FieldTitle}"/>
+        <WrapPanel x:Name="RetentionPanel">
+            <RadioButton Content="7 gün" Tag="7" GroupName="DataAudioRetention" Style="{DynamicResource Chip}" Checked="Retention_Checked"/>
+            <RadioButton Content="14 gün" Tag="14" GroupName="DataAudioRetention" Style="{DynamicResource Chip}" Checked="Retention_Checked"/>
+            <RadioButton Content="30 gün" Tag="30" GroupName="DataAudioRetention" Style="{DynamicResource Chip}" Checked="Retention_Checked"/>
+            <RadioButton Content="90 gün" Tag="90" GroupName="DataAudioRetention" Style="{DynamicResource Chip}" Checked="Retention_Checked"/>
+            <RadioButton Content="Hiç silme" Tag="0" GroupName="DataAudioRetention" Style="{DynamicResource Chip}" Checked="Retention_Checked"/>
+        </WrapPanel>
+        <TextBlock Style="{DynamicResource Hint}" Margin="0,0,0,14"
+                   Text="Süresi dolan kayıtların yalnızca ses dosyası silinir; transkript ve özetler kalır. Temizlik Notlar açılırken yapılır."/>
+
+        <!-- ── Yedekleme ── -->
+        <TextBlock Text="Yedekleme" Style="{DynamicResource FieldTitle}"/>
+        <TextBlock x:Name="LastBackupText" Style="{DynamicResource Hint}" Margin="0,0,0,6"/>
+        <WrapPanel Margin="0,0,0,10">
+            <Button x:Name="BackupNowButton" Content="💾 Şimdi yedekle" Style="{DynamicResource ActionButton}"
+                    Margin="0,0,8,6" Click="BackupNow_Click"/>
+            <Button Content="📁 Yedek klasörünü aç" Style="{DynamicResource ActionButton}" Margin="0,0,0,6"
+                    Click="OpenBackupDir_Click"/>
+        </WrapPanel>
+
+        <TextBlock Text="Otomatik yedek" Style="{DynamicResource FieldTitle}"/>
+        <WrapPanel>
+            <RadioButton x:Name="FreqOff" Content="Kapalı" Tag="Off" GroupName="DataBackupFrequency" Style="{DynamicResource Chip}" Checked="Frequency_Checked"/>
+            <RadioButton x:Name="FreqDaily" Content="Günlük" Tag="Daily" GroupName="DataBackupFrequency" Style="{DynamicResource Chip}" Checked="Frequency_Checked"/>
+            <RadioButton x:Name="FreqWeekly" Content="Haftalık" Tag="Weekly" GroupName="DataBackupFrequency" Style="{DynamicResource Chip}" Checked="Frequency_Checked"/>
+        </WrapPanel>
+
+        <TextBlock Text="Saklanacak yedek sayısı" Style="{DynamicResource FieldTitle}" Margin="0,4,0,6"/>
+        <WrapPanel x:Name="KeepPanel">
+            <RadioButton Content="3" Tag="3" GroupName="DataBackupKeep" Style="{DynamicResource Chip}" Checked="Keep_Checked"/>
+            <RadioButton Content="7" Tag="7" GroupName="DataBackupKeep" Style="{DynamicResource Chip}" Checked="Keep_Checked"/>
+            <RadioButton Content="14" Tag="14" GroupName="DataBackupKeep" Style="{DynamicResource Chip}" Checked="Keep_Checked"/>
+            <RadioButton Content="30" Tag="30" GroupName="DataBackupKeep" Style="{DynamicResource Chip}" Checked="Keep_Checked"/>
+        </WrapPanel>
+        <TextBlock Style="{DynamicResource Hint}" Margin="0,0,0,14"
+                   Text="Yedek; notları, görevleri, planları, kayıt metinlerini ve ayarları içerir. Ses dosyaları yedeğe dahil değildir. Fazla yedekler en eskiden başlayarak silinir."/>
+
+        <!-- ── Geri yükleme ── -->
+        <TextBlock Text="Yedekten geri yükle" Style="{DynamicResource FieldTitle}"/>
+        <ListBox x:Name="BackupList" MaxHeight="150" Margin="0,0,0,6" Padding="2"
+                 Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                 BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                 ItemContainerStyle="{StaticResource BackupItem}" DisplayMemberPath="Display"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 SelectionChanged="BackupList_SelectionChanged" AutomationProperties.Name="Yedekler"/>
+        <TextBlock x:Name="NoBackupsText" Style="{DynamicResource Hint}" Margin="0,0,0,6" Visibility="Collapsed"
+                   Text="Henüz yedek yok."/>
+        <Button x:Name="RestoreButton" Content="↺ Seçili yedeği geri yükle…" Style="{DynamicResource ActionButton}"
+                IsEnabled="False" Click="Restore_Click"/>
+        <TextBlock Style="{DynamicResource Hint}" Margin="0,6,0,14"
+                   Text="Geri yüklemeden önce mevcut durumun yedeği kendiliğinden alınır. Sonra Notlar'ı yeniden başlatmanız gerekir."/>
+
+        <!-- ── Ayarlar ── -->
+        <TextBlock Text="Ayarlar" Style="{DynamicResource FieldTitle}"/>
+        <WrapPanel Margin="0,0,0,4">
+            <Button Content="⤓ Ayarları dışa aktar…" Style="{DynamicResource ActionButton}" Margin="0,0,8,6"
+                    Click="ExportSettings_Click"/>
+            <Button Content="⤒ Ayarları içe aktar…" Style="{DynamicResource ActionButton}" Margin="0,0,0,6"
+                    Click="ImportSettings_Click"/>
+        </WrapPanel>
+        <Button Content="Tüm ayarları varsayılana sıfırla…" Style="{DynamicResource LinkButton}" Margin="0,2,0,4"
+                Click="ResetSettings_Click"/>
+        <TextBlock Style="{DynamicResource Hint}" Margin="0,0,0,14"
+                   Text="Yalnızca ayarlar etkilenir; notlara ve kayıtlara dokunulmaz."/>
+
+        <!-- ── Depolama ── -->
+        <TextBlock Text="Depolama kullanımı" Style="{DynamicResource FieldTitle}"/>
+        <Grid x:Name="UsageGrid" Margin="0,0,0,4" TextElement.Foreground="{DynamicResource Muted}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Text="Notlar (veritabanı)"/>
+            <TextBlock Grid.Row="0" Grid.Column="1" x:Name="UsageNotes" Text="…" TextAlignment="Right"/>
+            <TextBlock Grid.Row="1" Text="Kayıt sesleri"/>
+            <TextBlock Grid.Row="1" Grid.Column="1" x:Name="UsageRecordings" Text="…" TextAlignment="Right"/>
+            <TextBlock Grid.Row="2" Text="Modeller"/>
+            <TextBlock Grid.Row="2" Grid.Column="1" x:Name="UsageModels" Text="…" TextAlignment="Right"/>
+            <TextBlock Grid.Row="3" Text="Yedekler"/>
+            <TextBlock Grid.Row="3" Grid.Column="1" x:Name="UsageBackups" Text="…" TextAlignment="Right"/>
+            <TextBlock Grid.Row="4" Text="Toplam" FontWeight="SemiBold" Foreground="{DynamicResource Fg}" Margin="0,2,0,0"/>
+            <TextBlock Grid.Row="4" Grid.Column="1" x:Name="UsageTotal" Text="…" TextAlignment="Right" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Fg}" Margin="0,2,0,0"/>
+        </Grid>
+        <Button x:Name="UsageRefreshButton" Content="Yenile" Style="{DynamicResource LinkButton}" Margin="0,2,0,14"
+                Click="UsageRefresh_Click"/>
+
+        <Button Content="📄 Log klasörünü aç" Style="{DynamicResource ActionButton}" Click="OpenLogDir_Click"/>
+    </StackPanel>
+</UserControl>

@@ -30,9 +30,6 @@ public enum RecordingStartSource
 /// penceresi kapansa bile iş tamamlanıp kaydedilir.</summary>
 public sealed class RecordingController : IDisposable
 {
-    /// <summary>Ses dosyalarının saklanma süresi (metin kalır).</summary>
-    private static readonly TimeSpan AudioRetentionAge = TimeSpan.FromDays(14);
-
     private const string ClaudeNotFoundMessage =
         "'claude' komutu PATH üzerinde bulunamadı. Claude Code'un kurulu ve PATH'e eklenmiş olduğundan emin olun.";
 
@@ -68,6 +65,12 @@ public sealed class RecordingController : IDisposable
         _recorder.Error += ex => Post(() => OnRecorderError(ex));
         WhisperRuntime.Diagnostic += AppLog.Info;
 
+        // ⚙ Ayarlar → Ses ve metne çevirme: işlemci ve kişi ayırma tercihleri (kuyruk işlemeden önce) uygulanır,
+        // ayar değişince güncellenir (bir sonraki çeviride geçerli).
+        ApplyAudioSettings();
+        AppSettings.Changed += ApplyAudioSettings;
+        Current = this;
+
         // Önceki oturumda yarım kalan çeviriler (uygulama kapandı, çöktü…) yeniden kuyruğa alınır. Yarım kalan kayıt
         // Kaydedildi durumuna geçer ve kullanıcının "Transkript et" demesini bekler.
         try
@@ -85,7 +88,9 @@ public sealed class RecordingController : IDisposable
         {
             try
             {
-                AudioRetention.Purge(_store, AppPaths.RecordingsDir, AudioRetentionAge);
+                // Saklama süresi ⚙ Ayarlar → Veri ve yedekleme'den (varsayılan 14 gün; "hiç silme" ise temizlik yok).
+                if (AudioRetentionPolicy.ToAge(AppSettings.Load().AudioRetentionDays) is { } age)
+                    AudioRetention.Purge(_store, AppPaths.RecordingsDir, age);
             }
             catch (Exception ex)
             {
@@ -93,6 +98,10 @@ public sealed class RecordingController : IDisposable
             }
         });
     }
+
+    /// <summary>Uygulamanın kayıt denetleyicisi (⚙ Ayarlar'daki mikrofon testi kayıt durumunu buradan izler); henüz
+    /// kurulmadıysa ya da kapandıysa null.</summary>
+    public static RecordingController? Current { get; private set; }
 
     public RecordingStore Store => _store;
 
@@ -196,7 +205,13 @@ public sealed class RecordingController : IDisposable
         var folder = RecordingFiles.FolderFor(AppPaths.RecordingsDir, recording.Id);
         try
         {
+            // ⚙ Ayarlar → Ses ve metne çevirme: seçili aygıtlar (yoksa varsayılan; düşüş günlüğe yazılır).
+            var audio = AppSettings.Load();
+            _recorder.MicrophoneDeviceId = audio.MicrophoneDeviceId;
+            _recorder.LoopbackDeviceId = audio.LoopbackDeviceId;
             _recorder.Start(folder);
+            foreach (var note in _recorder.DeviceNotes)
+                AppLog.Info($"Kayıt #{recording.Id}: {note}");
         }
         catch (Exception ex)
         {
@@ -231,14 +246,16 @@ public sealed class RecordingController : IDisposable
         }
         if (notice is not null)
         {
-            if (automatic) Warning?.Invoke(notice);
+            // Sahip pencere görünmüyorsa (tepsi menüsünden başlatıldı) mesaj kutusu yerine tepsi bildirimi (Warning).
+            if (automatic || (owner is not { IsVisible: true } && Notifier.IsAvailable)) Warning?.Invoke(notice);
             else ShowMessage(owner, notice, MessageBoxImage.Information);
         }
         return true;
     }
 
-    /// <summary>Kaydı durdurur ve bitirir (durum Kaydedildi). Kayıt kendiliğinden metne çevrilmez; kullanıcı
-    /// dinleyip (isterse aralık seçip) "Transkript et" deyince <see cref="Requeue"/> ile kuyruğa alınır.</summary>
+    /// <summary>Kaydı durdurur ve bitirir (durum Kaydedildi). Varsayılan olarak kayıt kendiliğinden metne çevrilmez;
+    /// kullanıcı dinleyip (isterse aralık seçip) "Transkript et" deyince <see cref="Requeue"/> ile kuyruğa alınır.
+    /// ⚙ Ayarlar'da "Kayıt bitince otomatik metne çevir" açıksa hemen kuyruğa alınır.</summary>
     public void Stop()
     {
         if (!_recorder.IsRecording && _currentId is null) return;
@@ -252,6 +269,8 @@ public sealed class RecordingController : IDisposable
             try
             {
                 _store.Finish(recordingId);
+                if (AppSettings.Load().AutoTranscribeAfterRecording)
+                    TryLog(() => Requeue(recordingId));
             }
             catch (RecordingNotFoundException ex)
             {
@@ -332,8 +351,8 @@ public sealed class RecordingController : IDisposable
                 ClaudeHeadless.DefaultTimeout, _cts.Token);
 
             // Claude çalışırken başlık değişmiş olabilir; yedek başlık için güncel hâli kullanılır.
-            var (title, steps) = ClaudeHeadless.ParsePlan(output, _store.Get(id).Title);
-            var plan = _planStore.CreatePlan(title, projectPath: null, steps, author: "Claude",
+            var (title, steps) = ClaudeHeadless.ParsePlanItems(output, _store.Get(id).Title);
+            var plan = _planStore.CreatePlanFromItems(title, projectPath: null, steps, author: "Claude",
                 projectIds: projectId is { } p ? [p] : null);
             _store.SetPlan(id, plan.Id);
             return plan;
@@ -351,6 +370,8 @@ public sealed class RecordingController : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        AppSettings.Changed -= ApplyAudioSettings;
+        if (ReferenceEquals(Current, this)) Current = null;
 
         if (_currentId is { } id)
         {
@@ -361,6 +382,21 @@ public sealed class RecordingController : IDisposable
         TryLog(_recorder.Dispose);
         TryLog(_cts.Cancel);
         TryLog(_queue.Dispose);
+    }
+
+    /// <summary>İşlemci (GPU/CPU) ve kişi ayırma tercihlerini çeviri tarafına aktarır; her ayar kaydında çağrılır.</summary>
+    private void ApplyAudioSettings()
+    {
+        try
+        {
+            var settings = AppSettings.Load();
+            WhisperRuntime.Processor = settings.Processor;
+            _queue.SpeakerLabelingEnabled = settings.SpeakerLabelingEnabled;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+        }
     }
 
     private bool EnsureConsent(Window? owner)

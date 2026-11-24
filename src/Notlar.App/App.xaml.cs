@@ -33,6 +33,7 @@ public partial class App : Application
     private TrayIcon? _tray;
     private PanelWindow? _panel;
     private RecordingController? _recordings;
+    private GlobalHotkeys? _hotkeys;
 
     // Hafta içi otomatik kayıt: 20 sn'de bir RecordingSchedule.Decide'a sorulur.
     private readonly DispatcherTimer _scheduleTimer = new() { Interval = TimeSpan.FromSeconds(20) };
@@ -87,8 +88,11 @@ public partial class App : Application
         // aboneliksiz bırakılırsa WinForms çökme iletişim kutusunu tetikler.
         Forms.Application.ThreadException += (_, args) => AppLog.Write(args.Exception);
 
-        Theme.Apply(Resources);
+        Theme.Apply(Resources, AppSettings.Load(), force: true);
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        // ⚙ Ayarlar → Görünüm (tema modu, vurgu, yazı tipi, yoğunluk) kaydedilince anında uygulanır; görünümle
+        // ilgisiz bir kayıtta Theme.Apply sözlüğe dokunmaz.
+        AppSettings.Changed += OnSettingsChangedForTheme;
 
         var dataDirExisted = Directory.Exists(AppPaths.DataDir);
         Directory.CreateDirectory(AppPaths.DataDir);
@@ -132,7 +136,7 @@ public partial class App : Application
         _panel = new PanelWindow(store, taskStore, memoryStore, skillRegistry, skillTranslations, planStore, projectStore,
             appFlags, recordings);
         _tray = new TrayIcon(
-            onToggle: _panel.Toggle,
+            onToggle: OnTrayClick,
             onOpen: _panel.ShowNearTray,
             onExport: _panel.ExportMarkdown,
             onExit: ExitApp,
@@ -143,7 +147,8 @@ public partial class App : Application
         recordings.RecordingStateChanged += () => _tray?.SetRecording(recordings.IsRecording);
         recordings.Completed += OnRecordingCompleted;
         recordings.Failed += OnRecordingFailed;
-        recordings.Warning += message => _tray?.ShowBalloon("Notlar — kayıt", message, () => OpenRecordings(null), isError: true);
+        Notifier.Attach(_tray, OpenRecordings);
+        recordings.Warning += message => Notifier.Show(NotificationKind.Error, "Notlar — kayıt", message, () => OpenRecordings(null));
         try
         {
             _listener = new ChangeListener(AppPaths.ChangeEventName, () => Dispatcher.InvokeAsync(() =>
@@ -162,7 +167,7 @@ public partial class App : Application
         if (_closeEvent is not null)
         {
             _closeWait = ThreadPool.RegisterWaitForSingleObject(
-                _closeEvent, (_, _) => Dispatcher.InvokeAsync(Shutdown), null, Timeout.Infinite, executeOnlyOnce: false);
+                _closeEvent, (_, _) => Dispatcher.InvokeAsync(ShutdownNow), null, Timeout.Infinite, executeOnlyOnce: false);
         }
 
         _scheduleTimer.Tick += (_, _) => TryLog(CheckRecordingSchedule);
@@ -172,13 +177,21 @@ public partial class App : Application
         _teamsTimer.Tick += (_, _) => TryLog(CheckTeamsCall);
         _teamsTimer.Start();
 
+        // ⚙ Ayarlar → Genel: Alt+F4 ile çıkış, "Paneli açık başlat".
+        TryLog(InitializeGeneralBehavior);
+
+        // ⚙ Ayarlar → Kısayollar: sistem geneli kısayollar (ayar değişince kendini yeniden kaydeder).
+        TryLog(() => _hotkeys = new GlobalHotkeys(Dispatcher, OnGlobalHotkey));
+
         // Yedekleme ve temizlik I/O ağırlıklıdır; tepsi/panel zaten kurulduktan sonra arka planda çalıştır
         // ki UI iş parçacığı başlangıçta bloklanmasın.
         Task.Run(() =>
         {
             TryLog(() => store.PurgeDeleted(TimeSpan.FromDays(7)));
-            TryLog(() => store.Backup(AppPaths.BackupDir, keep: 7));
+            // Otomatik yedek: ⚙ Ayarlar → Veri ve yedekleme'deki sıklık/adet (varsayılan günlük, 7 yedek); saatte bir de denetlenir.
+            TryLog(DataBackupService.RunAutomaticIfDue);
         });
+        DataBackupService.StartScheduler();
     }
 
     /// <summary>Veri klasörüne (%APPDATA%\Notlar) bir kez, korumalı (yalnızca geçerli kullanıcı + SYSTEM
@@ -221,18 +234,45 @@ public partial class App : Application
 
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
     {
-        if (e.Category == UserPreferenceCategory.General)
-            Dispatcher.InvokeAsync(() => Theme.Apply(Resources));
+        // General: açık/koyu uygulama modu; Color/VisualStyle: Windows vurgu rengi. "Sistem" teması ve "Windows vurgu
+        // rengi" seçiliyken bu değişiklikler canlı izlenir; diğer seçimlerde sonuç değişmediğinden Apply bir şey yapmaz.
+        if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.VisualStyle)
+            Dispatcher.InvokeAsync(() => TryLog(() => Theme.Apply(Resources, AppSettings.Load())));
     }
 
-    private void ExitApp() => Shutdown();
+    private void OnSettingsChangedForTheme() =>
+        Dispatcher.InvokeAsync(() => TryLog(() => Theme.Apply(Resources, AppSettings.Load())));
+
+    private void ExitApp() => RequestExit();
+
+    /// <summary>Global kısayola basıldı (⚙ Ayarlar → Kısayollar).</summary>
+    private void OnGlobalHotkey(GlobalHotkeyAction action)
+    {
+        switch (action)
+        {
+            case GlobalHotkeyAction.TogglePanel: _panel?.ToggleFromHotkey(); break;
+            case GlobalHotkeyAction.QuickNote: _panel?.ShowQuickNote(); break;
+            case GlobalHotkeyAction.ToggleRecording: ToggleRecording(); break;
+        }
+    }
 
     /// <summary>Tepsi menüsü: kayıt sürüyorsa durdurur, yoksa başlatır.</summary>
     private void ToggleRecording()
     {
         if (_recordings is not { } recordings) return;
-        if (recordings.IsRecording) recordings.Stop();
-        else recordings.Start(owner: null);
+        if (recordings.IsRecording)
+        {
+            var stoppedId = recordings.CurrentRecordingId;
+            recordings.Stop();
+            Notifier.Show(NotificationKind.RecordingManual, "Kayıt durdu",
+                StoppedHint(), () => OpenRecordings(stoppedId));
+        }
+        else if (recordings.Start(owner: null))
+        {
+            var id = recordings.CurrentRecordingId;
+            Notifier.Show(NotificationKind.RecordingManual, "Kayıt başladı",
+                "Durdurmak için tepsi menüsünden ⏹ Kaydı durdur'u seçin.", () => OpenRecordings(id));
+        }
     }
 
     /// <summary>Hafta içi otomatik kayıt (⚙ Ayarlar → Kayıt): pencere içinde kaydı başlatır, pencere bitince otomatik
@@ -251,7 +291,8 @@ public partial class App : Application
         DateOnly? last = DateOnly.TryParseExact(settings.AutoRecordLastDate, "yyyy-MM-dd", CultureInfo.InvariantCulture,
             DateTimeStyles.None, out var parsed) ? parsed : null;
 
-        switch (RecordingSchedule.Decide(now, start, end, recordings.IsRecording, recordings.IsCurrentAutomatic, last))
+        switch (RecordingSchedule.Decide(now, start, end, recordings.IsRecording, recordings.IsCurrentAutomatic, last,
+                    settings.AutoRecordDays))
         {
             case ScheduleAction.Start:
                 if (!RecordingController.ConsentGiven)
@@ -259,9 +300,9 @@ public partial class App : Application
                     // Onay verilince aynı gün başlayabilsin diye "bugün denendi" işaretlenmez; balon günde bir kez.
                     if (_consentHintDate == today) return;
                     _consentHintDate = today;
-                    _tray?.ShowBalloon("Otomatik kayıt başlatılamadı",
+                    Notifier.Show(NotificationKind.Error, "Otomatik kayıt başlatılamadı",
                         "Önce bir kez elle kayıt başlatıp katılımcı bilgilendirme uyarısını onaylayın.",
-                        () => OpenRecordings(null), isError: true);
+                        () => OpenRecordings(null));
                     return;
                 }
 
@@ -270,21 +311,21 @@ public partial class App : Application
                 if (recordings.StartAutomatic(out var error))
                 {
                     var id = recordings.CurrentRecordingId;
-                    _tray?.ShowBalloon("Toplantı kaydı otomatik başladı",
+                    Notifier.Show(NotificationKind.RecordingScheduled, "Toplantı kaydı otomatik başladı",
                         $"{RecordingSchedule.FormatTime(end)}'da kendiliğinden duracak.", () => OpenRecordings(id));
                 }
                 else
                 {
-                    _tray?.ShowBalloon("Otomatik kayıt başlatılamadı", error ?? "Bilinmeyen hata.",
-                        () => OpenRecordings(null), isError: true);
+                    Notifier.Show(NotificationKind.Error, "Otomatik kayıt başlatılamadı", error ?? "Bilinmeyen hata.",
+                        () => OpenRecordings(null));
                 }
                 break;
 
             case ScheduleAction.Stop:
                 var stoppedId = recordings.CurrentRecordingId;
                 recordings.Stop();
-                _tray?.ShowBalloon("Toplantı kaydı durdu", "Dinleyip 📝 Transkript et ile metne çevirebilirsiniz.",
-                    () => OpenRecordings(stoppedId));
+                Notifier.Show(NotificationKind.RecordingScheduled, "Toplantı kaydı durdu",
+                    StoppedHint(), () => OpenRecordings(stoppedId));
                 break;
         }
     }
@@ -313,30 +354,30 @@ public partial class App : Application
                     var today = DateOnly.FromDateTime(DateTime.Now);
                     if (_consentHintDate == today) return;
                     _consentHintDate = today;
-                    _tray?.ShowBalloon("Otomatik kayıt başlatılamadı",
+                    Notifier.Show(NotificationKind.Error, "Otomatik kayıt başlatılamadı",
                         "Önce bir kez elle kayıt başlatıp katılımcı bilgilendirme uyarısını onaylayın.",
-                        () => OpenRecordings(null), isError: true);
+                        () => OpenRecordings(null));
                     return;
                 }
 
                 if (recordings.StartAutomatic(out var error, RecordingStartSource.Teams))
                 {
                     var id = recordings.CurrentRecordingId;
-                    _tray?.ShowBalloon("Teams araması algılandı — kayıt başladı",
+                    Notifier.Show(NotificationKind.RecordingTeams, "Teams araması algılandı — kayıt başladı",
                         "Arama bitince kendiliğinden duracak.", () => OpenRecordings(id));
                 }
                 else
                 {
-                    _tray?.ShowBalloon("Otomatik kayıt başlatılamadı", error ?? "Bilinmeyen hata.",
-                        () => OpenRecordings(null), isError: true);
+                    Notifier.Show(NotificationKind.Error, "Otomatik kayıt başlatılamadı", error ?? "Bilinmeyen hata.",
+                        () => OpenRecordings(null));
                 }
                 break;
 
             case ScheduleAction.Stop:
                 var stoppedId = recordings.CurrentRecordingId;
                 recordings.Stop();
-                _tray?.ShowBalloon("Teams araması bitti — kayıt durdu",
-                    "Dinleyip 📝 Transkript et ile metne çevirebilirsiniz.", () => OpenRecordings(stoppedId));
+                Notifier.Show(NotificationKind.RecordingTeams, "Teams araması bitti — kayıt durdu",
+                    StoppedHint(), () => OpenRecordings(stoppedId));
                 break;
         }
     }
@@ -344,16 +385,21 @@ public partial class App : Application
     /// <summary>Paneli Kayıtlar bölümünde açar; <paramref name="selectId"/> verilirse o kaydı seçer.</summary>
     private void OpenRecordings(long? selectId) => _panel?.ShowRecordings(selectId);
 
+    /// <summary>"Kayıt durdu" bildiriminin alt metni: otomatik çeviri açıksa kaydın kendiliğinden çevrileceğini söyler.</summary>
+    private static string StoppedHint() => AppSettings.Load().AutoTranscribeAfterRecording
+        ? "Kayıt metne çevriliyor; hazır olunca bildirilecek."
+        : "Dinleyip 📝 Transkript et ile metne çevirebilirsiniz.";
+
     private void OnRecordingCompleted(long id)
     {
         var title = TryGetRecordingTitle(id);
-        _tray?.ShowBalloon("Notlar", $"Kayıt metne çevrildi: {title}", () => OpenRecordings(id));
+        Notifier.Show(NotificationKind.TranscriptReady, "Notlar", $"Kayıt metne çevrildi: {title}", () => OpenRecordings(id));
     }
 
     private void OnRecordingFailed(long id, string message)
     {
         var title = TryGetRecordingTitle(id);
-        _tray?.ShowBalloon("Kayıt metne çevrilemedi", $"{title}: {message}", () => OpenRecordings(id), isError: true);
+        Notifier.Show(NotificationKind.Error, "Kayıt metne çevrilemedi", $"{title}: {message}", () => OpenRecordings(id));
     }
 
     private string TryGetRecordingTitle(long id)
@@ -372,8 +418,10 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        AppSettings.Changed -= OnSettingsChangedForTheme;
         _scheduleTimer.Stop();
         _teamsTimer.Stop();
+        _hotkeys?.Dispose();
         _showWait?.Unregister(null);
         _closeWait?.Unregister(null);
         // Kayıt sürüyorsa düzgün durdurulup bitirilir; kullanıcı "Transkript et" diyene kadar bekler.

@@ -466,13 +466,10 @@ public partial class RecordingsView : UserControl
         UpdateStatus(r);
         UpdatePlayer(r, otherRecording);
 
-        // Metin değişmediyse yeniden oluşturulmaz (kaydırma konumu ve seçim korunur).
-        var transcript = TranscriptFormatter.Format(segments);
-        if (otherRecording || transcript != _transcriptText)
-        {
-            _transcriptText = transcript;
-            TranscriptBox.Document = BuildTranscriptDocument(segments);
-        }
+        // Kişi filtresi uygulanır (bkz. RecordingsView.PersonFilter.cs); metin değişmediyse yeniden oluşturulmaz
+        // (kaydırma konumu ve seçim korunur).
+        SetTranscriptSegments(segments, otherRecording);
+        RenderTranscript(force: otherRecording);
         TranscriptPlaceholder.Text = TranscriptPlaceholderText(r);
 
         var summary = r.Summary ?? "";
@@ -484,6 +481,7 @@ public partial class RecordingsView : UserControl
             SummaryBox.ScrollToHome();
         }
 
+        RenderTasks(r); // bkz. RecordingsView.Tasks.cs
         UpdateTabs();
         UpdateButtons();
     }
@@ -497,12 +495,15 @@ public partial class RecordingsView : UserControl
         _hasTranscript = false;
         _transcriptText = "";
         TranscriptBox.Document = new FlowDocument();
+        SetTranscriptSegments([], otherRecording: true);
+        BuildPersonChips();
         DetailPanel.Visibility = Visibility.Collapsed;
         NoSelectionText.Visibility = Visibility.Visible;
     }
 
     /// <summary>Transkript: her konuşma ayrı paragraf; zaman damgası soluk, ardından (kişi ayrımı yapıldıysa)
-    /// kişiye özel renkte "Kişi N:" etiketi. Kişi bilgisi olmayan satırlar (eski kayıtlar) etiketsizdir.</summary>
+    /// kişiye özel renkte ad etiketi ("Ahmet:"; adı olmayan eski kayıtlarda "Kişi N:"). Kişi bilgisi olmayan
+    /// satırlar (eski kayıtlar) etiketsizdir.</summary>
     private static FlowDocument BuildTranscriptDocument(IReadOnlyList<TranscriptSegment> segments)
     {
         var doc = new FlowDocument { PagePadding = new Thickness(0), TextAlignment = TextAlignment.Left };
@@ -519,9 +520,8 @@ public partial class RecordingsView : UserControl
 
             if (s.Person is { } person)
             {
-                var label = new Run(TranscriptFormatter.PersonLabel(person) + ": ") { FontWeight = FontWeights.SemiBold };
-                label.SetResourceReference(TextElement.ForegroundProperty, Theme.PersonBrushKey(person));
-                paragraph.Inlines.Add(label);
+                // Etikete tıklayınca / sağ tıklayınca kişinin adı değiştirilir (bkz. RecordingsView.Persons.cs).
+                paragraph.Inlines.Add(PersonLabelRun(s, person));
             }
 
             paragraph.Inlines.Add(new Run(TextSafety.Flatten(s.Text)));
@@ -660,12 +660,15 @@ public partial class RecordingsView : UserControl
     private void UpdateTabs()
     {
         var showSummary = SummaryTab.IsChecked == true;
+        var showTasks = TasksTab.IsChecked == true;
         var hasSummary = !string.IsNullOrEmpty(SummaryBox.Text);
 
-        TranscriptBox.Visibility = !showSummary ? Visibility.Visible : Visibility.Collapsed;
-        TranscriptPlaceholder.Visibility = !showSummary && !_hasTranscript ? Visibility.Visible : Visibility.Collapsed;
+        TranscriptBox.Visibility = !showSummary && !showTasks ? Visibility.Visible : Visibility.Collapsed;
+        TranscriptPlaceholder.Visibility = !showSummary && !showTasks && !_hasTranscript ? Visibility.Visible : Visibility.Collapsed;
         SummaryBox.Visibility = showSummary ? Visibility.Visible : Visibility.Collapsed;
         SummaryPlaceholder.Visibility = showSummary && !hasSummary ? Visibility.Visible : Visibility.Collapsed;
+        UpdateTasksTab(showTasks); // bkz. RecordingsView.Tasks.cs
+        UpdatePersonFilterBar(); // bkz. RecordingsView.PersonFilter.cs
     }
 
     private void Tab_Checked(object sender, RoutedEventArgs e)
@@ -746,7 +749,12 @@ public partial class RecordingsView : UserControl
         }
     }
 
-    private void OnTranscriptionFinished(long id) => Reload();
+    private void OnTranscriptionFinished(long id)
+    {
+        // Yeni transkriptte kişi numaraları değişmiş olabilir: kişi filtresi sıfırlanır.
+        if (_current?.Id == id) ResetPersonFilter();
+        Reload();
+    }
 
     private void OnTranscriptionFailed(long id, string message) => Reload();
 
@@ -1083,6 +1091,7 @@ public partial class RecordingsView : UserControl
         try
         {
             _controller.Requeue(r.Id);
+            ResetPersonFilter();
             ShowMessage(_ranges.Count > 0
                 ? $"Seçili {_ranges.Count} aralık metne çevrilmek üzere sıraya alındı."
                 : "Kayıt metne çevrilmek üzere sıraya alındı.");
@@ -1178,6 +1187,12 @@ public partial class RecordingsView : UserControl
             e.Handled = true;
             view.CancelTitleEdit();
         }
+        else if (node is RecordingsView && box.Tag is Action cancelInlineEdit)
+        {
+            // Görevler sekmesindeki satır içi sorumlu kutusu: Esc vazgeçer, paneli kapatmaz.
+            e.Handled = true;
+            cancelInlineEdit();
+        }
     }
 
     // ---------------------------------------------------------------- Claude işlemleri
@@ -1197,6 +1212,8 @@ public partial class RecordingsView : UserControl
                 ShowMessage("Özet hazır.");
                 SummaryTab.IsChecked = true;
             }
+            if (!IsVisible)
+                Notifier.Show(NotificationKind.SummaryReady, "Özet hazır", TryGetTitle(id), Notifier.OpenRecordingsAction(id));
             Reload();
         }
         catch (OperationCanceledException)
@@ -1232,10 +1249,14 @@ public partial class RecordingsView : UserControl
             var plan = await _controller.CreatePlanAsync(id, projectId);
             if (plan is null) return;
             var message = $"Görevler çıkarıldı (Plan #{plan.Id}): {plan.Title}";
-            if (!IsVisible)
+            // Görünüm gizliyken mesaj kutusu kullanıcının işini bölmesin: tepsi bildirimi (ayarlara tabi).
+            if (!IsVisible && Notifier.IsAvailable)
+                Notifier.Show(NotificationKind.SummaryReady, "Görevler çıkarıldı", message, Notifier.OpenRecordingsAction(id));
+            else if (!IsVisible)
                 MessageBox.Show(message, "Notlar", MessageBoxButton.OK, MessageBoxImage.Information);
             else
                 ShowMessage(message + " — ▶ Görevleri başlat ile Claude Code'u başlatabilirsiniz.");
+            if (_current?.Id == id) TasksTab.IsChecked = true; // kime ne verildiği hemen görünsün
             Reload();
         }
         catch (OperationCanceledException)
@@ -1302,7 +1323,9 @@ public partial class RecordingsView : UserControl
             Requeue));
 
         menu.Items.Add(MenuEntry("📋 Kopyala", _hasTranscript || !string.IsNullOrWhiteSpace(r.Summary),
-            "Transkripti ve özeti panoya kopyala", Copy));
+            PersonFilterActive
+                ? "Transkriptin görünen (kişi filtresindeki) satırlarını ve özeti panoya kopyala"
+                : "Transkripti ve özeti panoya kopyala", Copy));
 
         menu.Items.Add(new Separator());
 
@@ -1419,17 +1442,16 @@ public partial class RecordingsView : UserControl
     private void Requeue()
     {
         if (_controller is null || _current is not { } r) return;
-        var question = r.Status == RecordingStatus.Hazir
-            ? "Kayıt yeniden metne çevrilecek; mevcut transkript yenisiyle değiştirilecek (özet korunur). Devam edilsin mi?"
-            : "Kayıt yeniden metne çevrilmek üzere sıraya alınsın mı?";
-        if (_ranges.Count > 0) question += $"\n\nYalnızca seçili {_ranges.Count} aralık çevrilecek.";
-        if (!Confirm(question)) return;
 
+        // Onay sorulmaz: mesaj kutusu paneli kapatıp açıyordu; yeniden çeviri özeti korur ve tekrar çalıştırılabilir.
         ClosePlayer();
         try
         {
             _controller.Requeue(r.Id);
-            ShowMessage("Kayıt metne çevrilmek üzere sıraya alındı.");
+            ResetPersonFilter();
+            ShowMessage(_ranges.Count > 0
+                ? $"Kayıt metne çevrilmek üzere sıraya alındı (yalnızca seçili {_ranges.Count} aralık)."
+                : "Kayıt metne çevrilmek üzere sıraya alındı.");
         }
         catch (Exception ex)
         {
@@ -1455,7 +1477,10 @@ public partial class RecordingsView : UserControl
         try
         {
             Clipboard.SetText(sb.ToString());
-            ShowMessage("Panoya kopyalandı.");
+            // _transcriptText kişi filtresi uygulanmış (görünen) metindir.
+            ShowMessage(_hasTranscript && TranscriptPersonFilter.Summarize(_persons, _personFilter) is { } shown
+                ? $"Panoya kopyalandı: transkriptten yalnızca filtredeki satırlar ({shown})."
+                : "Panoya kopyalandı.");
         }
         catch (ExternalException ex)
         {
@@ -1497,6 +1522,20 @@ public partial class RecordingsView : UserControl
             ? MessageBox.Show(owner, question, "Notlar", MessageBoxButton.YesNo, MessageBoxImage.Question)
             : MessageBox.Show(question, "Notlar", MessageBoxButton.YesNo, MessageBoxImage.Question);
         return result == MessageBoxResult.Yes;
+    }
+
+    /// <summary>Bildirim metni için kaydın başlığı; okunamazsa "#id".</summary>
+    private string TryGetTitle(long id)
+    {
+        try
+        {
+            return _controller?.Store.Get(id).Title ?? $"#{id}";
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+            return $"#{id}";
+        }
     }
 
     /// <summary>Görünüm görünürse mesaj çubuğunda, değilse (panel gizli / başka sekme açık; iş bu arada bittiyse)

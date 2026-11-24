@@ -267,11 +267,40 @@ public sealed record PlanProjectChipVm(long Id, string Name, bool IsMain)
 }
 
 /// <summary>Plan detay görünümünde bir adımın görünüm modeli (satır içi düzenleme desteğiyle).</summary>
-public sealed class PlanStepItemVm(PlanStep step, string? projectName) : INotifyPropertyChanged
+public sealed class PlanStepItemVm(PlanStep step, string? projectName, Brush? assigneeBrush = null) : INotifyPropertyChanged
 {
     private bool _isEditing;
     private string _editText = "";
     private long? _editProjectId;
+    private string _editAssignee = "";
+    private string _editDue = "";
+
+    /// <summary>Sorumlu rozeti: "👤 Ahmet" (varsa " · ⏰ Cuma"); sorumlu da son tarih de yoksa boş.</summary>
+    public string AssigneeLabel => (Step.Assignee, Step.DueText) switch
+    {
+        ({ } a, { } d) => $"👤 {a} · ⏰ {d}",
+        ({ } a, null) => $"👤 {a}",
+        (null, { } d) => $"⏰ {d}",
+        _ => "",
+    };
+    public bool HasAssigneeLabel => AssigneeLabel.Length > 0;
+
+    /// <summary>Sorumluya özgü rozet rengi (plandaki sırasına göre kişi renklerinden biri).</summary>
+    public Brush? AssigneeBrush { get; } = assigneeBrush;
+
+    /// <summary>Satır içi düzenlemede sorumlu kutusu (boş = sorumlusu belirsiz).</summary>
+    public string EditAssignee
+    {
+        get => _editAssignee;
+        set { _editAssignee = value; OnChanged(); }
+    }
+
+    /// <summary>Satır içi düzenlemede son tarih kutusu (boş = son tarih yok).</summary>
+    public string EditDue
+    {
+        get => _editDue;
+        set { _editDue = value; OnChanged(); }
+    }
 
     public PlanStep Step { get; } = step;
     public long Id => Step.Id;

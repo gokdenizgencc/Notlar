@@ -141,6 +141,7 @@ public partial class PanelWindow : Window
 
         UpdatePinButtonVisual();
         UpdateFullScreenButtonVisual();
+        InitializeGeneralBehavior();
     }
 
     /// <summary>Paneli gösterir, Kayıtlar bölümüne geçer ve <paramref name="selectId"/> verilmişse o kaydı seçer
@@ -160,6 +161,30 @@ public partial class PanelWindow : Window
             ShowNearTray();
         }
         if (selectId is { } id) RecordingsViewHost.Select(id);
+    }
+
+    /// <summary>Global kısayol "Paneli aç/kapat": panel önde ve etkinse gizler; açık ama arkada kaldıysa öne getirir
+    /// (sabitlenmiş panel başka pencerelerin altında kalabilir); kapalıysa açar.</summary>
+    public void ToggleFromHotkey()
+    {
+        if (IsVisible && IsActive) HidePanel();
+        else if (IsVisible) Activate();
+        else ShowNearTray();
+    }
+
+    /// <summary>Global kısayol "Hızlı not": paneli Notlar bölümünde açar ve not kutusuna odaklanır.</summary>
+    public void ShowQuickNote()
+    {
+        if (_mode != Mode.Notes)
+        {
+            CancelAllEdits();
+            ResetSelectMode();
+            _mode = Mode.Notes;
+            if (IsVisible) ReloadCore();
+        }
+        if (IsVisible) Activate();
+        else ShowNearTray();
+        InputBox.Focus();
     }
 
     /// <summary>Sağ alttaki kayıt düğmesi: kayıt sürüyorsa durdurur, yoksa başlatır. İlk kayıtta gösterilen onay
@@ -2258,12 +2283,38 @@ public partial class PanelWindow : Window
             PlanStepProjectOptions.Add(new PlanStepProjectOption(projId, projName));
 
         var projectNameById = allProjects.ToDictionary(p => p.Id, p => p.Name);
+        var assigneeOrder = PlanAssignees.Order(steps);
         PlanDetailSteps.Clear();
         foreach (var step in steps)
         {
             var name = step.ProjectId is { } pid && projectNameById.TryGetValue(pid, out var n) ? n : null;
-            PlanDetailSteps.Add(new PlanStepItemVm(step, name));
+            PlanDetailSteps.Add(new PlanStepItemVm(step, name, AssigneeBrush(assigneeOrder, step.Assignee)));
         }
+        PlanCopyAssignmentsButton.Visibility = PlanAssignees.AnyAssigned(steps) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Sorumlu rozetinin rengi: sorumlunun plandaki sırasına göre kişi renklerinden biri (sorumlusuz
+    /// adımlarda soluk renk).</summary>
+    private Brush AssigneeBrush(IReadOnlyList<string> order, string? assignee) =>
+        PlanAssignees.ColorSlot(order, assignee) is var slot and > 0
+            ? (Brush)FindResource(Theme.PersonBrushKey(slot))
+            : (Brush)FindResource("Muted");
+
+    /// <summary>📋 Kime ne verildi: planın adımlarını sorumluya göre özetleyip panoya kopyalar.</summary>
+    private void PlanCopyAssignments_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPlan is not { } plan) return;
+        Try(() =>
+        {
+            var summary = PlanAssignees.BuildSummary(_planStore.GetPlan(plan.Id).Steps);
+            if (summary.Length == 0) return;
+            Clipboard.SetText(summary);
+            // Kısa geri bildirim: düğme 2 sn "kopyalandı" yazar.
+            PlanCopyAssignmentsButton.Content = "✓ Panoya kopyalandı";
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            timer.Tick += (_, _) => { timer.Stop(); PlanCopyAssignmentsButton.Content = "📋 Kime ne verildi"; };
+            timer.Start();
+        });
     }
 
     private static string PlanStatusLabel(PlanStatus status) => status switch
@@ -2387,7 +2438,7 @@ public partial class PanelWindow : Window
         {
             var plan = _planStore.CreatePlan(title, folder, steps: [], projectIds: projectIds);
             foreach (var item in stepItems)
-                _planStore.AddStep(plan.Id, item.Text, projectId: item.ProjectId);
+                _planStore.AddStep(plan.Id, item.Text, projectId: item.ProjectId, assignee: item.Assignee);
 
             PlanTitleBox.Clear();
             PlanStepsEditorControl.Clear();
@@ -2617,6 +2668,8 @@ public partial class PanelWindow : Window
         if (sender is not FrameworkElement { DataContext: PlanStepItemVm item }) return;
         item.EditText = item.Text;
         item.EditProjectId = item.Step.ProjectId;
+        item.EditAssignee = item.Step.Assignee ?? "";
+        item.EditDue = item.Step.DueText ?? "";
         item.IsEditing = true;
     }
 
@@ -2641,11 +2694,14 @@ public partial class PanelWindow : Window
     }
 
     /// <summary>Adım düzenlemesini kaydeder: metin değiştiyse <see cref="PlanStore.UpdateStep"/>, bağlı proje
-    /// değiştiyse <see cref="PlanStore.SetStepProject"/> çağrılır (ikisi de değişmediyse hiçbir şey yapılmaz).</summary>
+    /// değiştiyse <see cref="PlanStore.SetStepProject"/>, sorumlu/son tarih değiştiyse
+    /// <see cref="PlanStore.SetStepAssignee"/> çağrılır (hiçbiri değişmediyse hiçbir şey yapılmaz).</summary>
     private void SaveStepEdit(PlanStepItemVm item)
     {
         var text = item.EditText.Trim();
         var newProjectId = item.EditProjectId;
+        var newAssignee = PlanAssignees.Normalize(item.EditAssignee);
+        var newDue = PlanAssignees.NormalizeDue(item.EditDue);
         item.IsEditing = false;
         Try(() =>
         {
@@ -2653,6 +2709,8 @@ public partial class PanelWindow : Window
                 _planStore.UpdateStep(item.Id, text);
             if (newProjectId != item.Step.ProjectId)
                 _planStore.SetStepProject(item.Id, newProjectId);
+            if (newAssignee != item.Step.Assignee || newDue != item.Step.DueText)
+                _planStore.SetStepAssignee(item.Id, newAssignee, newDue);
             Reload();
         });
     }

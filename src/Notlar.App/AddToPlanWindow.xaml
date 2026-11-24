@@ -4,7 +4,7 @@
         Title="Plana ekle" Width="420" Height="560" MinWidth="360" MinHeight="420"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip"
         Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
-        FontFamily="Segoe UI" FontSize="13"
+        FontFamily="{DynamicResource AppFont}" FontSize="13"
         PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>

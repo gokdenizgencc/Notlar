@@ -4,7 +4,7 @@
         Title="Planı çalıştır" Width="460" Height="460" MinWidth="380" MinHeight="260"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip"
         Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
-        FontFamily="Segoe UI" FontSize="13"
+        FontFamily="{DynamicResource AppFont}" FontSize="13"
         PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <Style x:Key="FlatButton" TargetType="Button">

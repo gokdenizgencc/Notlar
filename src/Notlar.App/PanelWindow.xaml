@@ -6,7 +6,7 @@
         WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True"
         Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
         BorderBrush="{DynamicResource Border}" BorderThickness="1"
-        FontFamily="Segoe UI" FontSize="13"
+        FontFamily="{DynamicResource AppFont}" FontSize="13"
         Deactivated="Window_Deactivated" PreviewKeyDown="Window_PreviewKeyDown">
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="0" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" ResizeBorderThickness="0"/>
@@ -74,7 +74,7 @@
         </Style>
         <DataTemplate x:Key="NoteRowTemplate" DataType="{x:Type local:NoteItem}">
             <Border x:Name="Row" Focusable="True" FocusVisualStyle="{x:Null}"
-                    Background="Transparent" Padding="8,5" CornerRadius="4"
+                    Background="Transparent" Padding="{DynamicResource RowPadding}" CornerRadius="4"
                     MouseLeftButtonDown="Row_MouseLeftButtonDown">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -177,7 +177,7 @@
 
         <DataTemplate x:Key="TaskRowTemplate" DataType="{x:Type local:TaskItemVm}">
             <Border x:Name="TaskRow" Focusable="True" FocusVisualStyle="{x:Null}"
-                    Background="Transparent" Padding="8,5" CornerRadius="4">
+                    Background="Transparent" Padding="{DynamicResource RowPadding}" CornerRadius="4">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -232,7 +232,7 @@
 
         <DataTemplate x:Key="MemoryRowTemplate" DataType="{x:Type local:MemoryItemVm}">
             <Border x:Name="MemRow" Focusable="True" FocusVisualStyle="{x:Null}"
-                    Background="Transparent" Padding="8,6" CornerRadius="4"
+                    Background="Transparent" Padding="{DynamicResource RowPaddingWide}" CornerRadius="4"
                     MouseLeftButtonDown="MemoryRow_MouseLeftButtonDown">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -286,7 +286,7 @@
 
         <DataTemplate x:Key="SkillRowTemplate" DataType="{x:Type local:SkillItemVm}">
             <Border x:Name="SkillRow" Focusable="True" FocusVisualStyle="{x:Null}"
-                    Background="Transparent" Padding="8,6" CornerRadius="4">
+                    Background="Transparent" Padding="{DynamicResource RowPaddingWide}" CornerRadius="4">
                 <Grid>
                     <Grid.Style>
                         <Style TargetType="Grid">
@@ -350,7 +350,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="MarketplaceRowTemplate" DataType="{x:Type local:MarketplacePluginVm}">
-            <Border x:Name="MarketRow" Background="Transparent" Padding="8,6" CornerRadius="4">
+            <Border x:Name="MarketRow" Background="Transparent" Padding="{DynamicResource RowPaddingWide}" CornerRadius="4">
                 <StackPanel>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -421,7 +421,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="PlanRowTemplate" DataType="{x:Type local:PlanListItemVm}">
-            <Border x:Name="PlanRow" Background="Transparent" Padding="8,6" CornerRadius="4" Cursor="Hand"
+            <Border x:Name="PlanRow" Background="Transparent" Padding="{DynamicResource RowPaddingWide}" CornerRadius="4" Cursor="Hand"
                     MouseLeftButtonDown="PlanRow_MouseLeftButtonDown">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -494,7 +494,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="ProjectRowTemplate" DataType="{x:Type local:ProjectItemVm}">
-            <Border x:Name="ProjectRow" Background="Transparent" Padding="8,6" CornerRadius="4">
+            <Border x:Name="ProjectRow" Background="Transparent" Padding="{DynamicResource RowPaddingWide}" CornerRadius="4">
                 <StackPanel>
                     <Grid Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
                         <Grid.ColumnDefinitions>
@@ -540,7 +540,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="PlanStepRowTemplate" DataType="{x:Type local:PlanStepItemVm}">
-            <Border x:Name="PlanStepRow" Background="Transparent" Padding="8,6" CornerRadius="4">
+            <Border x:Name="PlanStepRow" Background="Transparent" Padding="{DynamicResource RowPaddingWide}" CornerRadius="4">
                 <StackPanel>
                     <StackPanel Visibility="{Binding IsViewing, Converter={StaticResource BoolToVis}}">
                         <Grid>
@@ -554,6 +554,14 @@
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
                                 <StackPanel Orientation="Horizontal">
+                                    <!-- Sorumlu (kime verildi) rozeti: her kişi plandaki sırasına göre ayrı renkte. -->
+                                    <Border BorderBrush="{Binding AssigneeBrush}" BorderThickness="1" CornerRadius="6"
+                                            Padding="5,0" Margin="0,1,6,0"
+                                            ToolTip="Sorumlu ve son tarih (✏️ ile değiştirilebilir)"
+                                            Visibility="{Binding HasAssigneeLabel, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="{Binding AssigneeLabel}" FontSize="11" FontWeight="SemiBold"
+                                                   Foreground="{Binding AssigneeBrush}"/>
+                                    </Border>
                                     <TextBlock Text="{Binding AuthorLabel}" FontSize="11" FontWeight="SemiBold"
                                                Foreground="{DynamicResource Accent}"
                                                Visibility="{Binding HasAuthorLabel, Converter={StaticResource BoolToVis}}"
@@ -586,6 +594,29 @@
                                      TextWrapping="Wrap" AcceptsReturn="True" MinLines="1" MaxLines="4" Padding="2"
                                      KeyDown="PlanStepEditBox_KeyDown" IsVisibleChanged="EditBox_IsVisibleChanged"/>
                         </DockPanel>
+                        <!-- Sorumlu (boş = belirsiz; kullanıcının kendisi için "Ben") ve son tarih. -->
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="0.7*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="👤" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Muted}"/>
+                            <TextBox Grid.Column="1" Text="{Binding EditAssignee, UpdateSourceTrigger=PropertyChanged}" FontSize="11"
+                                     Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                     CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Border}" Padding="2,1"
+                                     ToolTip="Sorumlu: işin verildiği kişi (kendiniz için &quot;Ben&quot;; boş = belirsiz)"
+                                     KeyDown="PlanStepEditBox_KeyDown"/>
+                            <TextBlock Grid.Column="2" Text="⏰" FontSize="11" Margin="8,0,4,0" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Muted}"/>
+                            <TextBox Grid.Column="3" Text="{Binding EditDue, UpdateSourceTrigger=PropertyChanged}" FontSize="11"
+                                     Background="{DynamicResource Surface}" Foreground="{DynamicResource Fg}"
+                                     CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Border}" Padding="2,1"
+                                     ToolTip="Son tarih (ör. Cuma, ay sonu; boş = yok)"
+                                     KeyDown="PlanStepEditBox_KeyDown"/>
+                        </Grid>
                         <DockPanel Margin="0,4,0,0" LastChildFill="False">
                             <ComboBox DockPanel.Dock="Left" FontSize="11" MinWidth="120"
                                       ItemsSource="{Binding DataContext.PlanStepProjectOptions, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -965,7 +996,7 @@
                         <ItemsControl ItemsSource="{Binding Days}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type local:DayListItem}">
-                                    <Border x:Name="DayRow" Background="Transparent" Padding="8,8" CornerRadius="4"
+                                    <Border x:Name="DayRow" Background="Transparent" Padding="{DynamicResource DayRowPadding}" CornerRadius="4"
                                             Cursor="Hand" MouseLeftButtonDown="DayRow_MouseLeftButtonDown">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -1265,6 +1296,12 @@
                                         Padding="12,4" Margin="6,0,0,0"/>
                             </StackPanel>
                         </StackPanel>
+
+                        <!-- Adımlardan birinin sorumlusu varsa: "kime ne verildi" özetini panoya kopyala. -->
+                        <Button x:Name="PlanCopyAssignmentsButton" Content="📋 Kime ne verildi" Visibility="Collapsed"
+                                Click="PlanCopyAssignments_Click" Style="{StaticResource FlatButton}"
+                                Foreground="{DynamicResource Accent}" HorizontalAlignment="Left" Padding="0,2" Margin="2,0,0,4"
+                                ToolTip="Görevleri sorumluya göre özetleyip panoya kopyala (ör. &quot;Ahmet: x, y / Ayşe: z&quot;)"/>
 
                         <ItemsControl ItemsSource="{Binding PlanDetailSteps}" ItemTemplate="{StaticResource PlanStepRowTemplate}"/>
 

@@ -4,7 +4,7 @@
         Title="Notlar — Editör" Width="1200" Height="800" MinWidth="500" MinHeight="350"
         WindowStartupLocation="CenterScreen" WindowState="Maximized"
         Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
-        FontFamily="Segoe UI"
+        FontFamily="{DynamicResource AppFont}"
         PreviewKeyDown="Window_PreviewKeyDown"
         PreviewMouseWheel="Window_PreviewMouseWheel"
         Closing="Window_Closing"

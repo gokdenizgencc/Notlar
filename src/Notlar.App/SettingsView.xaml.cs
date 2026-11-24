@@ -12,12 +12,12 @@ using Notlar.Kayit;
 namespace Notlar.App;
 
 /// <summary>Panel içindeki ⚙ Ayarlar görünümü: Görünüm, Genel, Kayıt, Gizlilik, Hakkında. Her değişiklik anında
-/// kaydedilir (görünüm kaydırıcıları/renk kodları kısa bir gecikmeyle, yazarken diske boğulmasın diye).
+/// kaydedilir (Görünüm bölümü <see cref="AppearanceSettings"/> denetiminde kendisi kaydeder; kaydırıcılar/renk kodları
+/// kısa bir gecikmeyle, yazarken diske boğulmasın diye).
 /// Ayarlar her kayıtta diskten taze okunup yazılır (<see cref="AppSettings.Update"/>), böylece panelin kendi
 /// kaydettiği alanlar (konum, boyut) eski değerle ezilmez; <see cref="AppSettings.Changed"/> olayı korunur.</summary>
 public partial class SettingsView : UserControl
 {
-    private readonly DispatcherTimer _appearanceSaveTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(6) };
     private AppSettings? _settings;
     private AppFlags? _flags;
@@ -36,15 +36,9 @@ public partial class SettingsView : UserControl
     public SettingsView()
     {
         InitializeComponent();
-        // Sınırları ayarlamak değeri zorlayıp ValueChanged tetikler; bu bir kullanıcı değişikliği değil.
-        _syncing = true;
-        EditorFontSlider.Minimum = AppSettings.MinEditorFontSize;
-        EditorFontSlider.Maximum = AppSettings.MaxEditorFontSize;
-        EditorFontSlider.Value = AppSettings.DefaultEditorFontSize;
-        _syncing = false;
 
-        Appearance.Edited += ScheduleAppearanceSave;
-        _appearanceSaveTimer.Tick += (_, _) => SaveAppearanceNow();
+        Appearance.SaveFailed += ShowError;
+        AutoRecordDays.Error += ShowError;
         _statusTimer.Tick += (_, _) => { _statusTimer.Stop(); StatusBar.Visibility = Visibility.Collapsed; };
 
         // Panelin 📌/⤢ düğmeleri ya da başka pencereler ayarı değiştirirse anahtarlar güncel kalsın.
@@ -67,17 +61,15 @@ public partial class SettingsView : UserControl
     public void Reload()
     {
         // Bekleyen görünüm kaydı önce yazılır; yoksa aşağıdaki yükleme kullanıcının son değişikliğini silerdi.
-        if (_appearanceSaveTimer.IsEnabled) SaveAppearanceNow();
+        Appearance.FlushPendingSave();
 
         var settings = AppSettings.Load();
         _syncing = true;
         try
         {
             // Kullanıcı bir renk kodu yazarken (ör. veri değişikliği sinyaliyle gelen Reload) satırları yeniden kurma.
-            if (!(Keyboard.FocusedElement is TextBox focused && Appearance.IsAncestorOf(focused)))
+            if (!Appearance.IsEditingText)
                 Appearance.Load(settings);
-            EditorFontSlider.Value = settings.EditorFontSize;
-            UpdateEditorFontText();
 
             SyncPanelToggles(settings);
             SyncLanguage(settings);
@@ -110,46 +102,6 @@ public partial class SettingsView : UserControl
                 _syncing = false;
             }
         });
-    }
-
-    // ── Görünüm ────────────────────────────────────────────────────────────
-
-    private void ScheduleAppearanceSave()
-    {
-        _appearanceSaveTimer.Stop();
-        _appearanceSaveTimer.Start();
-    }
-
-    /// <summary>Gün penceresi yazı boyutu, yazar renkleri ve editör yazı boyutunu kaydeder. Geçersiz renk kodu
-    /// kaydedilmez (kutunun kenarı kırmızı kalır); diğer değerler yine de kaydedilir.</summary>
-    private void SaveAppearanceNow()
-    {
-        _appearanceSaveTimer.Stop();
-        var editorFontSize = Math.Round(EditorFontSlider.Value);
-        SaveSetting(s =>
-        {
-            Appearance.ApplyTo(s);
-            s.EditorFontSize = editorFontSize;
-        });
-    }
-
-    private void EditorFontSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        UpdateEditorFontText();
-        if (!_syncing && IsInitialized) ScheduleAppearanceSave();
-    }
-
-    private void UpdateEditorFontText()
-    {
-        if (EditorFontValueText is null) return;
-        EditorFontValueText.Text = Math.Round(EditorFontSlider.Value).ToString("0");
-    }
-
-    private void AppearanceReset_Click(object sender, RoutedEventArgs e)
-    {
-        Appearance.ResetToDefaults();
-        EditorFontSlider.Value = AppSettings.DefaultEditorFontSize;
-        SaveAppearanceNow();
     }
 
     // ── Genel ──────────────────────────────────────────────────────────────

@@ -1,0 +1,27 @@
+<UserControl x:Class="Notlar.App.ShortcutSettings"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Foreground="{DynamicResource Fg}">
+    <!-- ⚙ Ayarlar → Kısayollar. Biçemler (SectionTitle, FieldTitle, Hint, SettingCheck, CheckHint, LinkButton)
+         barındıran SettingsView'un kaynaklarından DynamicResource ile alınır. Satırlar kodda kurulur
+         (bkz. ShortcutSettings.xaml.cs); değişiklikler anında kaydedilir ve kısayollar yeniden kaydedilir. -->
+    <StackPanel>
+        <TextBlock Text="Kısayollar" Style="{DynamicResource SectionTitle}"/>
+
+        <TextBlock Text="Sistem geneli kısayollar" Style="{DynamicResource FieldTitle}"/>
+        <TextBlock Style="{DynamicResource Hint}" Margin="0,0,0,10"
+                   Text="Notlar arka plandayken de her uygulamada çalışır. Değiştirmek için kutuya tıklayıp yeni tuş birleşimine basın (Ctrl, Alt ya da Win + tuş); Esc vazgeçer."/>
+
+        <StackPanel x:Name="RowsPanel"/>
+
+        <TextBlock Text="Uygulama içi kısayollar" Style="{DynamicResource FieldTitle}" Margin="0,6,0,6"/>
+        <Grid x:Name="InAppGrid">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" MinWidth="96"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+        </Grid>
+        <TextBlock Style="{DynamicResource Hint}" Margin="0,6,0,0"
+                   Text="Bu kısayollar değiştirilemez; yalnızca ilgili pencere öndeyken çalışır."/>
+    </StackPanel>
+</UserControl>

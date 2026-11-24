@@ -21,6 +21,7 @@ public partial class PlanStepsEditor : UserControl
         public required TextBox Box;
         public required TextBlock Placeholder;
         public required ComboBox ProjectCombo;
+        public required TextBox AssigneeBox;
         public required Button Up;
         public required Button Down;
         public required Button Remove;
@@ -54,13 +55,15 @@ public partial class PlanStepsEditor : UserControl
         }
     }
 
-    /// <summary>Boş olmayan adımlar, her biri isteğe bağlı bağlı olduğu proje id'siyle birlikte, sıralı.</summary>
-    public IReadOnlyList<(string Text, long? ProjectId)> StepItems
+    /// <summary>Boş olmayan adımlar, her biri isteğe bağlı bağlı olduğu proje id'si ve sorumlusuyla (boşsa null)
+    /// birlikte, sıralı.</summary>
+    public IReadOnlyList<(string Text, long? ProjectId, string? Assignee)> StepItems
     {
         get
         {
             return _rows
-                .Select(r => (Text: r.Box.Text.Trim(), ProjectId: (r.ProjectCombo.SelectedItem as PlanStepProjectOption)?.Id))
+                .Select(r => (Text: r.Box.Text.Trim(), ProjectId: (r.ProjectCombo.SelectedItem as PlanStepProjectOption)?.Id,
+                    Assignee: Notlar.Core.PlanAssignees.Normalize(r.AssigneeBox.Text)))
                 .Where(t => t.Text.Length > 0)
                 .ToList();
         }
@@ -243,21 +246,49 @@ public partial class PlanStepsEditor : UserControl
         };
         projectCombo.SelectedItem = _projectOptions.FirstOrDefault(o => o.Id == projectId) ?? _projectOptions[0];
         projectCombo.SelectionChanged += (_, _) => { if (!_suppressEvents) RaiseStepsChanged(); };
-        Grid.SetColumn(projectCombo, 1);
-        Grid.SetRow(projectCombo, 1);
+
+        // Sorumlu (kime verildi): isteğe bağlı; kendiniz için "Ben".
+        var assigneeIcon = new TextBlock
+        {
+            Text = "👤",
+            FontSize = 11,
+            Foreground = (Brush)FindResource("Muted"),
+            Margin = new Thickness(0, 0, 3, 4),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var assigneeBox = new TextBox
+        {
+            FontSize = 11,
+            MinWidth = 90,
+            Padding = new Thickness(2, 1, 2, 1),
+            Margin = new Thickness(0, 0, 6, 4),
+            Background = (Brush)FindResource("Surface"),
+            Foreground = (Brush)FindResource("Fg"),
+            CaretBrush = (Brush)FindResource("Fg"),
+            BorderBrush = (Brush)FindResource("Border"),
+            ToolTip = "Sorumlu: işin verildiği kişi (kendiniz için \"Ben\"; boş = belirsiz)",
+        };
+        assigneeBox.TextChanged += (_, _) => { if (!_suppressEvents) RaiseStepsChanged(); };
+
+        var extras = new StackPanel { Orientation = Orientation.Horizontal };
+        extras.Children.Add(projectCombo);
+        extras.Children.Add(assigneeIcon);
+        extras.Children.Add(assigneeBox);
+        Grid.SetColumn(extras, 1);
+        Grid.SetRow(extras, 1);
 
         grid.Children.Add(number);
         grid.Children.Add(box);
         grid.Children.Add(placeholder);
         grid.Children.Add(buttons);
-        grid.Children.Add(projectCombo);
+        grid.Children.Add(extras);
 
         var root = new Border { Child = grid, Padding = new Thickness(0, 2, 0, 2) };
 
         var row = new StepRow
         {
             Root = root, Number = number, Box = box, Placeholder = placeholder,
-            ProjectCombo = projectCombo, Up = up, Down = down, Remove = remove,
+            ProjectCombo = projectCombo, AssigneeBox = assigneeBox, Up = up, Down = down, Remove = remove,
         };
         _rows.Add(row);
         StepsPanel.Children.Add(root);

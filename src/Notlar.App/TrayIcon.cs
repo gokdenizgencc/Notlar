@@ -90,12 +90,15 @@ public sealed class TrayIcon : IDisposable
         _notifyIcon.Text = recording ? RecordingTooltip : NormalTooltip;
     }
 
-    /// <summary>Tepsi balonu (bildirim) gösterir; <paramref name="onClick"/> balona tıklanınca çağrılır.</summary>
-    public void ShowBalloon(string title, string text, Action? onClick, bool isError = false)
+    /// <summary>Tepsi balonu (bildirim) gösterir; <paramref name="onClick"/> balona tıklanınca çağrılır. Doğrudan değil,
+    /// ayarları uygulayan <see cref="Notifier"/> üzerinden çağrılır. <paramref name="silent"/>: bildirim sesi çalmaz.</summary>
+    public void ShowBalloon(string title, string text, Action? onClick, bool isError = false, bool silent = false)
     {
         _balloonClick = onClick;
-        _notifyIcon.ShowBalloonTip(5000, Truncate(title, 60), Truncate(string.IsNullOrWhiteSpace(text) ? " " : text, 250),
-            isError ? Forms.ToolTipIcon.Error : Forms.ToolTipIcon.Info);
+        var safeTitle = Truncate(title, 60);
+        var safeText = Truncate(string.IsNullOrWhiteSpace(text) ? " " : text, 250);
+        if (silent && SilentBalloon.TryShow(_notifyIcon, safeTitle, safeText, isError)) return;
+        _notifyIcon.ShowBalloonTip(5000, safeTitle, safeText, isError ? Forms.ToolTipIcon.Error : Forms.ToolTipIcon.Info);
     }
 
     /// <summary>Windows balon başlığı/metni uzunluk sınırlıdır (63 / 255 karakter).</summary>

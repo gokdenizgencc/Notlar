@@ -128,27 +128,12 @@
                 <TextBlock x:Name="StatusText" TextWrapping="Wrap" Foreground="{DynamicResource DangerText}"/>
             </Border>
 
+            <local:SettingsJumpBar/>
             <!-- ── Görünüm ─────────────────────────────────────────────── -->
             <TextBlock Text="Görünüm" Style="{StaticResource SectionTitle}"/>
 
-            <TextBlock Text="Not editörü yazı boyutu" Style="{StaticResource FieldTitle}"/>
-            <Grid Margin="0,0,0,4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Slider x:Name="EditorFontSlider" TickFrequency="1" IsSnapToTickEnabled="True" VerticalAlignment="Center"
-                        ValueChanged="EditorFontSlider_ValueChanged" AutomationProperties.Name="Not editörü yazı boyutu"/>
-                <TextBlock x:Name="EditorFontValueText" Grid.Column="1" Width="32" Margin="8,0,0,0" TextAlignment="Right"
-                           VerticalAlignment="Center" Foreground="{DynamicResource Muted}"/>
-            </Grid>
-            <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,14"
-                       Text="Tam ekran not editöründe Ctrl + tekerlek ile de değişir."/>
-
-            <local:AppearanceSettings x:Name="Appearance" FontSizeTitle="Gün penceresi yazı boyutu"/>
-
-            <Button Content="Görünümü varsayılana döndür" Style="{StaticResource LinkButton}" Margin="0,2,0,0"
-                    Click="AppearanceReset_Click"/>
+            <!-- Tema, vurgu rengi, yazı, yoğunluk, yazar renkleri ve "varsayılana döndür"; kendisi anında kaydeder. -->
+            <local:AppearanceSettings x:Name="Appearance"/>
 
             <Border Style="{StaticResource Divider}"/>
 
@@ -172,6 +157,14 @@
                            Text="Panel serbestçe boyutlandırılabilen geniş bir pencere olarak açılır; boyutu ve konumu hatırlanır."/>
             </StackPanel>
 
+            <local:GeneralSettings/>
+
+            <Border Style="{StaticResource Divider}" Margin="0,4,0,14"/>
+            <local:ShortcutSettings/>
+
+            <Border Style="{StaticResource Divider}" Margin="0,4,0,14"/>
+            <local:NotificationSettings/>
+
             <Border Style="{StaticResource Divider}" Margin="0,4,0,14"/>
 
             <!-- ── Kayıt ───────────────────────────────────────────────── -->
@@ -190,7 +183,7 @@
             <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,12"
                        Text="Var olan bir kaydın dili Kayıtlar'da, kaydın ⋯ menüsünden değiştirilir."/>
 
-            <CheckBox x:Name="AutoRecordCheck" Content="Hafta içi otomatik kayıt" Style="{StaticResource SettingCheck}"
+            <CheckBox x:Name="AutoRecordCheck" Content="Zamanlanmış otomatik kayıt" Style="{StaticResource SettingCheck}"
                       Checked="AutoRecordCheck_Changed" Unchecked="AutoRecordCheck_Changed"/>
             <StackPanel Orientation="Horizontal" Margin="20,4,0,0">
                 <TextBox x:Name="AutoRecordStartBox" Width="54" MaxLength="5" TextAlignment="Center" Padding="2,3"
@@ -205,8 +198,9 @@
                          ToolTip="Bitiş saati (SS:dd)"
                          LostKeyboardFocus="AutoRecordTime_LostKeyboardFocus" KeyDown="AutoRecordTime_KeyDown"/>
             </StackPanel>
-            <TextBlock Style="{StaticResource CheckHint}" Margin="20,4,0,12"
-                       Text="Pazartesi–Cuma bu saatler arasında kayıt kendiliğinden başlar ve durur (Notlar açıkken). Kayıt metne kendiliğinden çevrilmez; Kayıtlar'da 📝 Transkript et'e basmanız beklenir. Elle başlattığınız kayda dokunulmaz."/>
+            <local:AutoRecordDaysPicker x:Name="AutoRecordDays" Margin="20,6,0,0"/>
+            <TextBlock Style="{StaticResource CheckHint}" Margin="20,2,0,12"
+                       Text="Seçili günlerde (varsayılan Pazartesi–Cuma) bu saatler arasında kayıt kendiliğinden başlar ve durur (Notlar açıkken). Kayıt bitince metne çevrilmesi aşağıdaki &quot;Kayıt bitince otomatik metne çevir&quot; ayarına bağlıdır. Elle başlattığınız kayda dokunulmaz."/>
 
             <CheckBox x:Name="TeamsAutoRecordCheck" Content="Teams aramasında otomatik kayıt"
                       Style="{StaticResource SettingCheck}"
@@ -215,13 +209,15 @@
                        Text="Teams araması ya da toplantısı başlayınca (Teams mikrofonu kullanmaya başlayınca) kayıt kendiliğinden başlar, arama bitince durur (Notlar açıkken). Zaten süren bir kayıt varsa yenisi başlatılmaz ve o kayıt arama bitince durdurulmaz."/>
 
             <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,8" Foreground="{DynamicResource Fg}"
-                       Text="Ses dosyaları 14 gün sonra silinir; transkript ve özetler kalır."/>
+                       Text="Ses dosyalarının ne zaman silineceği Veri ve yedekleme bölümünden ayarlanır; transkript ve özetler kalır."/>
 
             <TextBlock x:Name="BackendText" Style="{StaticResource Hint}" Margin="0,0,0,2"/>
             <TextBlock x:Name="GpuOffText" Style="{StaticResource Hint}" Margin="0,0,0,2" Visibility="Collapsed"/>
 
             <Button Content="📁 Kayıt klasörünü aç" Style="{StaticResource ActionButton}" Margin="0,10,0,0"
                     Click="OpenRecordingsDir_Click"/>
+
+            <local:AudioSettings/>
 
             <Border Style="{StaticResource Divider}"/>
 
@@ -233,6 +229,9 @@
                       Checked="KisiselOkumaCheck_Changed" Unchecked="KisiselOkumaCheck_Changed"/>
             <TextBlock x:Name="KisiselOkumaHint" Style="{StaticResource CheckHint}" Margin="20,2,0,0"
                        Text="Kapalıyken Claude (MCP) kişisel listeyi okuyamaz; yalnızca ekleme yapabilir. Varsayılan: kapalı."/>
+
+            <Border Style="{StaticResource Divider}"/>
+            <local:DataSettings/>
 
             <Border Style="{StaticResource Divider}"/>
 

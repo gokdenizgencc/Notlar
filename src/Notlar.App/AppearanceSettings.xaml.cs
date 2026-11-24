@@ -6,55 +6,90 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
+using Notlar.Core;
 
 namespace Notlar.App;
 
-/// <summary>Görünüm ayarları düzenleyicisi: gün penceresi yazı boyutu ve yazar renkleri. Değerleri yalnızca
-/// <see cref="ApplyTo"/> çağrıldığında ayarlara yazar; ne zaman kaydedileceğine barındıran taraf karar verir
-/// (AppearanceWindow "Uygula" ile, ⚙ Ayarlar görünümü <see cref="Edited"/> üzerine anında).</summary>
+/// <summary>Görünüm ayarları düzenleyicisi: tema modu, vurgu rengi, yazı tipi, yazı boyutları, yoğunluk ve yazar
+/// renkleri. Her değişiklik kendisi tarafından anında kaydedilir (<see cref="AppSettings.Update"/>; kaydırıcılar ve
+/// renk kodları yazarken diske boğulmasın diye kısa bir gecikmeyle). Kayıt <see cref="AppSettings.Changed"/>'i
+/// tetikler; App temayı yeniden uygular, açık pencereler ve önizleme kartı DynamicResource ile güncellenir.</summary>
 public partial class AppearanceSettings : UserControl
 {
     private static readonly string[] KnownAuthors = { "Ben", "Claude", "ChatGPT", "Gemini" };
 
-    private static readonly string[] Presets =
+    private static readonly string[] AuthorPresets =
     {
         "#D97757", "#10A37F", "#4285F4", "#8E24AA", "#E91E8C", "#546E7A", "#F4511E", "#43A047",
     };
 
+    /// <summary>"Varsayılan" kutucuğunun gösterdiği renk (açık temadaki uygulama mavisi).</summary>
+    private const string DefaultSwatchHex = "#0F6CBD";
+
     private static readonly Regex HexPattern = new(@"^#[0-9A-Fa-f]{6}$", RegexOptions.Compiled);
 
     private readonly Dictionary<string, TextBox> _hexBoxes = new(StringComparer.OrdinalIgnoreCase);
-    private bool _loading;
+    private readonly Dictionary<string, RadioButton> _accentButtons = new(StringComparer.OrdinalIgnoreCase);
+    private readonly DispatcherTimer _saveTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
 
-    /// <summary>Kullanıcı bir değeri değiştirdiğinde (kaydırıcı, renk kutusu, hazır renk, varsayılana dön)
-    /// tetiklenir; <see cref="Load"/> sırasında tetiklenmez.</summary>
-    public event Action? Edited;
+    /// <summary>Renk seçimi radyo düğmeleri iki ayrı panelde durduğundan grup adıyla bağlanır; aynı denetim iki
+    /// pencerede açıksa birbirini etkilemesin diye ad örneğe özeldir.</summary>
+    private readonly string _accentGroup = "Accent_" + Guid.NewGuid().ToString("N");
+
+    private bool _loading;
+    private string _themeMode = AppearanceOptions.ThemeSystem;
+    private string _accent = AppearanceOptions.AccentDefault;
+    private string _fontFamily = "";
+    private string _density = AppearanceOptions.DensityComfortable;
+
+    /// <summary>Kaydetme başarısız olduğunda (mesaj). Barındıran taraf kullanıcıya gösterir.</summary>
+    public event Action<string>? SaveFailed;
 
     public AppearanceSettings()
     {
         InitializeComponent();
+        _loading = true;
         FontSizeSlider.Minimum = AppSettings.MinDayFontSize;
         FontSizeSlider.Maximum = AppSettings.MaxDayFontSize;
+        FontSizeSlider.Value = AppSettings.DefaultDayFontSize;
+        EditorFontSlider.Minimum = AppSettings.MinEditorFontSize;
+        EditorFontSlider.Maximum = AppSettings.MaxEditorFontSize;
+        EditorFontSlider.Value = AppSettings.DefaultEditorFontSize;
+        _loading = false;
+
+        BuildAccentChoices();
+        BuildFontChoices();
+
+        _saveTimer.Tick += (_, _) => SaveNow();
+        // Pencere kapanırken / görünüm değişirken bekleyen kayıt kaybolmasın.
+        Unloaded += (_, _) => FlushPendingSave();
     }
 
-    /// <summary>Yazı boyutu başlığı (ör. panelde "Gün penceresi yazı boyutu").</summary>
-    public string FontSizeTitle
-    {
-        get => FontSizeCaption.Text;
-        set => FontSizeCaption.Text = value;
-    }
-
-    /// <summary>Seçili yazı boyutu (tam sayıya yuvarlanmış).</summary>
-    public double SelectedFontSize => Math.Round(FontSizeSlider.Value);
-
-    /// <summary>Denetimi verilen ayarların değerleriyle doldurur (<see cref="Edited"/> tetiklenmez).</summary>
+    /// <summary>Denetimi verilen ayarların değerleriyle doldurur (kaydetmez).</summary>
     public void Load(AppSettings settings)
     {
         _loading = true;
         try
         {
+            _themeMode = settings.ThemeMode;
+            _accent = settings.AccentColor;
+            _fontFamily = settings.UiFontFamily;
+            _density = settings.Density;
+
+            ThemeSystem.IsChecked = _themeMode == AppearanceOptions.ThemeSystem;
+            ThemeLight.IsChecked = _themeMode == AppearanceOptions.ThemeLight;
+            ThemeDark.IsChecked = _themeMode == AppearanceOptions.ThemeDark;
+
+            DensityComfortable.IsChecked = _density == AppearanceOptions.DensityComfortable;
+            DensityCompact.IsChecked = _density == AppearanceOptions.DensityCompact;
+
+            SyncAccent();
+            SyncFont();
+
             FontSizeSlider.Value = settings.DayFontSize;
-            UpdatePreview();
+            EditorFontSlider.Value = settings.EditorFontSize;
+            UpdateSizeTexts();
 
             _hexBoxes.Clear();
             AuthorColorsPanel.Children.Clear();
@@ -70,22 +105,25 @@ public partial class AppearanceSettings : UserControl
         }
     }
 
-    /// <summary>Geçersiz renk kodu girilmiş ilk yazar; hepsi geçerliyse null. Boş kod geçerlidir (tema rengi).</summary>
-    public string? FirstInvalidAuthor()
+    /// <summary>Kullanıcı bir renk kodu yazıyor mu? (Bu sırada dışarıdan yeniden yükleme satırları silmesin.)</summary>
+    public bool IsEditingText => Keyboard.FocusedElement is TextBox focused && IsAncestorOf(focused);
+
+    /// <summary>Gecikmeli bekleyen bir kayıt varsa hemen yazar.</summary>
+    public void FlushPendingSave()
     {
-        foreach (var kv in _hexBoxes)
-        {
-            if (!IsValidHex(kv.Value.Text.Trim()))
-                return kv.Key;
-        }
-        return null;
+        if (_saveTimer.IsEnabled) SaveNow();
     }
 
-    /// <summary>Denetimdeki değerleri <paramref name="settings"/> üzerine yazar (kaydetmez). Geçersiz renk
-    /// kodları atlanır; önce <see cref="FirstInvalidAuthor"/> ile doğrulanmalıdır.</summary>
+    /// <summary>Denetimdeki değerleri <paramref name="settings"/> üzerine yazar (kaydetmez). Geçersiz renk kodları
+    /// atlanır (kutunun kenarı kırmızı kalır).</summary>
     public void ApplyTo(AppSettings settings)
     {
-        settings.DayFontSize = SelectedFontSize;
+        settings.ThemeMode = _themeMode;
+        settings.AccentColor = _accent;
+        settings.UiFontFamily = _fontFamily;
+        settings.Density = _density;
+        settings.DayFontSize = Math.Round(FontSizeSlider.Value);
+        settings.EditorFontSize = Math.Round(EditorFontSlider.Value);
         foreach (var kv in _hexBoxes)
         {
             var text = kv.Value.Text.Trim();
@@ -94,27 +132,226 @@ public partial class AppearanceSettings : UserControl
         }
     }
 
-    /// <summary>Yazı boyutunu ve yazar renklerini varsayılana döndürür (kaydetmez).</summary>
-    public void ResetToDefaults()
+    // ── Kaydetme ─────────────────────────────────────────────────────────────
+
+    private void ScheduleSave()
     {
-        FontSizeSlider.Value = AppSettings.DefaultDayFontSize;
-        var defaults = AppSettings.CreateDefaultAuthorColors();
-        foreach (var author in KnownAuthors)
+        if (_loading) return;
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    private void SaveNow()
+    {
+        _saveTimer.Stop();
+        if (_loading) return;
+        try
         {
-            var hex = defaults.TryGetValue(author, out var v) ? v : "";
-            if (_hexBoxes.TryGetValue(author, out var box))
-                box.Text = hex;
+            AppSettings.Update(ApplyTo);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write(ex);
+            SaveFailed?.Invoke($"Görünüm ayarı kaydedilemedi: {ex.Message}");
         }
     }
+
+    private void Reset_Click(object sender, RoutedEventArgs e)
+    {
+        // Yeni bir örnek tüm görünüm alanlarının varsayılanlarını taşır (tema: sistem, vurgu: Notlar mavisi, Segoe UI,
+        // rahat, yazı boyutları, yazar renkleri). Görünümle ilgisiz ayarlara dokunulmaz (ApplyTo yalnız bunları yazar).
+        Load(new AppSettings());
+        SaveNow();
+    }
+
+    // ── Tema / yoğunluk ──────────────────────────────────────────────────────
+
+    private void ThemeMode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_loading || sender is not RadioButton { Tag: string mode }) return;
+        _themeMode = mode;
+        SaveNow();
+    }
+
+    private void Density_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_loading || sender is not RadioButton { Tag: string density }) return;
+        _density = density;
+        SaveNow();
+    }
+
+    // ── Vurgu rengi ──────────────────────────────────────────────────────────
+
+    private void BuildAccentChoices()
+    {
+        var windows = Theme.TryGetWindowsAccent();
+        var dot = new Ellipse { Width = 12, Height = 12, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center };
+        if (windows is { } w) dot.Fill = Freeze(new SolidColorBrush(ToColor(w)));
+        else dot.SetResourceReference(Shape.FillProperty, "Muted");
+        dot.SetResourceReference(Shape.StrokeProperty, "Border");
+
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        content.Children.Add(dot);
+        content.Children.Add(new TextBlock { Text = "Windows vurgu rengi", VerticalAlignment = VerticalAlignment.Center });
+
+        var windowsButton = new RadioButton
+        {
+            Content = content,
+            GroupName = _accentGroup,
+            Tag = AppearanceOptions.AccentWindows,
+            IsEnabled = windows is not null,
+            ToolTip = windows is null
+                ? "Windows vurgu rengi okunamadı."
+                : "Windows'un Kişiselleştirme → Renkler ayarındaki vurgu rengi; değişince Notlar da güncellenir.",
+        };
+        windowsButton.SetResourceReference(StyleProperty, "ChoiceChip");
+        windowsButton.Checked += Accent_Checked;
+        System.Windows.Automation.AutomationProperties.SetName(windowsButton, "Windows vurgu rengi");
+        _accentButtons[AppearanceOptions.AccentWindows] = windowsButton;
+        WindowsAccentRow.Children.Add(windowsButton);
+
+        SwatchPanel.Children.Add(BuildSwatch(AppearanceOptions.AccentDefault, "Varsayılan (Notlar mavisi)", DefaultSwatchHex));
+        foreach (var (name, hex) in AppearanceOptions.Presets)
+            SwatchPanel.Children.Add(BuildSwatch(hex, name, hex));
+    }
+
+    private RadioButton BuildSwatch(string value, string name, string displayHex)
+    {
+        var color = Rgb.Parse(displayHex);
+        var check = ColorMath.ContrastRatio(Rgb.White, color) >= ColorMath.ContrastRatio(Rgb.Black, color)
+            ? Brushes.White
+            : Brushes.Black;
+        var button = new RadioButton
+        {
+            GroupName = _accentGroup,
+            Tag = value,
+            Background = Freeze(new SolidColorBrush(ToColor(color))),
+            Foreground = check,
+            ToolTip = name,
+        };
+        button.SetResourceReference(StyleProperty, "AccentSwatch");
+        System.Windows.Automation.AutomationProperties.SetName(button, $"Vurgu rengi: {name}");
+        button.Checked += Accent_Checked;
+        _accentButtons[value] = button;
+        return button;
+    }
+
+    private void Accent_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string value }) return;
+        UpdateAccentHint(value);
+        if (_loading) return;
+        _accent = value;
+        SaveNow();
+    }
+
+    private void SyncAccent()
+    {
+        if (!_accentButtons.TryGetValue(_accent, out var selected))
+        {
+            // Listede olmayan bir #RRGGBB (elle düzenlenmiş dosya): hiçbir kutucuk seçili görünmez, değer korunur.
+            foreach (var b in _accentButtons.Values) b.IsChecked = false;
+            UpdateAccentHint(_accent);
+            return;
+        }
+        selected.IsChecked = true;
+        UpdateAccentHint(_accent);
+    }
+
+    private void UpdateAccentHint(string value)
+    {
+        string name;
+        if (value == AppearanceOptions.AccentDefault) name = "Varsayılan (Notlar mavisi)";
+        else if (value == AppearanceOptions.AccentWindows) name = "Windows vurgu rengi";
+        else
+        {
+            name = value;
+            foreach (var (presetName, hex) in AppearanceOptions.Presets)
+            {
+                if (string.Equals(hex, value, StringComparison.OrdinalIgnoreCase)) name = presetName;
+            }
+        }
+        AccentHint.Text = $"Seçili: {name}. Yazılar okunur kalsın diye renk koyu temada açılır, açık temada koyulaşır.";
+    }
+
+    // ── Yazı tipi ────────────────────────────────────────────────────────────
+
+    private void BuildFontChoices()
+    {
+        foreach (var (label, family) in Theme.AvailableFonts())
+        {
+            var isDefault = family == Theme.DefaultFontFamily;
+            FontCombo.Items.Add(new ComboBoxItem
+            {
+                Content = isDefault ? $"{label} (varsayılan)" : label,
+                Tag = isDefault ? "" : family,
+                FontFamily = new FontFamily(family),
+            });
+        }
+    }
+
+    /// <summary>Açılır listedeki öğenin Tag'i: varsayılan (ya da yüklü olmayan) yazı tipi için "".</summary>
+    private static string FontKey(string family)
+    {
+        var resolved = Theme.ResolveFontFamily(family);
+        return resolved == Theme.DefaultFontFamily ? "" : resolved;
+    }
+
+    private void SyncFont()
+    {
+        var key = FontKey(_fontFamily);
+        foreach (var item in FontCombo.Items)
+        {
+            if (item is ComboBoxItem { Tag: string tag } cbi && string.Equals(tag, key, StringComparison.OrdinalIgnoreCase))
+            {
+                FontCombo.SelectedItem = cbi;
+                return;
+            }
+        }
+        FontCombo.SelectedIndex = FontCombo.Items.Count > 0 ? 0 : -1;
+    }
+
+    private void FontCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || FontCombo.SelectedItem is not ComboBoxItem { Tag: string family }) return;
+        if (string.Equals(family, FontKey(_fontFamily), StringComparison.OrdinalIgnoreCase)) return;
+        _fontFamily = family;
+        SaveNow();
+    }
+
+    // ── Yazı boyutları ───────────────────────────────────────────────────────
+
+    private void FontSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        UpdateSizeTexts();
+        if (IsInitialized) ScheduleSave();
+    }
+
+    private void EditorFontSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        UpdateSizeTexts();
+        if (IsInitialized) ScheduleSave();
+    }
+
+    private void UpdateSizeTexts()
+    {
+        if (FontSizeValueText is null || EditorFontValueText is null || PreviewNoteText is null) return;
+        var day = Math.Round(FontSizeSlider.Value);
+        FontSizeValueText.Text = day.ToString("0");
+        PreviewNoteText.FontSize = day;
+        EditorFontValueText.Text = Math.Round(EditorFontSlider.Value).ToString("0");
+    }
+
+    // ── Yazar renkleri ───────────────────────────────────────────────────────
 
     private static bool IsValidHex(string text) => text.Length == 0 || HexPattern.IsMatch(text);
 
     private UIElement BuildAuthorRow(string author, string currentHex)
     {
-        // Renkler SetResourceReference ile bağlanır: panel uzun yaşar, Windows teması değişince güncellenmeli.
+        // Renkler SetResourceReference ile bağlanır: panel uzun yaşar, tema değişince güncellenmeli.
         var outer = new Border
         {
-            Margin = new Thickness(0, 0, 0, 10),
+            Margin = new Thickness(0, 0, 0, 8),
             Padding = new Thickness(10, 8, 10, 8),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
@@ -135,10 +372,10 @@ public partial class AppearanceSettings : UserControl
         var swatchRow = new WrapPanel { Margin = new Thickness(0, 0, 0, 6) };
 
         if (author.Equals("Ben", StringComparison.OrdinalIgnoreCase))
-            swatchRow.Children.Add(BuildSwatch(author, "", isThemeDefault: true));
+            swatchRow.Children.Add(BuildAuthorSwatch(author, "", isThemeDefault: true));
 
-        foreach (var hex in Presets)
-            swatchRow.Children.Add(BuildSwatch(author, hex, isThemeDefault: false));
+        foreach (var hex in AuthorPresets)
+            swatchRow.Children.Add(BuildAuthorSwatch(author, hex, isThemeDefault: false));
 
         stack.Children.Add(swatchRow);
 
@@ -159,7 +396,7 @@ public partial class AppearanceSettings : UserControl
         {
             var valid = IsValidHex(hexBox.Text.Trim());
             hexBox.SetResourceReference(Control.BorderBrushProperty, valid ? "Border" : "Danger");
-            if (!_loading) Edited?.Invoke();
+            ScheduleSave();
         };
         _hexBoxes[author] = hexBox;
         stack.Children.Add(hexBox);
@@ -167,7 +404,7 @@ public partial class AppearanceSettings : UserControl
         return outer;
     }
 
-    private UIElement BuildSwatch(string author, string hex, bool isThemeDefault)
+    private UIElement BuildAuthorSwatch(string author, string hex, bool isThemeDefault)
     {
         var ellipse = new Ellipse
         {
@@ -179,7 +416,7 @@ public partial class AppearanceSettings : UserControl
             ToolTip = isThemeDefault ? "Tema rengi (varsayılan)" : hex,
         };
         if (isThemeDefault) ellipse.SetResourceReference(Shape.FillProperty, "Fg");
-        else ellipse.Fill = ParseColor(hex);
+        else ellipse.Fill = Freeze(new SolidColorBrush(ToColor(Rgb.Parse(hex))));
         ellipse.SetResourceReference(Shape.StrokeProperty, "Border");
         ellipse.MouseLeftButtonDown += (_, _) =>
         {
@@ -189,32 +426,13 @@ public partial class AppearanceSettings : UserControl
         return ellipse;
     }
 
-    private static Brush ParseColor(string hex)
-    {
-        try
-        {
-            var color = (Color)ColorConverter.ConvertFromString(hex);
-            var brush = new SolidColorBrush(color);
-            brush.Freeze();
-            return brush;
-        }
-        catch
-        {
-            return Brushes.Gray;
-        }
-    }
+    // ── Yardımcılar ──────────────────────────────────────────────────────────
 
-    private void FontSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        UpdatePreview();
-        if (!_loading && IsInitialized) Edited?.Invoke();
-    }
+    private static Color ToColor(Rgb c) => Color.FromRgb(c.R, c.G, c.B);
 
-    private void UpdatePreview()
+    private static Brush Freeze(SolidColorBrush brush)
     {
-        if (FontSizeValueText is null || FontSizePreviewText is null) return;
-        var size = SelectedFontSize;
-        FontSizeValueText.Text = size.ToString("0");
-        FontSizePreviewText.FontSize = size;
+        brush.Freeze();
+        return brush;
     }
 }
