@@ -481,3 +481,19 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 .superpowers/
+
+# Yerel araç/ajan klasörleri
+.claude/
+
+# Kullanıcı verisi ve sırlar — depoya asla girmemeli
+.env.*
+*.login.env
+*.db
+*.db-wal
+*.db-shm
+*.wav
+*.bin
+*.onnx
+
+# Yayın hazırlık notları (yalnızca yerel)
+YAYIN.md

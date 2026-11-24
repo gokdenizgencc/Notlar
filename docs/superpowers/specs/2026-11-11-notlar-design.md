@@ -37,7 +37,7 @@ Claude Code ──stdio──► NotlarMcp.exe ─┐
 Tray ikonu ──tıkla──► NotlarApp.exe ──┘
 ```
 
-Solution: `C:\Users\kullanici\source\repos\Notlar\Notlar.slnx`
+Solution: `Notlar.slnx`
 
 | Proje | Görev | Bağımlılık |
 |---|---|---|

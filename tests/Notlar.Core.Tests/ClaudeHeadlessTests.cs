@@ -114,6 +114,24 @@ public class ClaudeHeadlessTests
     }
 
     [Fact]
+    public void Inputs_explain_person_labels_and_carry_them_in_the_transcript()
+    {
+        TranscriptSegment[] labelled =
+        [
+            new(5_000, 6_000, Speaker.Ben, "Merhaba, başlayalım.", 1),
+            new(8_000, 9_000, Speaker.KarsiTaraf, "Tamam.", 2),
+        ];
+
+        foreach (var input in new[] { ClaudeHeadless.BuildSummaryInput(Rec, labelled), ClaudeHeadless.BuildPlanInput(Rec, labelled) })
+        {
+            Assert.Contains("\"Kişi N:\" etiketi konuşanı sesine göre ayırır", input);
+            Assert.Contains("gerçek adını vermez", input);
+            Assert.DoesNotContain("etiketli değildir", input);
+            Assert.Contains("[00:05] Kişi 1: Merhaba, başlayalım.\n[00:08] Kişi 2: Tamam.", input);
+        }
+    }
+
+    [Fact]
     public void Plan_input_asks_for_json_only_with_max_15_steps()
     {
         var input = ClaudeHeadless.BuildPlanInput(Rec, Segs);
