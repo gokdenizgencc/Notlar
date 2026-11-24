@@ -1001,16 +1001,16 @@
                                 Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
                         <Button DockPanel.Dock="Right" Content="⤢ Büyüt" ToolTip="Büyük pencerede aç" Click="ExpandButton_Click"
                                 Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}"/>
-                        <Button DockPanel.Dock="Right" Content="📝 Düzenle" Click="EditDayButton_Click"
-                                ToolTip="Günü not defteri gibi düzenle: Enter yeni satır, ↑/↓ satırlar arası, Ctrl+S kaydet"
-                                Style="{StaticResource FlatButton}" Foreground="{DynamicResource Accent}" Margin="0,0,6,0"/>
                         <Button x:Name="SelectModeToggleButton" DockPanel.Dock="Right" Content="Seç" ToolTip="Notları çoklu seç"
                                 Click="SelectModeToggle_Click" Style="{StaticResource FlatButton}" Margin="0,0,6,0"/>
                     </DockPanel>
                     <TextBlock x:Name="DayViewHeader" FontWeight="SemiBold" Margin="8,2,8,6" TextTrimming="CharacterEllipsis"/>
                     <TextBlock x:Name="DayViewEmptyText" Text="Bu günde not yok." Foreground="{DynamicResource Muted}"
                                HorizontalAlignment="Center" Margin="0,24,0,0" Visibility="Collapsed"/>
-                    <ItemsControl ItemsSource="{Binding DayNotes}" ItemTemplate="{StaticResource NoteRowTemplate}"/>
+                    <!-- Varsayılan: gün Notepad gibi satır satır düzenlenir (üstüne gelince saat). "Seç" modunda eski not listesi. -->
+                    <local:DayLineEditor x:Name="DayEditor" AutoGrow="True" FontSize="13" Margin="0,0,0,4" MinHeight="120"/>
+                    <ItemsControl x:Name="DayNotesList" ItemsSource="{Binding DayNotes}" ItemTemplate="{StaticResource NoteRowTemplate}"
+                                  Visibility="Collapsed"/>
                 </StackPanel>
 
                 <StackPanel x:Name="TasksPanel" Visibility="Collapsed">

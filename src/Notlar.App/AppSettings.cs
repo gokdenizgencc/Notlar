@@ -76,6 +76,10 @@ public sealed class AppSettings
     /// uygulama yeniden başlatılsa da geçerli olsun diye saklanır.</summary>
     public string? AutoRecordLastDate { get; set; }
 
+    /// <summary>Teams araması/toplantısı başlayınca kayıt kendiliğinden başlasın, bitince dursun mu? (yalnızca Notlar
+    /// açıkken; bkz. TeamsCallTrigger).</summary>
+    public bool TeamsAutoRecordEnabled { get; set; } = true;
+
     public static event Action? Changed;
 
     private static string SettingsPath => Path.Combine(AppPaths.DataDir, "ayarlar.json");

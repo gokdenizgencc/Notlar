@@ -208,6 +208,12 @@
             <TextBlock Style="{StaticResource CheckHint}" Margin="20,4,0,12"
                        Text="Pazartesi–Cuma bu saatler arasında kayıt kendiliğinden başlar ve durur (Notlar açıkken). Kayıt metne kendiliğinden çevrilmez; Kayıtlar'da 📝 Transkript et'e basmanız beklenir. Elle başlattığınız kayda dokunulmaz."/>
 
+            <CheckBox x:Name="TeamsAutoRecordCheck" Content="Teams aramasında otomatik kayıt"
+                      Style="{StaticResource SettingCheck}"
+                      Checked="TeamsAutoRecordCheck_Changed" Unchecked="TeamsAutoRecordCheck_Changed"/>
+            <TextBlock Style="{StaticResource CheckHint}"
+                       Text="Teams araması ya da toplantısı başlayınca (Teams mikrofonu kullanmaya başlayınca) kayıt kendiliğinden başlar, arama bitince durur (Notlar açıkken). Zaten süren bir kayıt varsa yenisi başlatılmaz ve o kayıt arama bitince durdurulmaz."/>
+
             <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,8" Foreground="{DynamicResource Fg}"
                        Text="Ses dosyaları 14 gün sonra silinir; transkript ve özetler kalır."/>
 

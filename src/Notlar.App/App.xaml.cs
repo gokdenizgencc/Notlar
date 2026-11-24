@@ -38,6 +38,12 @@ public partial class App : Application
     private readonly DispatcherTimer _scheduleTimer = new() { Interval = TimeSpan.FromSeconds(20) };
     private DateOnly? _consentHintDate;
 
+    // Teams araması algılama: 3 sn'de bir mikrofon kullanımı yoklanır. Başlangıç ikinci yoklamada onaylanır (anlık
+    // mikrofon denemeleri kayıt başlatmasın); bitiş 10 sn kesintisiz boşta kalınca (kısa kopmalar kaydı bölmesin).
+    private readonly DispatcherTimer _teamsTimer = new() { Interval = TimeSpan.FromSeconds(3) };
+    private readonly TeamsCallTrigger _teamsTrigger = new(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10));
+    private readonly ITeamsCallProbe _teamsProbe = new TeamsCallProbe();
+
     [DllImport("user32.dll")]
     private static extern bool AllowSetForegroundWindow(int dwProcessId);
 
@@ -163,6 +169,9 @@ public partial class App : Application
         _scheduleTimer.Start();
         TryLog(CheckRecordingSchedule);
 
+        _teamsTimer.Tick += (_, _) => TryLog(CheckTeamsCall);
+        _teamsTimer.Start();
+
         // Yedekleme ve temizlik I/O ağırlıklıdır; tepsi/panel zaten kurulduktan sonra arka planda çalıştır
         // ki UI iş parçacığı başlangıçta bloklanmasın.
         Task.Run(() =>
@@ -280,6 +289,58 @@ public partial class App : Application
         }
     }
 
+    /// <summary>Teams araması otomatik kaydı (⚙ Ayarlar → Kayıt): Teams mikrofonu kullanmaya başlayınca kaydı
+    /// başlatır, bırakınca yalnızca kendi başlattığı kaydı durdurur. Zaten bir kayıt sürüyorsa (elle ya da
+    /// zamanlamayla) yenisini başlatmaz ve o kayda dokunmaz.</summary>
+    private void CheckTeamsCall()
+    {
+        if (_recordings is not { } recordings) return;
+
+        // Ayar kapalıyken yoklama yapılmaz; yalnızca Teams'in başlattığı kayıt sürüyorsa bitişi izlenmeye devam eder.
+        if (!AppSettings.Load().TeamsAutoRecordEnabled && !recordings.IsCurrentTeams)
+        {
+            _teamsTrigger.Reset();
+            return;
+        }
+
+        var action = _teamsTrigger.Update(DateTime.Now, _teamsProbe.IsMicrophoneInUse(), recordings.IsRecording,
+            recordings.IsCurrentTeams);
+        switch (action)
+        {
+            case ScheduleAction.Start:
+                if (!RecordingController.ConsentGiven)
+                {
+                    var today = DateOnly.FromDateTime(DateTime.Now);
+                    if (_consentHintDate == today) return;
+                    _consentHintDate = today;
+                    _tray?.ShowBalloon("Otomatik kayıt başlatılamadı",
+                        "Önce bir kez elle kayıt başlatıp katılımcı bilgilendirme uyarısını onaylayın.",
+                        () => OpenRecordings(null), isError: true);
+                    return;
+                }
+
+                if (recordings.StartAutomatic(out var error, RecordingStartSource.Teams))
+                {
+                    var id = recordings.CurrentRecordingId;
+                    _tray?.ShowBalloon("Teams araması algılandı — kayıt başladı",
+                        "Arama bitince kendiliğinden duracak.", () => OpenRecordings(id));
+                }
+                else
+                {
+                    _tray?.ShowBalloon("Otomatik kayıt başlatılamadı", error ?? "Bilinmeyen hata.",
+                        () => OpenRecordings(null), isError: true);
+                }
+                break;
+
+            case ScheduleAction.Stop:
+                var stoppedId = recordings.CurrentRecordingId;
+                recordings.Stop();
+                _tray?.ShowBalloon("Teams araması bitti — kayıt durdu",
+                    "Dinleyip 📝 Transkript et ile metne çevirebilirsiniz.", () => OpenRecordings(stoppedId));
+                break;
+        }
+    }
+
     /// <summary>Paneli Kayıtlar bölümünde açar; <paramref name="selectId"/> verilirse o kaydı seçer.</summary>
     private void OpenRecordings(long? selectId) => _panel?.ShowRecordings(selectId);
 
@@ -312,6 +373,7 @@ public partial class App : Application
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _scheduleTimer.Stop();
+        _teamsTimer.Stop();
         _showWait?.Unregister(null);
         _closeWait?.Unregister(null);
         // Kayıt sürüyorsa düzgün durdurulup bitirilir; kullanıcı "Transkript et" diyene kadar bekler.

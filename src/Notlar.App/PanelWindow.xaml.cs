@@ -647,7 +647,12 @@ public partial class PanelWindow : Window
                 }
                 DayViewHeader.Text = DayGrouper.Header(day, today);
             }
-            DayViewEmptyText.Visibility = _selectedDay is not null && DayNotes.Count == 0
+            // Gün görünümü varsayılan olarak satır editörüdür; "Seç" modunda çoklu seçim için eski not listesi.
+            var lineEditor = _selectedDay is not null && !_selectMode;
+            DayEditor.Visibility = lineEditor ? Visibility.Visible : Visibility.Collapsed;
+            DayNotesList.Visibility = lineEditor ? Visibility.Collapsed : Visibility.Visible;
+            if (lineEditor) DayEditor.Load(_store, _selectedDay!.Value);
+            DayViewEmptyText.Visibility = _selectedDay is not null && !lineEditor && DayNotes.Count == 0
                 ? Visibility.Visible : Visibility.Collapsed;
             RefreshSelectModeUi();
 
@@ -1041,14 +1046,6 @@ public partial class PanelWindow : Window
         window.Closed += (_, _) => _dayWindows.Remove(window);
         _dayWindows.Add(window);
         window.Show();
-    }
-
-    /// <summary>Seçili günü not defteri gibi düzenlenen editörde açar (Enter yeni satır, ↑/↓, Ctrl+S).</summary>
-    private void EditDayButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_selectedDay is not { } day) return;
-        CancelAllEdits();
-        NoteEditorWindow.OpenDay(_store, day);
     }
 
     /// <summary>Tek tık satırı seçer; çift tık notun gününü editörde açar, imleç o notun satırında.</summary>

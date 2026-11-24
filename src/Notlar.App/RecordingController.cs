@@ -10,6 +10,19 @@ using Notlar.Kayit;
 
 namespace Notlar.App;
 
+/// <summary>Süren kaydı kim başlattı? Otomatik tetikler yalnızca kendi başlattıkları kaydı durdurur.</summary>
+public enum RecordingStartSource
+{
+    /// <summary>Kullanıcı (panel / tepsi).</summary>
+    Manual,
+
+    /// <summary>Hafta içi zamanlama (RecordingSchedule).</summary>
+    Schedule,
+
+    /// <summary>Teams araması algılandı (TeamsCallTrigger).</summary>
+    Teams,
+}
+
 /// <summary>Toplantı kaydının uygulama tarafı: ses kaydedici (<see cref="MeetingRecorder"/>), çeviri kuyruğu
 /// (<see cref="TranscriptionQueue"/>) ve <see cref="RecordingStore"/> burada bir araya gelir. Kayıt/kuyruk olayları
 /// arka plan thread'lerinden gelir; bu sınıf hepsini UI thread'ine aktarır, dolayısıyla dışarıya açılan tüm olaylar
@@ -33,7 +46,7 @@ public sealed class RecordingController : IDisposable
     private readonly HashSet<long> _summarizing = [];
     private readonly HashSet<long> _planning = [];
     private long? _currentId;
-    private bool _currentIsAutomatic;
+    private RecordingStartSource _currentSource;
     private bool _disposed;
 
     // İlerleme olayları işçi thread'inde çok sık gelebilir (ör. model indirirken her okunan blokta); yalnızca
@@ -91,7 +104,10 @@ public sealed class RecordingController : IDisposable
     public TimeSpan Elapsed => _recorder.Elapsed;
 
     /// <summary>Süren kayıt zamanlayıcı tarafından (otomatik) başlatıldı mı?</summary>
-    public bool IsCurrentAutomatic => _currentId is not null && _currentIsAutomatic;
+    public bool IsCurrentAutomatic => _currentId is not null && _currentSource == RecordingStartSource.Schedule;
+
+    /// <summary>Süren kayıt Teams araması algılanınca mı başlatıldı?</summary>
+    public bool IsCurrentTeams => _currentId is not null && _currentSource == RecordingStartSource.Teams;
 
     /// <summary>Tek seferlik KVKK uyarısı onaylanmış mı? Onaysız otomatik kayıt başlatılmaz.</summary>
     public static bool ConsentGiven => AppSettings.Load().RecordingConsentShown;
@@ -131,13 +147,13 @@ public sealed class RecordingController : IDisposable
     {
         if (_disposed || _recorder.IsRecording) return false;
         if (!EnsureConsent(owner)) return false;
-        return StartCore(owner, automatic: false, out _);
+        return StartCore(owner, RecordingStartSource.Manual, out _);
     }
 
-    /// <summary>Zamanlayıcının başlattığı kayıt: hiçbir mesaj kutusu göstermez. KVKK uyarısı henüz onaylanmadıysa ya
-    /// da ses aygıtları açılamazsa false döner (<paramref name="error"/>: Türkçe neden). Kanallardan yalnızca biri
-    /// açılabildiyse kayıt başlar ve <see cref="Warning"/> ile bildirilir.</summary>
-    public bool StartAutomatic(out string? error)
+    /// <summary>Zamanlayıcının ya da Teams tetiğinin başlattığı kayıt: hiçbir mesaj kutusu göstermez. KVKK uyarısı
+    /// henüz onaylanmadıysa ya da ses aygıtları açılamazsa false döner (<paramref name="error"/>: Türkçe neden).
+    /// Kanallardan yalnızca biri açılabildiyse kayıt başlar ve <see cref="Warning"/> ile bildirilir.</summary>
+    public bool StartAutomatic(out string? error, RecordingStartSource source = RecordingStartSource.Schedule)
     {
         error = null;
         if (_disposed || _recorder.IsRecording) return false;
@@ -146,12 +162,13 @@ public sealed class RecordingController : IDisposable
             error = "Kayıt uyarısı henüz onaylanmadı.";
             return false;
         }
-        return StartCore(owner: null, automatic: true, out error);
+        return StartCore(owner: null, source, out error);
     }
 
-    private bool StartCore(Window? owner, bool automatic, out string? error)
+    private bool StartCore(Window? owner, RecordingStartSource source, out string? error)
     {
         error = null;
+        var automatic = source != RecordingStartSource.Manual;
 
         string language;
         try
@@ -197,7 +214,7 @@ public sealed class RecordingController : IDisposable
         }
 
         _currentId = recording.Id;
-        _currentIsAutomatic = automatic;
+        _currentSource = source;
         RecordingStateChanged?.Invoke();
 
         // Kanallardan biri açılamadıysa kullanıcı bir kez bilgilendirilir; kayıt diğer kanalla sürer.
@@ -227,7 +244,7 @@ public sealed class RecordingController : IDisposable
         if (!_recorder.IsRecording && _currentId is null) return;
         var id = _currentId;
         _currentId = null;
-        _currentIsAutomatic = false;
+        _currentSource = RecordingStartSource.Manual;
         TryLog(_recorder.Stop);
 
         if (id is { } recordingId)

@@ -57,38 +57,8 @@
             </Grid>
         </Border>
 
-        <!-- Gövde: satır numarası + saat çubuğu ve düzenleyici -->
-        <Grid Grid.Row="1" Background="{DynamicResource Surface}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-
-            <Border Grid.Column="0" Background="{DynamicResource Bg}" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,1,0">
-                <ScrollViewer x:Name="GutterScroll" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Disabled"
-                              IsHitTestVisible="False">
-                    <TextBlock x:Name="GutterText" FontFamily="Consolas" TextAlignment="Left"
-                               Padding="10,4,10,4" Foreground="{DynamicResource Muted}" Background="Transparent"/>
-                </ScrollViewer>
-            </Border>
-
-            <TextBox x:Name="EditorBox" Grid.Column="1" FontFamily="Consolas"
-                      AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
-                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                      BorderThickness="0" Background="Transparent" Foreground="{DynamicResource Fg}"
-                      CaretBrush="{DynamicResource Fg}" Padding="10,4,10,4"
-                      TextChanged="EditorBox_TextChanged" SelectionChanged="EditorBox_SelectionChanged"
-                      ScrollViewer.ScrollChanged="EditorBox_ScrollChanged"/>
-        </Grid>
-
-        <!-- Dışarıda değişti çubuğu -->
-        <Border Grid.Row="2" x:Name="ExternalChangeBar" Background="{DynamicResource TagBg}" Padding="12,6" Visibility="Collapsed">
-            <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Yeniden yükle" Style="{StaticResource FlatButton}"
-                        Foreground="{DynamicResource Accent}" Click="ReloadBar_Click"/>
-                <TextBlock Text="Bu gün dışarıda değişti. Ctrl+S düzenlemelerinizi dışarıdaki değişikliklerle birleştirerek kaydeder; Yeniden yükle düzenlemelerinizi atar." VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource Fg}"/>
-            </DockPanel>
-        </Border>
+        <!-- Gövde: her açık gün kendi satır editöründe (yalnızca etkin olan görünür) -->
+        <Grid Grid.Row="1" x:Name="EditorHost" Grid.RowSpan="2"/>
 
         <!-- Durum çubuğu -->
         <Border Grid.Row="3" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="12,4">

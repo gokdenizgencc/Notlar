@@ -260,6 +260,7 @@ public partial class SettingsView : UserControl
     private void SyncAutoRecord(AppSettings settings)
     {
         AutoRecordCheck.IsChecked = settings.AutoRecordEnabled;
+        TeamsAutoRecordCheck.IsChecked = settings.TeamsAutoRecordEnabled;
         // Kullanıcı saat yazarken (başka bir ayar kaydedilince gelen eşitleme) kutunun metni ezilmez.
         if (!AutoRecordStartBox.IsKeyboardFocusWithin) AutoRecordStartBox.Text = settings.AutoRecordStart;
         if (!AutoRecordEndBox.IsKeyboardFocusWithin) AutoRecordEndBox.Text = settings.AutoRecordEnd;
@@ -270,6 +271,13 @@ public partial class SettingsView : UserControl
         if (_syncing) return;
         var enabled = AutoRecordCheck.IsChecked == true;
         SaveSetting(s => s.AutoRecordEnabled = enabled);
+    }
+
+    private void TeamsAutoRecordCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_syncing) return;
+        var enabled = TeamsAutoRecordCheck.IsChecked == true;
+        SaveSetting(s => s.TeamsAutoRecordEnabled = enabled);
     }
 
     private void AutoRecordTime_KeyDown(object sender, KeyEventArgs e)

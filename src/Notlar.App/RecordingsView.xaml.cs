@@ -501,7 +501,8 @@ public partial class RecordingsView : UserControl
         NoSelectionText.Visibility = Visibility.Visible;
     }
 
-    /// <summary>Transkript: satır başına bir segment; zaman damgası soluk, "Ben" ve "Karşı taraf" ayrı renkte.</summary>
+    /// <summary>Transkript: her konuşma ayrı paragraf; zaman damgası soluk, ardından (kişi ayrımı yapıldıysa)
+    /// kişiye özel renkte "Kişi N:" etiketi. Kişi bilgisi olmayan satırlar (eski kayıtlar) etiketsizdir.</summary>
     private static FlowDocument BuildTranscriptDocument(IReadOnlyList<TranscriptSegment> segments)
     {
         var doc = new FlowDocument { PagePadding = new Thickness(0), TextAlignment = TextAlignment.Left };
@@ -516,11 +517,14 @@ public partial class RecordingsView : UserControl
             stamp.SetResourceReference(TextElement.ForegroundProperty, "Muted");
             paragraph.Inlines.Add(stamp);
 
-            var speaker = new Run(TranscriptFormatter.Label(s.Speaker) + ":") { FontWeight = FontWeights.SemiBold };
-            speaker.SetResourceReference(TextElement.ForegroundProperty, s.Speaker == Speaker.Ben ? "SpeakerBen" : "SpeakerKarsi");
-            paragraph.Inlines.Add(speaker);
+            if (s.Person is { } person)
+            {
+                var label = new Run(TranscriptFormatter.PersonLabel(person) + ": ") { FontWeight = FontWeights.SemiBold };
+                label.SetResourceReference(TextElement.ForegroundProperty, Theme.PersonBrushKey(person));
+                paragraph.Inlines.Add(label);
+            }
 
-            paragraph.Inlines.Add(new Run(" " + TextSafety.Flatten(s.Text)));
+            paragraph.Inlines.Add(new Run(TextSafety.Flatten(s.Text)));
             doc.Blocks.Add(paragraph);
         }
         return doc;

@@ -10,8 +10,8 @@ using Notlar.Core;
 
 namespace Notlar.App;
 
-/// <summary>Günün notlarını büyük, yeniden boyutlandırılabilir bir pencerede gösterir (görüntüleme + tamamlandı işareti).
-/// Düzenleme için "📝 Düzenle" ya da bir nota çift tık, günü not defteri gibi düzenlenen <see cref="NoteEditorWindow"/>'da açar.</summary>
+/// <summary>Günün notlarını büyük, yeniden boyutlandırılabilir bir pencerede Notepad gibi satır satır düzenler
+/// (<see cref="DayLineEditor"/>: satır numaraları, üzerine gelince saat, kendiliğinden kayıt).</summary>
 public partial class DayWindow : Window
 {
     private static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
@@ -36,6 +36,7 @@ public partial class DayWindow : Window
 
     private void Window_Closed(object? sender, EventArgs e)
     {
+        Editor.Flush();
         AppSettings.Changed -= OnSettingsChanged;
     }
 
@@ -45,7 +46,7 @@ public partial class DayWindow : Window
         {
             _settings = AppSettings.Load();
             _fontSize = _settings.DayFontSize;
-            Body.FontSize = _fontSize;
+            Editor.FontSize = _fontSize;
             Reload();
         });
     }
@@ -62,16 +63,16 @@ public partial class DayWindow : Window
             var dayNotes = groups.FirstOrDefault(g => g.Date == Day)?.Notes ?? Array.Empty<Note>();
 
             BuildHeader(dayNotes);
-
-            EmptyText.Visibility = dayNotes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-
-            Body.FontSize = _fontSize;
-
-            NotesList.Children.Clear();
-            var ordered = dayNotes.ToList();
-            for (var i = 0; i < ordered.Count; i++)
+            Editor.FontSize = _fontSize;
+            if (Editor.Day is null)
             {
-                NotesList.Children.Add(BuildRow(ordered[i], isFirst: i == 0));
+                Editor.StateChanged += () => BuildHeader(Editor.Notes);
+                Editor.Load(_store, Day);
+                Editor.FocusEditor();
+            }
+            else
+            {
+                Editor.Reload();
             }
         }
         catch (Exception ex)
@@ -129,138 +130,6 @@ public partial class DayWindow : Window
         return border;
     }
 
-    private UIElement BuildRow(Note note, bool isFirst)
-    {
-        var container = new Border
-        {
-            Padding = new Thickness(0, 14, 0, 14),
-            BorderBrush = (Brush)FindResource("Border"),
-            BorderThickness = isFirst ? new Thickness(0) : new Thickness(0, 1, 0, 0),
-        };
-
-        var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-        var checkBox = new System.Windows.Controls.CheckBox
-        {
-            IsChecked = note.Done,
-            Margin = new Thickness(0, 4, 12, 0),
-            VerticalAlignment = VerticalAlignment.Top,
-        };
-        checkBox.Click += (_, _) => ToggleDone(note);
-        Grid.SetColumn(checkBox, 0);
-        grid.Children.Add(checkBox);
-
-        var authorName = note.Author;
-        var authorColor = AuthorColors.For(authorName, _settings) ?? (Brush)FindResource("Fg");
-
-        var timePanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 14, 0), VerticalAlignment = VerticalAlignment.Top };
-        timePanel.Children.Add(new TextBlock
-        {
-            Text = note.CreatedAt.ToString("HH:mm"),
-            Foreground = (Brush)FindResource("Muted"),
-        });
-        var authorBadge = new Border
-        {
-            CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(6, 1, 6, 1),
-            Margin = new Thickness(6, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            Background = AuthorColors.Tint(authorColor),
-        };
-        authorBadge.Child = new TextBlock
-        {
-            Text = authorName,
-            FontSize = 10,
-            FontWeight = FontWeights.SemiBold,
-            Foreground = authorColor,
-        };
-        timePanel.Children.Add(authorBadge);
-        Grid.SetColumn(timePanel, 1);
-        grid.Children.Add(timePanel);
-
-        var body = new StackPanel();
-        Grid.SetColumn(body, 2);
-
-        var textBox = new TextBox
-        {
-            Text = note.DisplayText,
-            IsReadOnly = true,
-            BorderThickness = new Thickness(0),
-            Background = Brushes.Transparent,
-            Foreground = authorColor,
-            TextWrapping = TextWrapping.Wrap,
-            IsReadOnlyCaretVisible = true,
-            Padding = new Thickness(0),
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-        };
-        if (note.Done)
-        {
-            textBox.TextDecorations = TextDecorations.Strikethrough;
-            textBox.Opacity = 0.5;
-        }
-        body.Children.Add(textBox);
-
-        if (note.Tags.Count > 0)
-        {
-            var tagsPanel = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
-            foreach (var tag in note.Tags)
-            {
-                var border = new Border
-                {
-                    Background = (Brush)FindResource("TagBg"),
-                    CornerRadius = new CornerRadius(8),
-                    Padding = new Thickness(6, 0, 6, 0),
-                    Margin = new Thickness(0, 0, 4, 0),
-                };
-                border.Child = new TextBlock
-                {
-                    Text = tag,
-                    FontSize = 11,
-                    Foreground = (Brush)FindResource("Accent"),
-                };
-                tagsPanel.Children.Add(border);
-            }
-            body.Children.Add(tagsPanel);
-        }
-
-        // Çift tık: günü not defteri gibi düzenlenen editörde aç, imleç bu notun satırında.
-        MouseButtonEventHandler openEditor = (_, e) =>
-        {
-            if (e.ClickCount != 2) return;
-            e.Handled = true;
-            NoteEditorWindow.OpenDay(_store, Day, note.Id);
-        };
-        timePanel.PreviewMouseLeftButtonDown += openEditor;
-        body.PreviewMouseLeftButtonDown += openEditor;
-
-        grid.Children.Add(body);
-        container.Child = grid;
-        return container;
-    }
-
-    private void ToggleDone(Note note)
-    {
-        try
-        {
-            _store.SetDone(note.Id, !note.Done);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write(ex);
-            MessageBox.Show(this, $"İşlem başarısız: {ex.Message}", "Notlar", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-        Reload();
-    }
-
-    private void EditorButton_Click(object sender, RoutedEventArgs e)
-    {
-        NoteEditorWindow.OpenDay(_store, Day);
-    }
-
     private void AppearanceButton_Click(object sender, RoutedEventArgs e)
     {
         var window = new AppearanceWindow(_settings) { Owner = this };
@@ -314,7 +183,7 @@ public partial class DayWindow : Window
         if (Math.Abs(clamped - _fontSize) < 0.01) return;
 
         _fontSize = clamped;
-        Body.FontSize = _fontSize;
+        Editor.FontSize = _fontSize;
 
         try
         {

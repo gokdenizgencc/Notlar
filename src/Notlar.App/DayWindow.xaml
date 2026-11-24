@@ -1,6 +1,7 @@
 <Window x:Class="Notlar.App.DayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Notlar.App"
         Title="Notlar" Width="1000" Height="700" MinWidth="500" MinHeight="350"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
@@ -49,21 +50,12 @@
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <StackPanel x:Name="SummaryPillsPanel" Orientation="Horizontal" VerticalAlignment="Center"/>
-                    <Button x:Name="EditorButton" Content="📝 Düzenle" Style="{StaticResource FlatButton}"
-                            ToolTip="Günü not defteri gibi düzenle: Enter yeni satır, ↑/↓ satırlar arası, Ctrl+S kaydet (bir nota çift tık da açar)"
-                            Margin="16,0,0,0" Click="EditorButton_Click"/>
                     <Button x:Name="AppearanceButton" Content="⚙ Görünüm" Style="{StaticResource FlatButton}"
-                            Margin="8,0,0,0" Click="AppearanceButton_Click"/>
+                            Margin="16,0,0,0" Click="AppearanceButton_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <ScrollViewer x:Name="Body" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20,8,20,20" FontSize="16">
-            <Grid>
-                <TextBlock x:Name="EmptyText" Text="Bu günde not yok." Foreground="{DynamicResource Muted}"
-                           HorizontalAlignment="Center" Margin="0,60,0,0" Visibility="Collapsed"/>
-                <StackPanel x:Name="NotesList"/>
-            </Grid>
-        </ScrollViewer>
+        <local:DayLineEditor x:Name="Editor" Grid.Row="1"/>
     </Grid>
 </Window>
