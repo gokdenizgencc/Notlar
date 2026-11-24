@@ -31,7 +31,7 @@ public partial class RunPlanConfirmWindow : Window
         IReadOnlyList<PlanStep> steps, IReadOnlyDictionary<long, string> projectNamesById)
     {
         InitializeComponent();
-        TitleText.Text = planTitle;
+        TitleText.Text = TextSafety.Flatten(planTitle);
         QuestionText.Text = $"Claude Code bu klasörde açılıp planı uygulamaya başlayacak: {folderLabel}. Devam edilsin mi?";
 
         if (extraFolders.Count > 0)
@@ -45,8 +45,9 @@ public partial class RunPlanConfirmWindow : Window
             .Select((s, i) => new StepRow
             {
                 Number = $"{i + 1}.",
-                Text = s.Text,
-                AuthorLabel = s.Author == NoteAuthor.Ben ? "" : $"(ekleyen: {s.Author})",
+                // Görünmez/bidi karakterler atılır: pencerede görünen metin Claude'un okuyacağıyla aynı olsun.
+                Text = TextSafety.Flatten(s.Text),
+                AuthorLabel = s.Author == NoteAuthor.Ben ? "" : $"(ekleyen: {TextSafety.Flatten(s.Author)})",
                 ProjectLabel = s.ProjectId is { } pid && projectNamesById.TryGetValue(pid, out var name) ? $"[{name}]" : "",
             })
             .ToList();

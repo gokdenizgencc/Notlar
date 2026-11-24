@@ -26,10 +26,8 @@ public sealed class TaskTools(TaskStore store, McpAuthor? author = null, AppFlag
     public string KisiselListele(
         [Description("true ise yalnızca tamamlanmamış kayıtlar.")] bool sadece_acik = false) => Run(() =>
     {
-        // Okuma kilidi: yalnızca kullanıcı panelden açıkça izin verdiyse (varsayılan kapalı). Her çağrıda
-        // yeniden okunur ki panelden yapılan değişiklik hemen geçerli olsun.
-        if (flags is null || !flags.GetBool(AppFlags.KisiselMcpOkuma))
-            throw new McpException("Kişisel liste Claude'a kapalı. Notlar panelindeki ayardan açabilirsin.");
+        // Her çağrıda yeniden okunur ki panelden yapılan değişiklik hemen geçerli olsun.
+        RequireAccess();
 
         var tasks = store.List(sadece_acik);
         if (tasks.Count == 0)
@@ -47,6 +45,7 @@ public sealed class TaskTools(TaskStore store, McpAuthor? author = null, AppFlag
         [Description("Kaydın id'si.")] long id,
         [Description("true: tamamlandı, false: tekrar aç.")] bool tamamlandi = true) => Run(() =>
     {
+        RequireAccess();
         var task = store.SetDone(id, tamamlandi);
         return $"{(tamamlandi ? "Kişisel kayıt tamamlandı" : "Kişisel kayıt tekrar açıldı")}: {Line(task)}";
     });
@@ -56,18 +55,32 @@ public sealed class TaskTools(TaskStore store, McpAuthor? author = null, AppFlag
     public string KisiselGuncelle(
         [Description("Kaydın id'si.")] long id,
         [Description("Yeni başlık.")] string baslik) =>
-        Run(() => $"Kişisel kayıt güncellendi: {Line(store.Rename(id, baslik))}");
+        Run(() =>
+        {
+            RequireAccess();
+            return $"Kişisel kayıt güncellendi: {Line(store.Rename(id, baslik))}";
+        });
 
     [McpServerTool(Name = "kisisel_sil")]
     [Description("Kişisel kaydı siler.")]
     public string KisiselSil([Description("Kaydın id'si.")] long id) => Run(() =>
     {
+        RequireAccess();
         store.Delete(id);
         return $"Kişisel kayıt silindi (id: {id}).";
     });
 
+    /// <summary>Okuma kilidi: yalnızca kullanıcı panelden açıkça izin verdiyse (varsayılan kapalı) geçer. Liste kapalıyken
+    /// id ile tamamlama/güncelleme/silme de reddedilir; aksi halde bu araçların yanıtı başlıkları sızdırır ve id'ler
+    /// körlemesine denenerek kayıtlar bozulabilir. Kilit kapalıyken yalnızca kisisel_ekle çalışır.</summary>
+    private void RequireAccess()
+    {
+        if (flags is null || !flags.GetBool(AppFlags.KisiselMcpOkuma))
+            throw new McpException("Kişisel liste Claude'a kapalı. Notlar panelindeki ayardan açabilirsin.");
+    }
+
     private static string Line(TaskItem task) =>
-        $"{(task.Done ? "[x]" : "[ ]")} {task.Title.ReplaceLineEndings(" ")}  (id: {task.Id}, yazar: {task.Author})";
+        $"{(task.Done ? "[x]" : "[ ]")} {TextSafety.Flatten(task.Title)}  (id: {task.Id}, yazar: {TextSafety.Flatten(task.Author)})";
 
     private static string Run(Func<string> action)
     {

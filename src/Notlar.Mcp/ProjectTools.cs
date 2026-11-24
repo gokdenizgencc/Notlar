@@ -22,7 +22,7 @@ public sealed class ProjectTools(ProjectStore store)
 
         var sb = new StringBuilder();
         foreach (var p in projects)
-            sb.Append($"[#{p.Id}] {p.Name} — {p.Path}\n");
+            sb.Append($"[#{p.Id}] {TextSafety.Flatten(p.Name)} — {TextSafety.Flatten(p.Path)}\n");
         return sb.ToString().TrimEnd();
     });
 

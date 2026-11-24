@@ -9,6 +9,11 @@ public sealed class WhisperModelManager
 {
     public const string ModelFileName = "ggml-large-v3-turbo-q5_0.bin";
 
+    /// <summary>Model dosyasının beklenen SHA-256 özeti. İndirilen dosya bununla uyuşmazsa kullanılmaz: kaynak
+    /// (Hugging Face) ele geçirilse ya da dosya değiştirilse bile yabancı bir model yerel ayrıştırıcıya girmez.
+    /// Model sürümü değişirse bu değer de güncellenmelidir.</summary>
+    internal const string ModelSha256 = "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2";
+
     /// <summary>İndirme akışı uzunluk bildirmediğinden ilerleme bu yaklaşık boyuta göre hesaplanır.</summary>
     internal const long ApproximateModelBytes = 574_041_195;
 
@@ -106,6 +111,9 @@ public sealed class WhisperModelManager
 
         if (done < MinimumModelBytes)
             throw new InvalidDataException($"İndirilen model dosyası eksik görünüyor ({done:N0} bayt).");
+
+        await target.DisposeAsync().ConfigureAwait(false);
+        await ModelIntegrity.VerifyAsync(partPath, ModelSha256, cancellationToken).ConfigureAwait(false);
     }
 
     private static long? TryGetLength(Stream stream)

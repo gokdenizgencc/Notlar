@@ -74,7 +74,7 @@ public sealed class MemoryTools(MemoryStore store)
     }
 
     private static string Line(MemoryItem item) =>
-        $"[#{item.Id} · {item.Category}] {item.Title}: {item.Content.ReplaceLineEndings(" ")}";
+        $"[#{item.Id} · {TextSafety.Flatten(item.Category)}] {TextSafety.Flatten(item.Title)}: {TextSafety.Flatten(item.Content)}";
 
     private static string Run(Func<string> action)
     {
